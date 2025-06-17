@@ -16,6 +16,13 @@ export interface ConsignmentItem {
   buyerId?: string;
   buyerName?: string;
   buyerEmail?: string;
+  // New filtering fields
+  category?: string;
+  gender?: 'Men' | 'Women' | 'Unisex' | '';
+  size?: string;
+  brand?: string;
+  condition?: 'New' | 'Like New' | 'Good' | 'Fair' | '';
+  material?: string;
 }
 
 export interface User {

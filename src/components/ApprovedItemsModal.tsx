@@ -15,6 +15,13 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   const [loading, setLoading] = useState(true);
   const [editingItem, setEditingItem] = useState<ConsignmentItem | null>(null);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
+  
+  // Modal states
+  const [showMakeLiveModal, setShowMakeLiveModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
+  const [modalMessage, setModalMessage] = useState('');
 
   useEffect(() => {
     if (isOpen && user) {
@@ -72,22 +79,34 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
     };
   };
 
-  const handleMakeLive = async (itemId: string) => {
-    setProcessingItemId(itemId);
+  const handleMakeLiveClick = (item: ConsignmentItem) => {
+    setSelectedItem(item);
+    setShowMakeLiveModal(true);
+  };
+
+  const confirmMakeLive = async () => {
+    if (!selectedItem) return;
+    
+    setProcessingItemId(selectedItem.id);
+    setShowMakeLiveModal(false);
+    
     try {
-      await updateDoc(doc(db, 'items', itemId), {
+      await updateDoc(doc(db, 'items', selectedItem.id), {
         status: 'live',
         liveAt: serverTimestamp()
       });
       
       // Remove from approved list
-      setApprovedItems(prev => prev.filter(item => item.id !== itemId));
-      alert('Item is now live!');
+      setApprovedItems(prev => prev.filter(item => item.id !== selectedItem.id));
+      setModalMessage('Item is now live!');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error making item live:', error);
-      alert('Error making item live. Please try again.');
+      setModalMessage('Error making item live. Please try again.');
+      setShowErrorModal(true);
     } finally {
       setProcessingItemId(null);
+      setSelectedItem(null);
     }
   };
 
@@ -101,7 +120,13 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       await updateDoc(doc(db, 'items', updatedItem.id), {
         title: updatedItem.title,
         description: updatedItem.description,
-        price: updatedItem.price
+        price: updatedItem.price,
+        category: updatedItem.category || null,
+        gender: updatedItem.gender || null,
+        size: updatedItem.size || null,
+        brand: updatedItem.brand || null,
+        condition: updatedItem.condition || null,
+        material: updatedItem.material || null
       });
       
       // Update local state
@@ -109,10 +134,12 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
         item.id === updatedItem.id ? updatedItem : item
       ));
       setEditingItem(null);
-      alert('Item updated successfully!');
+      setModalMessage('Item updated successfully!');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error updating item:', error);
-      alert('Error updating item. Please try again.');
+      setModalMessage('Error updating item. Please try again.');
+      setShowErrorModal(true);
     } finally {
       setProcessingItemId(null);
     }
@@ -231,7 +258,7 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                             Edit Details
                           </button>
                           <button
-                            onClick={() => handleMakeLive(item.id)}
+                            onClick={() => handleMakeLiveClick(item)}
                             disabled={processingItemId === item.id}
                             className="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           >
@@ -257,6 +284,84 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
           isProcessing={processingItemId === editingItem.id}
         />
       )}
+
+      {/* Make Live Confirmation Modal */}
+      {showMakeLiveModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-green-600 text-xl">🚀</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Make Item Live</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to make "<span className="font-medium">{selectedItem.title}</span>" live? 
+              This will make it available to all customers immediately.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowMakeLiveModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmMakeLive}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                Make Live Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-green-600 text-xl">🎉</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Success!</h3>
+            </div>
+            <p className="text-gray-600 mb-6">{modalMessage}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-red-600 text-xl">⚠️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Error</h3>
+            </div>
+            <p className="text-gray-600 mb-6">{modalMessage}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -273,25 +378,41 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description);
   const [price, setPrice] = useState(item.price.toString());
+  const [category, setCategory] = useState(item.category || '');
+  const [gender, setGender] = useState(item.gender || '');
+  const [size, setSize] = useState(item.size || '');
+  const [brand, setBrand] = useState(item.brand || '');
+  const [condition, setCondition] = useState(item.condition || '');
+  const [material, setMaterial] = useState(item.material || '');
+  const [showValidationError, setShowValidationError] = useState(false);
+  const [validationMessage, setValidationMessage] = useState('');
 
   const handleSave = () => {
     if (!title.trim() || !description.trim() || !price.trim()) {
-      alert('Please fill in all fields');
+      setValidationMessage('Please fill in all required fields');
+      setShowValidationError(true);
       return;
     }
 
     const priceValue = parseFloat(price);
     if (isNaN(priceValue) || priceValue <= 0) {
-      alert('Please enter a valid price');
+      setValidationMessage('Please enter a valid price greater than 0');
+      setShowValidationError(true);
       return;
     }
 
-    onSave({
-      ...item,
-      title: title.trim(),
-      description: description.trim(),
-      price: priceValue
-    });
+          onSave({
+        ...item,
+        title: title.trim(),
+        description: description.trim(),
+        price: priceValue,
+        category: category || undefined,
+        gender: (gender as 'Men' | 'Women' | 'Unisex' | '') || undefined,
+        size: size || undefined,
+        brand: brand.trim() || undefined,
+        condition: (condition as 'New' | 'Like New' | 'Good' | 'Fair' | '') || undefined,
+        material: material.trim() || undefined
+      });
   };
 
   return (
@@ -301,9 +422,9 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
           <h3 className="text-xl font-bold text-gray-800">Edit Item Details</h3>
         </div>
         
-        <div className="p-6 space-y-4">
+        <div className="p-6 space-y-4 max-h-96 overflow-y-auto">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
             <input
               type="text"
               value={title}
@@ -313,7 +434,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -323,7 +444,7 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Price</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
               <input
@@ -337,6 +458,111 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
                 }}
                 className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+          </div>
+
+          {/* Additional Details */}
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="text-sm font-medium text-gray-900 mb-3">Additional Details</h4>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Category</option>
+                  <option value="Climbing">Climbing 🧗</option>
+                  <option value="Skiing">Skiing ⛷️</option>
+                  <option value="Hiking">Hiking 🥾</option>
+                  <option value="Camping">Camping ⛺</option>
+                  <option value="Mountaineering">Mountaineering 🏔️</option>
+                  <option value="Snowboarding">Snowboarding 🏂</option>
+                  <option value="Cycling">Cycling 🚵</option>
+                  <option value="Water Sports">Water Sports 🚣</option>
+                  <option value="Apparel">Apparel 👕</option>
+                  <option value="Footwear">Footwear 👟</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
+                <select
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Men">Men</option>
+                  <option value="Women">Women</option>
+                  <option value="Unisex">Unisex</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Size</label>
+                <select
+                  value={size}
+                  onChange={(e) => setSize(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Size</option>
+                  <option value="XS">XS</option>
+                  <option value="S">S</option>
+                  <option value="M">M</option>
+                  <option value="L">L</option>
+                  <option value="XL">XL</option>
+                  <option value="XXL">XXL</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10</option>
+                  <option value="11">11</option>
+                  <option value="12">12</option>
+                  <option value="13">13</option>
+                  <option value="One Size">One Size</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Condition</label>
+                <select
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Condition</option>
+                  <option value="New">New - Never used</option>
+                  <option value="Like New">Like New - Minimal wear</option>
+                  <option value="Good">Good - Some wear but functional</option>
+                  <option value="Fair">Fair - Well used but still works</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                <input
+                  type="text"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Patagonia, REI"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Material</label>
+                <input
+                  type="text"
+                  value={material}
+                  onChange={(e) => setMaterial(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., Gore-Tex, Cotton"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -357,6 +583,29 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
             {isProcessing ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
+
+        {/* Validation Error Modal */}
+        {showValidationError && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+              <div className="flex items-center mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                  <span className="text-red-600 text-xl">⚠️</span>
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900">Validation Error</h3>
+              </div>
+              <p className="text-gray-600 mb-6">{validationMessage}</p>
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setShowValidationError(false)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

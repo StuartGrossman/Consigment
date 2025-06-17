@@ -14,6 +14,15 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
+  
+  // Modal states
+  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showErrorModal, setShowErrorModal] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [modalMessage, setModalMessage] = useState('');
 
   useEffect(() => {
     if (isOpen && user) {
@@ -50,44 +59,67 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     }
   };
 
-  const handleApprove = async (itemId: string) => {
-    setProcessingItemId(itemId);
+  const handleApproveClick = (item: ConsignmentItem) => {
+    setSelectedItem(item);
+    setShowApproveModal(true);
+  };
+
+  const handleRejectClick = (item: ConsignmentItem) => {
+    setSelectedItem(item);
+    setRejectionReason('');
+    setShowRejectModal(true);
+  };
+
+  const confirmApprove = async () => {
+    if (!selectedItem) return;
+    
+    setProcessingItemId(selectedItem.id);
+    setShowApproveModal(false);
+    
     try {
-      await updateDoc(doc(db, 'items', itemId), {
+      await updateDoc(doc(db, 'items', selectedItem.id), {
         status: 'approved',
         approvedAt: serverTimestamp()
       });
       
       // Remove from pending list
-      setPendingItems(prev => prev.filter(item => item.id !== itemId));
-      alert('Item approved! It will be available to employees for 3 days before going live.');
+      setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
+      setModalMessage('Item approved! It will be available to employees for 3 days before going live.');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error approving item:', error);
-      alert('Error approving item. Please try again.');
+      setModalMessage('Error approving item. Please try again.');
+      setShowErrorModal(true);
     } finally {
       setProcessingItemId(null);
+      setSelectedItem(null);
     }
   };
 
-  const handleReject = async (itemId: string) => {
-    const reason = prompt('Reason for rejection (optional):');
-    setProcessingItemId(itemId);
+  const confirmReject = async () => {
+    if (!selectedItem) return;
+    
+    setProcessingItemId(selectedItem.id);
+    setShowRejectModal(false);
     
     try {
-      await updateDoc(doc(db, 'items', itemId), {
+      await updateDoc(doc(db, 'items', selectedItem.id), {
         status: 'rejected',
         rejectedAt: serverTimestamp(),
-        rejectionReason: reason || 'No reason provided'
+        rejectionReason: rejectionReason || 'No reason provided'
       });
       
       // Remove from pending list
-      setPendingItems(prev => prev.filter(item => item.id !== itemId));
-      alert('Item rejected.');
+      setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
+      setModalMessage('Item rejected.');
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Error rejecting item:', error);
-      alert('Error rejecting item. Please try again.');
+      setModalMessage('Error rejecting item. Please try again.');
+      setShowErrorModal(true);
     } finally {
       setProcessingItemId(null);
+      setSelectedItem(null);
     }
   };
 
@@ -183,14 +215,14 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
                       {/* Action Buttons */}
                       <div className="flex gap-3">
                         <button
-                          onClick={() => handleApprove(item.id)}
+                          onClick={() => handleApproveClick(item)}
                           disabled={processingItemId === item.id}
                           className="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
                           {processingItemId === item.id ? 'Processing...' : 'Approve Item'}
                         </button>
                         <button
-                          onClick={() => handleReject(item.id)}
+                          onClick={() => handleRejectClick(item)}
                           disabled={processingItemId === item.id}
                           className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                         >
@@ -205,6 +237,127 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           )}
         </div>
       </div>
+
+      {/* Approve Confirmation Modal */}
+      {showApproveModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-green-600 text-xl">✅</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Approve Item</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to approve "<span className="font-medium">{selectedItem.title}</span>"? 
+              This will make it available to employees for 3 days before going live to all customers.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowApproveModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmApprove}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                Approve Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-red-600 text-xl">❌</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Reject Item</h3>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Are you sure you want to reject "<span className="font-medium">{selectedItem.title}</span>"?
+            </p>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for rejection (optional)
+              </label>
+              <textarea
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                rows={3}
+                placeholder="Enter reason for rejection..."
+              />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowRejectModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReject}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                Reject Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-green-600 text-xl">🎉</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Success!</h3>
+            </div>
+            <p className="text-gray-600 mb-6">{modalMessage}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Error Modal */}
+      {showErrorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-red-600 text-xl">⚠️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Error</h3>
+            </div>
+            <p className="text-gray-600 mb-6">{modalMessage}</p>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setShowErrorModal(false)}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

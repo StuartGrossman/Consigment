@@ -112,6 +112,29 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
         <p className="text-gray-600 text-sm mb-3 line-clamp-3">
           {item.description}
         </p>
+
+        {/* Item Details */}
+        {(item.category || item.brand || item.size || item.condition) && (
+          <div className="mb-3 p-2 bg-gray-50 rounded-md">
+            <div className="flex flex-wrap gap-2 text-xs">
+              {item.category && (
+                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{item.category}</span>
+              )}
+              {item.brand && (
+                <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded-full">{item.brand}</span>
+              )}
+              {item.size && (
+                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full">Size {item.size}</span>
+              )}
+              {item.condition && (
+                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full">{item.condition}</span>
+              )}
+              {item.gender && (
+                <span className="bg-pink-100 text-pink-800 px-2 py-1 rounded-full">{item.gender}</span>
+              )}
+            </div>
+          </div>
+        )}
         
         <div className="flex justify-between items-center">
           <div className="text-2xl font-bold text-green-600">

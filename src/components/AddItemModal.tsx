@@ -18,6 +18,14 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const [uploading, setUploading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  // New fields for filtering
+  const [category, setCategory] = useState('');
+  const [gender, setGender] = useState('');
+  const [size, setSize] = useState('');
+  const [brand, setBrand] = useState('');
+  const [condition, setCondition] = useState('');
+  const [material, setMaterial] = useState('');
 
   if (!isOpen) return null;
 
@@ -85,6 +93,13 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
         sellerEmail: user.email,
         status: 'pending',
         createdAt: serverTimestamp(),
+        // New fields
+        category: category || undefined,
+        gender: gender || undefined,
+        size: size || undefined,
+        brand: brand.trim() || undefined,
+        condition: condition || undefined,
+        material: material.trim() || undefined,
       });
 
       // Show success message
@@ -105,6 +120,13 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
     setShowPreview(false);
     setShowSuccess(false);
     setUploading(false);
+    // Reset new fields
+    setCategory('');
+    setGender('');
+    setSize('');
+    setBrand('');
+    setCondition('');
+    setMaterial('');
   };
 
   const handleClose = () => {
@@ -199,6 +221,33 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                     by {user?.displayName}
                   </div>
                 </div>
+
+                {/* Item Details Preview */}
+                {(category || gender || size || brand || condition || material) && (
+                  <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900 mb-2">Item Details</h4>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {category && (
+                        <div><span className="text-gray-500">Category:</span> <span className="font-medium">{category}</span></div>
+                      )}
+                      {gender && (
+                        <div><span className="text-gray-500">Gender:</span> <span className="font-medium">{gender}</span></div>
+                      )}
+                      {size && (
+                        <div><span className="text-gray-500">Size:</span> <span className="font-medium">{size}</span></div>
+                      )}
+                      {brand && (
+                        <div><span className="text-gray-500">Brand:</span> <span className="font-medium">{brand}</span></div>
+                      )}
+                      {condition && (
+                        <div><span className="text-gray-500">Condition:</span> <span className="font-medium">{condition}</span></div>
+                      )}
+                      {material && (
+                        <div><span className="text-gray-500">Material:</span> <span className="font-medium">{material}</span></div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-4 border-t border-gray-100">
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
@@ -311,6 +360,135 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                 placeholder="0.00"
                 required
               />
+            </div>
+          </div>
+
+          {/* Additional Item Details */}
+          <div className="border-t border-gray-200 pt-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Item Details (Optional but Recommended)</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Category */}
+              <div>
+                <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
+                  Category
+                </label>
+                <select
+                  id="category"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Category</option>
+                  <option value="Climbing">Climbing 🧗</option>
+                  <option value="Skiing">Skiing ⛷️</option>
+                  <option value="Hiking">Hiking 🥾</option>
+                  <option value="Camping">Camping ⛺</option>
+                  <option value="Mountaineering">Mountaineering 🏔️</option>
+                  <option value="Snowboarding">Snowboarding 🏂</option>
+                  <option value="Cycling">Cycling 🚵</option>
+                  <option value="Water Sports">Water Sports 🚣</option>
+                  <option value="Apparel">Apparel 👕</option>
+                  <option value="Footwear">Footwear 👟</option>
+                </select>
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-2">
+                  Gender
+                </label>
+                <select
+                  id="gender"
+                  value={gender}
+                  onChange={(e) => setGender(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Gender</option>
+                  <option value="Men">Men</option>
+                  <option value="Women">Women</option>
+                  <option value="Unisex">Unisex</option>
+                </select>
+              </div>
+
+              {/* Size */}
+              <div>
+                <label htmlFor="size" className="block text-sm font-medium text-gray-700 mb-2">
+                  Size
+                </label>
+                <select
+                  id="size"
+                  value={size}
+                  onChange={(e) => setSize(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Size</option>
+                  <option value="XS">XS</option>
+                  <option value="S">S</option>
+                  <option value="M">M</option>
+                  <option value="L">L</option>
+                  <option value="XL">XL</option>
+                  <option value="XXL">XXL</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10</option>
+                  <option value="11">11</option>
+                  <option value="12">12</option>
+                  <option value="13">13</option>
+                  <option value="One Size">One Size</option>
+                </select>
+              </div>
+
+              {/* Brand */}
+              <div>
+                <label htmlFor="brand" className="block text-sm font-medium text-gray-700 mb-2">
+                  Brand
+                </label>
+                <input
+                  type="text"
+                  id="brand"
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Patagonia, REI, North Face"
+                />
+              </div>
+
+              {/* Condition */}
+              <div>
+                <label htmlFor="condition" className="block text-sm font-medium text-gray-700 mb-2">
+                  Condition
+                </label>
+                <select
+                  id="condition"
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Condition</option>
+                  <option value="New">New - Never used</option>
+                  <option value="Like New">Like New - Minimal wear</option>
+                  <option value="Good">Good - Some wear but functional</option>
+                  <option value="Fair">Fair - Well used but still works</option>
+                </select>
+              </div>
+
+              {/* Material */}
+              <div>
+                <label htmlFor="material" className="block text-sm font-medium text-gray-700 mb-2">
+                  Material/Fabric
+                </label>
+                <input
+                  type="text"
+                  id="material"
+                  value={material}
+                  onChange={(e) => setMaterial(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="e.g., Gore-Tex, Merino Wool, Cotton"
+                />
+              </div>
             </div>
           </div>
 

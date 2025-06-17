@@ -21,6 +21,19 @@ const Home: React.FC = () => {
     const [loadingItems, setLoadingItems] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [filters, setFilters] = useState({
+        category: '',
+        gender: '',
+        size: '',
+        brand: '',
+        priceRange: '',
+        sortBy: 'newest'
+    });
+    const [notificationCounts, setNotificationCounts] = useState({
+        pending: 0,
+        approved: 0,
+        sold: 0
+    });
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -32,6 +45,15 @@ const Home: React.FC = () => {
         }
     }, [isAuthenticated]);
 
+    useEffect(() => {
+        if (isAdmin) {
+            fetchNotificationCounts();
+            // Set up interval to refresh counts every 30 seconds
+            const interval = setInterval(fetchNotificationCounts, 30000);
+            return () => clearInterval(interval);
+        }
+    }, [isAdmin]);
+
     const checkAdminStatus = async () => {
         if (!user) return;
         
@@ -41,6 +63,39 @@ const Home: React.FC = () => {
         } catch (error) {
             console.error('Error checking admin status:', error);
             setIsAdmin(false);
+        }
+    };
+
+    const fetchNotificationCounts = async () => {
+        if (!user) return;
+        
+        try {
+            const itemsRef = collection(db, 'items');
+            
+            // Get pending items count
+            const pendingQuery = query(itemsRef, where('status', '==', 'pending'));
+            const pendingSnapshot = await getDocs(pendingQuery);
+            
+            // Get approved items count
+            const approvedQuery = query(itemsRef, where('status', '==', 'approved'));
+            const approvedSnapshot = await getDocs(approvedQuery);
+            
+            // Get recently sold items count (sold in last 24 hours)
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const soldQuery = query(
+                itemsRef, 
+                where('status', '==', 'sold'),
+                where('soldAt', '>=', oneDayAgo)
+            );
+            const soldSnapshot = await getDocs(soldQuery);
+            
+            setNotificationCounts({
+                pending: pendingSnapshot.size,
+                approved: approvedSnapshot.size,
+                sold: soldSnapshot.size
+            });
+        } catch (error) {
+            console.error('Error fetching notification counts:', error);
         }
     };
 
@@ -107,6 +162,7 @@ const Home: React.FC = () => {
     const handleAdminModalClose = () => {
         setIsAdminModalOpen(false);
         fetchItems();
+        if (isAdmin) fetchNotificationCounts();
     };
 
     const handleApprovedModal = () => {
@@ -116,6 +172,7 @@ const Home: React.FC = () => {
     const handleApprovedModalClose = () => {
         setIsApprovedModalOpen(false);
         fetchItems();
+        if (isAdmin) fetchNotificationCounts();
     };
 
     const handleAnalyticsModal = () => {
@@ -156,6 +213,71 @@ const Home: React.FC = () => {
             console.error('Error marking item as sold:', error);
             throw error;
         }
+    };
+
+    const handleFilterChange = (filterType: string, value: string) => {
+        setFilters(prev => ({
+            ...prev,
+            [filterType]: value
+        }));
+    };
+
+    const clearFilters = () => {
+        setFilters({
+            category: '',
+            gender: '',
+            size: '',
+            brand: '',
+            priceRange: '',
+            sortBy: 'newest'
+        });
+    };
+
+    const getFilteredAndSortedItems = () => {
+        let filtered = [...items];
+
+        // Apply filters
+        if (filters.category) {
+            filtered = filtered.filter(item => item.category === filters.category);
+        }
+        if (filters.gender) {
+            filtered = filtered.filter(item => item.gender === filters.gender);
+        }
+        if (filters.size) {
+            filtered = filtered.filter(item => item.size === filters.size);
+        }
+        if (filters.brand) {
+            filtered = filtered.filter(item => item.brand?.toLowerCase().includes(filters.brand.toLowerCase()));
+        }
+        if (filters.priceRange) {
+            const [min, max] = filters.priceRange.split('-').map(Number);
+            filtered = filtered.filter(item => {
+                if (max) {
+                    return item.price >= min && item.price <= max;
+                } else {
+                    return item.price >= min;
+                }
+            });
+        }
+
+        // Apply sorting
+        switch (filters.sortBy) {
+            case 'price-low':
+                filtered.sort((a, b) => a.price - b.price);
+                break;
+            case 'price-high':
+                filtered.sort((a, b) => b.price - a.price);
+                break;
+            case 'oldest':
+                filtered.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+                break;
+            case 'newest':
+            default:
+                filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                break;
+        }
+
+        return filtered;
     };
 
     if (loading) {
@@ -384,21 +506,36 @@ const Home: React.FC = () => {
                                 <>
                                     <button
                                         onClick={handleAdminModal}
-                                        className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors text-sm"
+                                        className="relative bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors text-sm"
                                     >
                                         Manage Items
+                                        {notificationCounts.pending > 0 && (
+                                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
+                                            </span>
+                                        )}
                                     </button>
                                     <button
                                         onClick={handleApprovedModal}
-                                        className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                                        className="relative bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm"
                                     >
                                         Approved Items
+                                        {notificationCounts.approved > 0 && (
+                                            <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
+                                            </span>
+                                        )}
                                     </button>
                                     <button
                                         onClick={handleSoldItemsModal}
-                                        className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm"
+                                        className="relative bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm"
                                     >
                                         Sold Items
+                                        {notificationCounts.sold > 0 && (
+                                            <span className="absolute -top-2 -right-2 bg-yellow-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                {notificationCounts.sold > 9 ? '9+' : notificationCounts.sold}
+                                            </span>
+                                        )}
                                     </button>
                                 </>
                             )}
@@ -436,45 +573,195 @@ const Home: React.FC = () => {
                 </div>
             </div>
 
-            {/* Items Grid */}
+            {/* Main Content with Sidebar */}
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="mb-8">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Available Gear</h2>
-                    <p className="text-gray-600">Quality mountain equipment from fellow outdoor enthusiasts</p>
-                </div>
-                
-                {loadingItems ? (
-                    <div className="flex justify-center py-12">
-                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-                    </div>
-                ) : items.length === 0 ? (
-                    <div className="text-center py-16 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                        <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
+                <div className="flex gap-8">
+                    {/* Left Sidebar - Filters */}
+                    <div className="w-64 flex-shrink-0">
+                        <div className="bg-white rounded-lg shadow-sm border p-6 sticky top-8">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+                                <button
+                                    onClick={clearFilters}
+                                    className="text-sm text-orange-600 hover:text-orange-700"
+                                >
+                                    Clear All
+                                </button>
+                            </div>
+
+                            {/* Sort By */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                                <select
+                                    value={filters.sortBy}
+                                    onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="price-low">Price: Low to High</option>
+                                    <option value="price-high">Price: High to Low</option>
+                                </select>
+                            </div>
+
+                            {/* Category */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                                <select
+                                    value={filters.category}
+                                    onChange={(e) => handleFilterChange('category', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">All Categories</option>
+                                    <option value="Climbing">Climbing 🧗</option>
+                                    <option value="Skiing">Skiing ⛷️</option>
+                                    <option value="Hiking">Hiking 🥾</option>
+                                    <option value="Camping">Camping ⛺</option>
+                                    <option value="Mountaineering">Mountaineering 🏔️</option>
+                                    <option value="Snowboarding">Snowboarding 🏂</option>
+                                    <option value="Cycling">Cycling 🚵</option>
+                                    <option value="Water Sports">Water Sports 🚣</option>
+                                    <option value="Apparel">Apparel 👕</option>
+                                    <option value="Footwear">Footwear 👟</option>
+                                </select>
+                            </div>
+
+                            {/* Gender */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                                <select
+                                    value={filters.gender}
+                                    onChange={(e) => handleFilterChange('gender', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">All</option>
+                                    <option value="Men">Men</option>
+                                    <option value="Women">Women</option>
+                                    <option value="Unisex">Unisex</option>
+                                </select>
+                            </div>
+
+                            {/* Size */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Size</label>
+                                <select
+                                    value={filters.size}
+                                    onChange={(e) => handleFilterChange('size', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">All Sizes</option>
+                                    <option value="XS">XS</option>
+                                    <option value="S">S</option>
+                                    <option value="M">M</option>
+                                    <option value="L">L</option>
+                                    <option value="XL">XL</option>
+                                    <option value="XXL">XXL</option>
+                                    <option value="6">6</option>
+                                    <option value="7">7</option>
+                                    <option value="8">8</option>
+                                    <option value="9">9</option>
+                                    <option value="10">10</option>
+                                    <option value="11">11</option>
+                                    <option value="12">12</option>
+                                    <option value="13">13</option>
+                                    <option value="One Size">One Size</option>
+                                </select>
+                            </div>
+
+                            {/* Brand */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                                <input
+                                    type="text"
+                                    value={filters.brand}
+                                    onChange={(e) => handleFilterChange('brand', e.target.value)}
+                                    placeholder="Search brands..."
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                />
+                            </div>
+
+                            {/* Price Range */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
+                                <select
+                                    value={filters.priceRange}
+                                    onChange={(e) => handleFilterChange('priceRange', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">Any Price</option>
+                                    <option value="0-25">Under $25</option>
+                                    <option value="25-50">$25 - $50</option>
+                                    <option value="50-100">$50 - $100</option>
+                                    <option value="100-200">$100 - $200</option>
+                                    <option value="200-500">$200 - $500</option>
+                                    <option value="500">$500+</option>
+                                </select>
+                            </div>
                         </div>
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No items available yet</h3>
-                        <p className="text-gray-500 mb-6">Be the first to list your mountain gear!</p>
-                        <button
-                            onClick={handleAddItem}
-                            className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors"
-                        >
-                            List Your First Item
-                        </button>
                     </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {items.map((item) => (
-                            <ItemCard 
-                                key={item.id} 
-                                item={item} 
-                                isAdmin={isAdmin}
-                                onMarkAsSold={handleMarkAsSold}
-                            />
-                        ))}
+
+                    {/* Main Content Area */}
+                    <div className="flex-1">
+                        <div className="mb-8">
+                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Available Gear</h2>
+                            <p className="text-gray-600">Quality mountain equipment from fellow outdoor enthusiasts</p>
+                        </div>
+                        
+                        {loadingItems ? (
+                            <div className="flex justify-center py-12">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+                            </div>
+                        ) : (() => {
+                            const filteredItems = getFilteredAndSortedItems();
+                            return filteredItems.length === 0 ? (
+                                <div className="text-center py-16 bg-white rounded-lg border-2 border-dashed border-gray-300">
+                                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                                        {items.length === 0 ? 'No items available yet' : 'No items match your filters'}
+                                    </h3>
+                                    <p className="text-gray-500 mb-6">
+                                        {items.length === 0 ? 'Be the first to list your mountain gear!' : 'Try adjusting your search criteria'}
+                                    </p>
+                                    {items.length === 0 ? (
+                                        <button
+                                            onClick={handleAddItem}
+                                            className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors"
+                                        >
+                                            List Your First Item
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={clearFilters}
+                                            className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors"
+                                        >
+                                            Clear Filters
+                                        </button>
+                                    )}
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="mb-4 text-sm text-gray-600">
+                                        Showing {filteredItems.length} of {items.length} items
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {filteredItems.map((item) => (
+                                            <ItemCard 
+                                                key={item.id} 
+                                                item={item} 
+                                                isAdmin={isAdmin}
+                                                onMarkAsSold={handleMarkAsSold}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
-                )}
+                </div>
             </div>
 
             {/* Modals */}
