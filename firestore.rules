@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Items collection rules
+    match /items/{itemId} {
+      // Allow authenticated users to read items that are 'live'
+      allow read: if request.auth != null && resource.data.status == 'live';
+      
+      // Allow authenticated users to read their own items (any status)
+      allow read: if request.auth != null && request.auth.uid == resource.data.sellerId;
+      
+      // Allow authenticated users to create items with 'pending' status
+      allow create: if request.auth != null 
+        && request.auth.uid == request.resource.data.sellerId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.sellerId is string
+        && request.resource.data.sellerName is string
+        && request.resource.data.sellerEmail is string
+        && request.resource.data.title is string
+        && request.resource.data.description is string
+        && request.resource.data.price is number
+        && request.resource.data.images is list
+        && request.resource.data.createdAt is timestamp;
+      
+      // Allow admins to read and update any item
+      allow read, update: if request.auth != null 
+        && (request.auth.token.admin == true 
+            || request.auth.token.email in [
+              'grossman.stuart1@gmail.com', // Your admin email
+              'admin@consignmentstore.com'   // Add other admin emails here
+            ]
+            || exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
+    }
+    
+    // Users collection (optional - for storing user profiles)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Admins collection
+    match /admins/{userId} {
+      // Allow users to create admin document for themselves (for initial setup)
+      allow create: if request.auth != null && request.auth.uid == userId;
+      // Allow reading admin status
+      allow read: if request.auth != null;
+    }
+  }
+} 
