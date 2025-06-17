@@ -7,6 +7,7 @@ import ItemCard from './ItemCard';
 import AddItemModal from './AddItemModal';
 import AdminModal from './AdminModal';
 import ApprovedItemsModal from './ApprovedItemsModal';
+import UserAnalyticsModal from './UserAnalyticsModal';
 
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, logout, isAuthenticated } = useAuth();
@@ -14,6 +15,7 @@ const Home: React.FC = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     const [isApprovedModalOpen, setIsApprovedModalOpen] = useState(false);
+    const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
     const [loadingItems, setLoadingItems] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
 
@@ -121,6 +123,16 @@ const Home: React.FC = () => {
         fetchItems();
     };
 
+    const handleAnalyticsModal = () => {
+        setIsAnalyticsModalOpen(true);
+    };
+
+    const handleAnalyticsModalClose = () => {
+        setIsAnalyticsModalOpen(false);
+        // Refresh items after analytics actions
+        fetchItems();
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -188,6 +200,18 @@ const Home: React.FC = () => {
                                     </button>
                                 </>
                             )}
+                            
+                            {/* Analytics button - show for all users */}
+                            <button
+                                onClick={handleAnalyticsModal}
+                                className={`px-4 py-2 rounded-lg transition-colors text-sm ${
+                                    isAdmin 
+                                        ? 'bg-teal-500 text-white hover:bg-teal-600' 
+                                        : 'bg-gray-500 text-white hover:bg-gray-600'
+                                }`}
+                            >
+                                {isAdmin ? 'User Analytics' : 'My Statistics'}
+                            </button>
                             <div className="flex items-center gap-2">
                                 <img 
                                     src={user?.photoURL || ''} 
@@ -252,6 +276,14 @@ const Home: React.FC = () => {
                     user={user}
                 />
             )}
+
+            {/* User Analytics Modal */}
+            <UserAnalyticsModal 
+                isOpen={isAnalyticsModalOpen} 
+                onClose={handleAnalyticsModalClose}
+                user={user}
+                isAdmin={isAdmin}
+            />
         </div>
     );
 };

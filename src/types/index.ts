@@ -11,6 +11,11 @@ export interface ConsignmentItem {
   createdAt: Date;
   approvedAt?: Date;
   liveAt?: Date;
+  soldAt?: Date;
+  soldPrice?: number;
+  buyerId?: string;
+  buyerName?: string;
+  buyerEmail?: string;
 }
 
 export interface User {
@@ -24,4 +29,31 @@ export interface User {
 export interface UploadProgress {
   url: string;
   progress: number;
+}
+
+export interface UserAnalytics {
+  userId: string;
+  userName: string;
+  userEmail: string;
+  totalItemsListed: number;
+  totalItemsSold: number;
+  totalEarnings: number;
+  totalPaid: number;
+  outstandingBalance: number;
+  activeItems: ConsignmentItem[];
+  soldItems: ConsignmentItem[];
+  pendingItems: ConsignmentItem[];
+  approvedItems: ConsignmentItem[];
+}
+
+export interface PaymentRecord {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  amount: number;
+  itemsSold: string[]; // Array of item IDs
+  paidAt: Date;
+  paymentMethod?: string;
+  notes?: string;
 } 
