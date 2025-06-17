@@ -9,9 +9,10 @@ interface UserAnalyticsModalProps {
     onClose: () => void;
     user: FirebaseUser | null;
     isAdmin?: boolean;
+    refreshTrigger?: number;
 }
 
-const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose, user, isAdmin = false }) => {
+const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose, user, isAdmin = false, refreshTrigger = 0 }) => {
     const [loading, setLoading] = useState(false);
     const [selectedUser, setSelectedUser] = useState<string | null>(null);
     const [userAnalytics, setUserAnalytics] = useState<UserAnalytics[]>([]);
@@ -22,8 +23,14 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentNotes, setPaymentNotes] = useState('');
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+    const [showSoldModal, setShowSoldModal] = useState(false);
+    const [itemToMarkSold, setItemToMarkSold] = useState<ConsignmentItem | null>(null);
+    const [soldPrice, setSoldPrice] = useState('');
 
     useEffect(() => {
+        console.log('UserAnalyticsModal useEffect triggered:', { isOpen, isAdmin, refreshTrigger });
         if (isOpen) {
             if (isAdmin) {
                 fetchAllUserAnalytics();
@@ -31,16 +38,20 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 fetchUserAnalytics(user.uid);
             }
         }
-    }, [isOpen, isAdmin, user]);
+    }, [isOpen, isAdmin, user, refreshTrigger]);
 
     const fetchAllUserAnalytics = async () => {
         setLoading(true);
         try {
+            console.log('Fetching all user analytics...');
+            
+            const allUsers: User[] = [];
+            const userMap = new Map<string, UserAnalytics>();
+
+            // First, get all items to find users who have listed items
             const itemsRef = collection(db, 'items');
             const itemsSnapshot = await getDocs(itemsRef);
-            
-            const userMap = new Map<string, UserAnalytics>();
-            const users = new Set<User>();
+            console.log('Found', itemsSnapshot.size, 'items');
 
             itemsSnapshot.forEach((doc) => {
                 const item = { 
@@ -53,14 +64,16 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 } as ConsignmentItem;
                 const userId = item.sellerId;
                 
-                users.add({
-                    uid: userId,
-                    email: item.sellerEmail,
-                    displayName: item.sellerName,
-                    photoURL: ''
-                });
-
+                // Create user analytics if not exists
                 if (!userMap.has(userId)) {
+                    const user: User = {
+                        uid: userId,
+                        email: item.sellerEmail,
+                        displayName: item.sellerName,
+                        photoURL: ''
+                    };
+                    allUsers.push(user);
+
                     userMap.set(userId, {
                         userId,
                         userName: item.sellerName,
@@ -98,28 +111,87 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 }
             });
 
-            // Get payment records
-            const paymentsRef = collection(db, 'payments');
-            const paymentsSnapshot = await getDocs(paymentsRef);
-            const payments: PaymentRecord[] = [];
-            
-            paymentsSnapshot.forEach((doc) => {
-                const payment = { id: doc.id, ...doc.data() } as PaymentRecord;
-                payments.push(payment);
+            // Try to get additional users from the users collection (if it exists)
+            try {
+                const usersRef = collection(db, 'users');
+                const usersSnapshot = await getDocs(usersRef);
+                console.log('Found', usersSnapshot.size, 'users in users collection');
                 
-                if (userMap.has(payment.userId)) {
-                    userMap.get(payment.userId)!.totalPaid += payment.amount;
-                }
-            });
+                usersSnapshot.forEach((doc) => {
+                    const userData = doc.data();
+                    const userId = doc.id;
+                    
+                    // If we don't already have this user, add them
+                    if (!userMap.has(userId)) {
+                        const user: User = {
+                            uid: userId,
+                            email: userData.email || '',
+                            displayName: userData.displayName || userData.name || 'Unknown User',
+                            photoURL: userData.photoURL || ''
+                        };
+                        allUsers.push(user);
+
+                        userMap.set(userId, {
+                            userId,
+                            userName: user.displayName,
+                            userEmail: user.email,
+                            totalItemsListed: 0,
+                            totalItemsSold: 0,
+                            totalEarnings: 0,
+                            totalPaid: 0,
+                            outstandingBalance: 0,
+                            activeItems: [],
+                            soldItems: [],
+                            pendingItems: [],
+                            approvedItems: []
+                        });
+                    } else {
+                        // Update existing user info with more complete data
+                        const analytics = userMap.get(userId)!;
+                        analytics.userName = userData.displayName || userData.name || analytics.userName;
+                        analytics.userEmail = userData.email || analytics.userEmail;
+                    }
+                });
+            } catch (usersError) {
+                console.log('Users collection not found or error:', usersError);
+            }
+
+            // Get payment records
+            try {
+                const paymentsRef = collection(db, 'payments');
+                const paymentsSnapshot = await getDocs(paymentsRef);
+                const payments: PaymentRecord[] = [];
+                
+                paymentsSnapshot.forEach((doc) => {
+                    const payment = { id: doc.id, ...doc.data() } as PaymentRecord;
+                    payments.push(payment);
+                    
+                    if (userMap.has(payment.userId)) {
+                        userMap.get(payment.userId)!.totalPaid += payment.amount;
+                    }
+                });
+                setPaymentRecords(payments);
+            } catch (paymentsError) {
+                console.log('Payments collection not found or error:', paymentsError);
+                setPaymentRecords([]);
+            }
 
             // Calculate outstanding balances
             userMap.forEach((analytics) => {
                 analytics.outstandingBalance = analytics.totalEarnings - analytics.totalPaid;
             });
 
-            setUserAnalytics(Array.from(userMap.values()));
-            setAllUsers(Array.from(users));
-            setPaymentRecords(payments);
+            // Sort users by total earnings (highest first), then by items listed
+            const sortedAnalytics = Array.from(userMap.values()).sort((a, b) => {
+                if (b.totalEarnings !== a.totalEarnings) {
+                    return b.totalEarnings - a.totalEarnings;
+                }
+                return b.totalItemsListed - a.totalItemsListed;
+            });
+
+            console.log('Final user analytics:', sortedAnalytics.length, 'users');
+            setUserAnalytics(sortedAnalytics);
+            setAllUsers(allUsers);
         } catch (error) {
             console.error('Error fetching analytics:', error);
         } finally {
@@ -130,9 +202,13 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const fetchUserAnalytics = async (userId: string) => {
         setLoading(true);
         try {
+            console.log('Fetching user analytics for userId:', userId);
+            
             const itemsRef = collection(db, 'items');
             const userItemsQuery = query(itemsRef, where('sellerId', '==', userId));
             const itemsSnapshot = await getDocs(userItemsQuery);
+            
+            console.log('Found', itemsSnapshot.size, 'items for user');
             
             const analytics: UserAnalytics = {
                 userId,
@@ -158,6 +234,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                     liveAt: doc.data().liveAt?.toDate(),
                     soldAt: doc.data().soldAt?.toDate()
                 } as ConsignmentItem;
+                
+                console.log('Processing item:', item.title, 'status:', item.status, 'price:', item.price, 'soldPrice:', item.soldPrice);
                 analytics.totalItemsListed++;
 
                 switch (item.status) {
@@ -179,16 +257,31 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             });
 
             // Get payment records for this user
-            const paymentsRef = collection(db, 'payments');
-            const userPaymentsQuery = query(paymentsRef, where('userId', '==', userId));
-            const paymentsSnapshot = await getDocs(userPaymentsQuery);
-            
-            paymentsSnapshot.forEach((doc) => {
-                const payment = doc.data() as PaymentRecord;
-                analytics.totalPaid += payment.amount;
-            });
+            try {
+                const paymentsRef = collection(db, 'payments');
+                const userPaymentsQuery = query(paymentsRef, where('userId', '==', userId));
+                const paymentsSnapshot = await getDocs(userPaymentsQuery);
+                
+                console.log('Found', paymentsSnapshot.size, 'payments for user');
+                
+                paymentsSnapshot.forEach((doc) => {
+                    const payment = doc.data() as PaymentRecord;
+                    analytics.totalPaid += payment.amount;
+                });
+            } catch (paymentsError) {
+                console.log('Payments collection not found or error:', paymentsError);
+            }
 
             analytics.outstandingBalance = analytics.totalEarnings - analytics.totalPaid;
+            
+            console.log('Final user analytics:', {
+                totalItemsListed: analytics.totalItemsListed,
+                totalItemsSold: analytics.totalItemsSold,
+                totalEarnings: analytics.totalEarnings,
+                totalPaid: analytics.totalPaid,
+                outstandingBalance: analytics.outstandingBalance
+            });
+            
             setCurrentUserAnalytics(analytics);
         } catch (error) {
             console.error('Error fetching user analytics:', error);
@@ -223,11 +316,16 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         }
     };
 
-    const handleDeleteItem = async (itemId: string) => {
-        if (!confirm('Are you sure you want to delete this item?')) return;
+    const handleDeleteItem = (itemId: string) => {
+        setItemToDelete(itemId);
+        setShowDeleteModal(true);
+    };
+
+    const confirmDeleteItem = async () => {
+        if (!itemToDelete) return;
         
         try {
-            await deleteDoc(doc(db, 'items', itemId));
+            await deleteDoc(doc(db, 'items', itemToDelete));
             if (isAdmin) {
                 fetchAllUserAnalytics();
             } else if (user) {
@@ -235,19 +333,35 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             }
         } catch (error) {
             console.error('Error deleting item:', error);
+        } finally {
+            setShowDeleteModal(false);
+            setItemToDelete(null);
         }
     };
 
-    const handleMarkAsSold = async (item: ConsignmentItem) => {
-        const soldPrice = prompt('Enter sold price:', item.price.toString());
-        if (!soldPrice) return;
+    const cancelDeleteItem = () => {
+        setShowDeleteModal(false);
+        setItemToDelete(null);
+    };
+
+    const handleMarkAsSold = (item: ConsignmentItem) => {
+        setItemToMarkSold(item);
+        setSoldPrice(item.price.toString());
+        setShowSoldModal(true);
+    };
+
+    const confirmMarkAsSold = async () => {
+        if (!itemToMarkSold || !soldPrice) return;
+        
+        const price = parseFloat(soldPrice);
+        if (isNaN(price) || price <= 0) return;
         
         try {
-            const itemRef = doc(db, 'items', item.id);
+            const itemRef = doc(db, 'items', itemToMarkSold.id);
             await updateDoc(itemRef, {
                 status: 'sold',
                 soldAt: new Date(),
-                soldPrice: parseFloat(soldPrice)
+                soldPrice: price
             });
             
             if (isAdmin) {
@@ -257,7 +371,17 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             }
         } catch (error) {
             console.error('Error marking item as sold:', error);
+        } finally {
+            setShowSoldModal(false);
+            setItemToMarkSold(null);
+            setSoldPrice('');
         }
+    };
+
+    const cancelMarkAsSold = () => {
+        setShowSoldModal(false);
+        setItemToMarkSold(null);
+        setSoldPrice('');
     };
 
     const handlePayUser = async () => {
@@ -326,36 +450,53 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 {/* User List */}
                                 <div className="lg:col-span-1">
-                                    <h3 className="text-lg font-semibold mb-4">Users</h3>
+                                    <h3 className="text-lg font-semibold mb-4">
+                                        Users ({userAnalytics.length})
+                                    </h3>
                                     <div className="space-y-2 max-h-96 overflow-y-auto">
-                                        {userAnalytics.map((analytics) => (
-                                            <div
-                                                key={analytics.userId}
-                                                className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                                                    selectedUser === analytics.userId 
-                                                        ? 'border-blue-500 bg-blue-50' 
-                                                        : 'border-gray-200 hover:border-gray-300'
-                                                }`}
-                                                onClick={() => setSelectedUser(analytics.userId)}
-                                            >
-                                                <div className="font-medium">{analytics.userName}</div>
-                                                <div className="text-sm text-gray-500">{analytics.userEmail}</div>
-                                                <div className="text-sm mt-1">
-                                                    <span className="text-green-600">{formatCurrency(analytics.totalEarnings)}</span>
+                                        {userAnalytics.length === 0 ? (
+                                            <div className="text-center py-8 text-gray-500">
+                                                <div className="text-4xl mb-2">👥</div>
+                                                <p>No users found</p>
+                                                <p className="text-sm">Users will appear here after they list items</p>
+                                            </div>
+                                        ) : (
+                                            userAnalytics.map((analytics) => (
+                                                <div
+                                                    key={analytics.userId}
+                                                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                                                        selectedUser === analytics.userId 
+                                                            ? 'border-blue-500 bg-blue-50' 
+                                                            : 'border-gray-200 hover:border-gray-300'
+                                                    }`}
+                                                    onClick={() => setSelectedUser(analytics.userId)}
+                                                >
+                                                    <div className="font-medium">{analytics.userName}</div>
+                                                    <div className="text-sm text-gray-500">{analytics.userEmail}</div>
+                                                    <div className="text-sm mt-1 flex justify-between">
+                                                        <span className="text-blue-600">{analytics.totalItemsListed} items</span>
+                                                        <span className="text-green-600">{formatCurrency(analytics.totalEarnings)}</span>
+                                                    </div>
                                                     {analytics.outstandingBalance > 0 && (
-                                                        <span className="text-orange-600 ml-2">
-                                                            ({formatCurrency(analytics.outstandingBalance)} owed)
-                                                        </span>
+                                                        <div className="text-xs text-orange-600 mt-1">
+                                                            Owed: {formatCurrency(analytics.outstandingBalance)}
+                                                        </div>
                                                     )}
                                                 </div>
-                                            </div>
-                                        ))}
+                                            ))
+                                        )}
                                     </div>
                                 </div>
 
                                 {/* User Details */}
                                 <div className="lg:col-span-2">
-                                    {selectedUser && (() => {
+                                    {!selectedUser ? (
+                                        <div className="text-center py-16 text-gray-500">
+                                            <div className="text-6xl mb-4">📊</div>
+                                            <h3 className="text-lg font-medium mb-2">Select a User</h3>
+                                            <p>Click on a user from the list to view their detailed analytics</p>
+                                        </div>
+                                    ) : (() => {
                                         const analytics = userAnalytics.find(u => u.userId === selectedUser);
                                         if (!analytics) return null;
 
@@ -448,10 +589,17 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                             </div>
                         </div>
                     ) : (
-                        currentUserAnalytics && (
-                            <div>
-                                {/* User's Personal Statistics */}
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        <div>
+                            {!currentUserAnalytics ? (
+                                <div className="text-center py-16 text-gray-500">
+                                    <div className="text-6xl mb-4">📊</div>
+                                    <h3 className="text-lg font-medium mb-2">Loading Your Statistics...</h3>
+                                    <p>Gathering your item data and earnings information</p>
+                                </div>
+                            ) : (
+                                <div>
+                                    {/* User's Personal Statistics */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                                     <div className="bg-blue-50 p-4 rounded-lg">
                                         <div className="text-blue-600 text-sm font-medium">Items Listed</div>
                                         <div className="text-2xl font-bold text-blue-900">{currentUserAnalytics.totalItemsListed}</div>
@@ -499,8 +647,9 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                         </div>
                                     );
                                 })}
-                            </div>
-                        )
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
 
@@ -596,6 +745,86 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                         Cancel
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Delete Item Modal */}
+                {showDeleteModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+                            <div className="flex items-center mb-4">
+                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-red-600 text-xl">🗑️</span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Delete Item</h3>
+                            </div>
+                            <p className="text-gray-600 mb-6">
+                                Are you sure you want to delete this item? This action cannot be undone.
+                            </p>
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    onClick={cancelDeleteItem}
+                                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDeleteItem}
+                                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                                >
+                                    Delete Item
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Mark as Sold Modal */}
+                {showSoldModal && itemToMarkSold && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+                            <div className="flex items-center mb-4">
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-green-600 text-xl">✅</span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Mark as Sold</h3>
+                            </div>
+                            <p className="text-gray-600 mb-4">
+                                Mark "<span className="font-medium">{itemToMarkSold.title}</span>" as sold
+                            </p>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Final Sale Price
+                                </label>
+                                <input
+                                    type="number"
+                                    value={soldPrice}
+                                    onChange={(e) => setSoldPrice(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
+                                    placeholder="Enter sale price"
+                                    min="0"
+                                    step="0.01"
+                                />
+                                {soldPrice && parseFloat(soldPrice) <= 0 && (
+                                    <p className="text-red-500 text-sm mt-1">Please enter a valid price greater than 0</p>
+                                )}
+                            </div>
+                            <div className="flex justify-end space-x-3">
+                                <button
+                                    onClick={cancelMarkAsSold}
+                                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmMarkAsSold}
+                                    disabled={!soldPrice || parseFloat(soldPrice) <= 0}
+                                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    Confirm Sale
+                                </button>
                             </div>
                         </div>
                     </div>
