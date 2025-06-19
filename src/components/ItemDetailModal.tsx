@@ -1,14 +1,21 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ConsignmentItem } from '../types';
 import { useCart } from '../hooks/useCart';
+import { useAuth } from '../hooks/useAuth';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db, storage } from '../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { logUserAction } from '../services/firebaseService';
+import JsBarcode from 'jsbarcode';
 
 interface ItemDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   item: ConsignmentItem | null;
+  onItemUpdated?: () => void;
 }
 
-const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item }) => {
+const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item, onItemUpdated }) => {
   const { 
     addToCart, 
     isInCart, 
@@ -18,6 +25,9 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
     cartItems,
     bookmarkedItems 
   } = useCart();
+  
+  const { isAdmin, user } = useAuth();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Debug bookmark state changes
   useEffect(() => {
@@ -49,13 +59,13 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
     }
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     console.log('Before adding to cart - Cart items count:', cartItems.length);
     console.log('Item being added:', item.title, 'ID:', item.id);
     console.log('Is item already in cart?', isInCart(item.id));
     console.log('Current cart quantity for this item:', getCartItemQuantity(item.id));
     
-    addToCart(item);
+    await addToCart(item, user);
     
     // Show a brief success message
     const toast = document.createElement('div');
@@ -69,12 +79,12 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
     }, 2000);
   };
 
-  const handleBookmarkToggle = () => {
+  const handleBookmarkToggle = async () => {
     const wasBookmarked = isBookmarked(item.id);
     console.log('Before bookmark toggle - Item ID:', item.id, 'Was bookmarked:', wasBookmarked);
     console.log('Current bookmarked items count:', bookmarkedItems.length);
     
-    toggleBookmark(item.id);
+    await toggleBookmark(item.id, user);
     
     // Show a brief success message
     const toast = document.createElement('div');
@@ -90,12 +100,191 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
   const canPurchase = item.status === 'live';
 
+  // Generate barcode and save as image to Firebase Storage
+  const generateAndSaveBarcode = async (barcodeData: string): Promise<string | null> => {
+    if (!canvasRef.current) return null;
+    
+    try {
+      // Generate barcode using jsbarcode
+      JsBarcode(canvasRef.current, barcodeData, {
+        format: "CODE128",
+        width: 2,
+        height: 80,
+        displayValue: true,
+        fontSize: 12,
+        margin: 10
+      });
+
+      // Convert canvas to blob
+      return new Promise((resolve) => {
+        canvasRef.current!.toBlob(async (blob) => {
+          if (!blob) {
+            resolve(null);
+            return;
+          }
+
+          try {
+            // Upload to Firebase Storage
+            const storageRef = ref(storage, `barcodes/${item.id}_${barcodeData}.png`);
+            await uploadBytes(storageRef, blob);
+            const downloadURL = await getDownloadURL(storageRef);
+            resolve(downloadURL);
+          } catch (error) {
+            console.error('Error uploading barcode:', error);
+            resolve(null);
+          }
+        }, 'image/png');
+      });
+    } catch (error) {
+      console.error('Error generating barcode:', error);
+      return null;
+    }
+  };
+
+  // Print barcode from stored image
+  const printBarcode = (barcodeImageUrl: string) => {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Barcode Label - ${item.title}</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+              .item-info { margin-bottom: 20px; border: 1px solid #ccc; padding: 15px; background-color: #f9f9f9; }
+              .barcode-container { margin: 20px 0; }
+              .print-info { margin-top: 20px; font-size: 12px; color: #666; }
+              h2 { color: #333; margin-bottom: 10px; }
+              .detail-row { margin: 5px 0; text-align: left; }
+              .label { font-weight: bold; display: inline-block; width: 100px; }
+            </style>
+          </head>
+          <body>
+            <h2>Summit Gear Exchange</h2>
+            <div class="item-info">
+              <h3>${item.title}</h3>
+              <div class="detail-row">
+                <span class="label">Price:</span> $${item.price}
+              </div>
+              <div class="detail-row">
+                <span class="label">Category:</span> ${item.category}
+              </div>
+              <div class="detail-row">
+                <span class="label">Brand:</span> ${item.brand || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Size:</span> ${item.size || 'N/A'}
+              </div>
+              <div class="detail-row">
+                <span class="label">Seller:</span> ${item.sellerName}
+              </div>
+              <div class="detail-row">
+                <span class="label">Status:</span> ${item.status}
+              </div>
+            </div>
+            <div class="barcode-container">
+              <img src="${barcodeImageUrl}" alt="Barcode: ${item.barcodeData}" style="max-width: 100%; height: auto;" />
+            </div>
+            <div class="print-info">
+              <p>Barcode: ${item.barcodeData}</p>
+              <p>Generated: ${(() => {
+                try {
+                  if (!item.barcodeGeneratedAt) return new Date().toLocaleDateString();
+                  const date = item.barcodeGeneratedAt instanceof Date 
+                    ? item.barcodeGeneratedAt
+                    : (item.barcodeGeneratedAt as any).toDate?.()
+                      ? (item.barcodeGeneratedAt as any).toDate()
+                      : new Date(item.barcodeGeneratedAt as any);
+                  return date.toLocaleDateString();
+                } catch (error) {
+                  return new Date().toLocaleDateString();
+                }
+              })()}</p>
+              <p>Printed: ${new Date().toLocaleString()}</p>
+            </div>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+    }
+  };
+
+  const handleAdminAction = async (action: string) => {
+    if (!item) return;
+    
+    try {
+      const itemRef = doc(db, 'items', item.id);
+      const updateData: any = { status: action };
+      
+      if (action === 'live') {
+        updateData.liveAt = new Date();
+      } else if (action === 'approved') {
+        updateData.approvedAt = new Date();
+      } else if (action === 'archived') {
+        updateData.archivedAt = new Date();
+      } else if (action === 'pending') {
+        // Reset approval and live dates when moving back to pending
+        updateData.approvedAt = null;
+        updateData.liveAt = null;
+      }
+      
+      await updateDoc(itemRef, updateData);
+      
+      // Log the admin action
+      const actionText = action === 'live' ? 'made item live' : 
+                        action === 'approved' ? 'moved item to approved' : 
+                        action === 'archived' ? 'removed/archived item' :
+                        action === 'pending' ? 'moved item back to pending' : 
+                        `updated item to ${action}`;
+      await logUserAction(user, `item_${action}`, `Admin ${actionText}`, item.id, item.title);
+      
+      // Show success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      const successMessage = action === 'live' ? 'made live' : 
+                             action === 'approved' ? 'moved to approved' : 
+                             action === 'archived' ? 'removed from listings' :
+                             action === 'pending' ? 'moved to pending review' :
+                             `updated to ${action}`;
+      toast.textContent = `Item ${successMessage} successfully!`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 2000);
+      
+      // Call refresh callback if provided
+      if (onItemUpdated) {
+        onItemUpdated();
+      }
+      
+      // Close modal after action
+      onClose();
+    } catch (error) {
+      console.error('Error updating item:', error);
+      
+      // Show error message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = 'Error updating item. Please try again.';
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 2000);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
           <div className="flex justify-between items-start">
-            <div>
+            <div className="flex-1">
               <h2 className="text-2xl font-bold text-gray-800">{item.title}</h2>
               <div className="flex items-center gap-3 mt-2">
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(item.status)}`}>
@@ -103,10 +292,52 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                 </span>
                 <span className="text-2xl font-bold text-orange-600">${item.price}</span>
               </div>
+              
+              {/* Admin Actions - Moved to top */}
+              {isAdmin && (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {item.status !== 'pending' && (
+                    <button
+                      onClick={() => handleAdminAction('pending')}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-500 text-white hover:bg-slate-600 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Send to Pending
+                    </button>
+                  )}
+                  
+                  {item.status !== 'approved' && (
+                    <button
+                      onClick={() => handleAdminAction('approved')}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-500 text-white hover:bg-slate-600 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Send Back to Approved Items
+                    </button>
+                  )}
+                  
+                  {/* Barcode Print Button */}
+                  {item.barcodeImageUrl && (
+                    <button
+                      onClick={() => printBarcode(item.barcodeImageUrl!)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-500 text-white hover:bg-slate-600 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                      </svg>
+                      Print Barcode
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              className="text-gray-400 hover:text-gray-600 focus:outline-none ml-4"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -115,7 +346,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           {/* Item Images */}
           {item.images && item.images.length > 0 && (
             <div className="mb-6">
@@ -187,12 +418,84 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
               )}
             </div>
 
+            {/* Seller Information */}
+            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+              <h4 className="font-medium text-gray-800 mb-2">Seller Information</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <span className="text-gray-600">Name:</span>
+                  <span className="ml-2 font-medium">{item.sellerName}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Email:</span>
+                  <span className="ml-2">{item.sellerEmail}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Listed:</span>
+                  <span className="ml-2">{item.createdAt?.toLocaleDateString() || 'N/A'}</span>
+                </div>
+                {item.approvedAt && (
+                  <div>
+                    <span className="text-gray-600">Approved:</span>
+                    <span className="ml-2">{item.approvedAt.toLocaleDateString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Barcode Information (Admin Only) */}
+            {isAdmin && item.barcodeData && (
+              <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                <h4 className="font-medium text-gray-800 mb-2">Barcode Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-600">Barcode ID:</span>
+                    <span className="ml-2 font-mono text-xs">{item.barcodeData}</span>
+                  </div>
+                  {item.barcodeGeneratedAt && (
+                    <div>
+                      <span className="text-gray-600">Generated:</span>
+                      <span className="ml-2">{
+                        (() => {
+                          try {
+                            const date = item.barcodeGeneratedAt instanceof Date 
+                              ? item.barcodeGeneratedAt
+                              : (item.barcodeGeneratedAt as any).toDate?.()
+                                ? (item.barcodeGeneratedAt as any).toDate()
+                                : new Date(item.barcodeGeneratedAt as any);
+                            return date.toLocaleDateString();
+                          } catch (error) {
+                            return 'Unknown date';
+                          }
+                        })()
+                      }</span>
+                    </div>
+                  )}
+                  {item.barcodeImageUrl && (
+                    <div className="md:col-span-2">
+                      <span className="text-gray-600">Barcode Image:</span>
+                      <div className="mt-2">
+                        <img 
+                          src={item.barcodeImageUrl} 
+                          alt={`Barcode: ${item.barcodeData}`}
+                          className="max-w-xs bg-white p-2 border rounded"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
           </div>
         </div>
 
-        {/* Action Buttons - Only show for live items */}
-        {canPurchase && (
+        {/* Hidden canvas for barcode generation */}
+        <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+        {/* Action Buttons */}
+        {!isAdmin && canPurchase ? (
+          /* User Actions - Only show for live items */
           <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6">
             <div className="flex gap-3">
               {/* Bookmark Button */}
@@ -237,21 +540,179 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
               </p>
             </div>
           </div>
-        )}
+        ) : null}
 
         {/* Status Message for Non-Live Items */}
-        {!canPurchase && (
+        {!canPurchase && item.status !== 'sold' && (
           <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 p-6">
             <div className="text-center">
               <p className="text-gray-600 font-medium">
                 {item.status === 'pending' && 'This item is currently under review'}
                 {item.status === 'approved' && 'This item is approved and will be available soon'}
-                {item.status === 'sold' && 'This item has been sold'}
                 {item.status === 'archived' && 'This item is no longer available'}
               </p>
               <p className="text-xs text-gray-500 mt-1">
                 Check back later or browse our other available items
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Sold Item Actions */}
+        {item.status === 'sold' && (
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6">
+            <div className="space-y-4">
+              {/* Sale Information */}
+              <div className="bg-green-50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="font-medium text-green-800">Item Sold</span>
+                  <span className={`ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    item.saleType === 'online' 
+                      ? 'bg-blue-100 text-blue-800' 
+                      : 'bg-green-100 text-green-800'
+                  }`}>
+                    {item.saleType === 'online' ? '🌐 Online' : '🏪 In-Store'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Sold Price:</span>
+                    <span className="ml-2 font-semibold text-green-700">${item.soldPrice || item.price}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Sold Date:</span>
+                    <span className="ml-2 font-medium">{item.soldAt?.toLocaleDateString() || 'N/A'}</span>
+                  </div>
+                  {item.saleTransactionId && (
+                    <div className="col-span-2">
+                      <span className="text-gray-600">Transaction ID:</span>
+                      <span className="ml-2 font-mono text-xs">{item.saleTransactionId}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                {/* Barcode Label */}
+                {item.barcodeData && (
+                  <button
+                    onClick={() => {
+                      // Generate and print barcode
+                      const printWindow = window.open('', '_blank');
+                      if (printWindow) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>Barcode Label - ${item.title}</title>
+                              <style>
+                                body { font-family: Arial, sans-serif; margin: 20px; text-align: center; }
+                                .barcode-container { margin: 20px 0; }
+                                .item-info { margin-bottom: 20px; }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="item-info">
+                                <h3>${item.title}</h3>
+                                <p>Price: $${item.soldPrice || item.price} | Sold: ${item.soldAt?.toLocaleDateString() || 'N/A'}</p>
+                              </div>
+                              <div class="barcode-container">
+                                <p>Barcode: ${item.barcodeData}</p>
+                                <p>Generated: ${item.barcodeGeneratedAt?.toLocaleDateString() || 'N/A'}</p>
+                              </div>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                        printWindow.print();
+                      }
+                    }}
+                    className="flex-1 py-2 px-4 rounded-lg font-medium bg-gray-500 text-white hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    Print Barcode
+                  </button>
+                )}
+
+                {/* Shipping Label - Only for online sales */}
+                {item.saleType === 'online' && item.buyerInfo && (
+                  <button
+                    onClick={() => {
+                      // Generate and print shipping label
+                      const printWindow = window.open('', '_blank');
+                      if (printWindow) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>Shipping Label - ${item.title}</title>
+                              <style>
+                                body { font-family: Arial, sans-serif; margin: 20px; }
+                                .shipping-label { border: 2px solid #000; padding: 20px; max-width: 600px; margin: 0 auto; }
+                                .from, .to { margin-bottom: 20px; }
+                                .to { border-top: 2px solid #000; padding-top: 20px; }
+                                .item-details { margin-top: 20px; border-top: 1px solid #ccc; padding-top: 10px; }
+                                h3 { margin: 0 0 10px 0; }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="shipping-label">
+                                <div class="from">
+                                  <h3>FROM:</h3>
+                                  <p><strong>Summit Gear Exchange</strong><br>
+                                  123 Mountain View Drive<br>
+                                  Summit, CO 80424<br>
+                                  Phone: (555) 123-4567</p>
+                                </div>
+                                                                 <div class="to">
+                                   <h3>TO:</h3>
+                                   <p><strong>${item.buyerInfo?.name || 'N/A'}</strong><br>
+                                   ${item.buyerInfo?.address || 'N/A'}<br>
+                                   ${item.buyerInfo?.city || 'N/A'}, ${item.buyerInfo?.zipCode || 'N/A'}<br>
+                                   Phone: ${item.buyerInfo?.phone || 'N/A'}</p>
+                                 </div>
+                                <div class="item-details">
+                                  <p><strong>Item:</strong> ${item.title}</p>
+                                  <p><strong>Order ID:</strong> ${item.saleTransactionId || 'N/A'}</p>
+                                  <p><strong>Sold Date:</strong> ${item.soldAt?.toLocaleDateString() || 'N/A'}</p>
+                                </div>
+                              </div>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                        printWindow.print();
+                      }
+                    }}
+                    className="flex-1 py-2 px-4 rounded-lg font-medium bg-blue-500 text-white hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2V7" />
+                    </svg>
+                    Print Shipping Label
+                  </button>
+                )}
+              </div>
+
+              {/* Buyer Information - Only for online sales */}
+              {item.saleType === 'online' && item.buyerInfo && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h4 className="font-medium text-blue-800 mb-2">Buyer Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                    <div><span className="text-gray-600">Name:</span> <span className="ml-1">{item.buyerInfo?.name || 'N/A'}</span></div>
+                    <div><span className="text-gray-600">Email:</span> <span className="ml-1">{item.buyerInfo?.email || 'N/A'}</span></div>
+                    <div><span className="text-gray-600">Phone:</span> <span className="ml-1">{item.buyerInfo?.phone || 'N/A'}</span></div>
+                    <div className="md:col-span-2">
+                      <span className="text-gray-600">Address:</span> 
+                      <span className="ml-1">{item.buyerInfo?.address || 'N/A'}, {item.buyerInfo?.city || 'N/A'}, {item.buyerInfo?.zipCode || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

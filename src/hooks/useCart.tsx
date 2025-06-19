@@ -1,5 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { ConsignmentItem } from '../types';
+import { ConsignmentItem, AuthUser } from '../types';
+import { logUserAction } from '../services/firebaseService';
 
 export interface CartItem {
   item: ConsignmentItem;
@@ -10,13 +11,13 @@ export interface CartItem {
 interface CartContextType {
   cartItems: CartItem[];
   bookmarkedItems: string[];
-  addToCart: (item: ConsignmentItem, quantity?: number) => void;
-  removeFromCart: (itemId: string) => void;
-  updateQuantity: (itemId: string, newQuantity: number) => void;
-  clearCart: () => void;
+  addToCart: (item: ConsignmentItem, user?: AuthUser | null, quantity?: number) => void;
+  removeFromCart: (itemId: string, user?: AuthUser | null) => void;
+  updateQuantity: (itemId: string, newQuantity: number, user?: AuthUser | null) => void;
+  clearCart: (user?: AuthUser | null) => void;
   isInCart: (itemId: string) => boolean;
   getCartItemQuantity: (itemId: string) => number;
-  toggleBookmark: (itemId: string) => void;
+  toggleBookmark: (itemId: string, user?: AuthUser | null) => void;
   isBookmarked: (itemId: string) => boolean;
   getCartTotal: () => number;
   getCartItemCount: () => number;
@@ -87,8 +88,14 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }
   }, [bookmarkedItems, isInitialized]);
 
-  const addToCart = (item: ConsignmentItem, quantity: number = 1) => {
+  const addToCart = async (item: ConsignmentItem, user?: AuthUser | null, quantity: number = 1) => {
     console.log('addToCart called:', item.title, 'Current cart size:', cartItems.length);
+    
+    // Log the action
+    if (user) {
+      await logUserAction(user, 'cart_updated', 'Added item to cart', item.id, item.title);
+    }
+    
     // Check if item is already in cart
     const existingItemIndex = cartItems.findIndex(cartItem => cartItem.item.id === item.id);
     
@@ -112,14 +119,30 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }
   };
 
-  const removeFromCart = (itemId: string) => {
+  const removeFromCart = async (itemId: string, user?: AuthUser | null) => {
+    // Find the item being removed for logging
+    const itemToRemove = cartItems.find(cartItem => cartItem.item.id === itemId);
+    
+    // Log the action
+    if (user && itemToRemove) {
+      await logUserAction(user, 'cart_updated', 'Removed item from cart', itemToRemove.item.id, itemToRemove.item.title);
+    }
+    
     setCartItems(prev => prev.filter(cartItem => cartItem.item.id !== itemId));
   };
 
-  const updateQuantity = (itemId: string, newQuantity: number) => {
+  const updateQuantity = async (itemId: string, newQuantity: number, user?: AuthUser | null) => {
     if (newQuantity <= 0) {
-      removeFromCart(itemId);
+      await removeFromCart(itemId, user);
       return;
+    }
+    
+    // Find the item for logging
+    const item = cartItems.find(cartItem => cartItem.item.id === itemId);
+    
+    // Log the action
+    if (user && item) {
+      await logUserAction(user, 'cart_updated', `Updated item quantity to ${newQuantity}`, item.item.id, item.item.title);
     }
     
     setCartItems(prev => 
@@ -131,7 +154,12 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     );
   };
 
-  const clearCart = () => {
+  const clearCart = async (user?: AuthUser | null) => {
+    // Log the action
+    if (user) {
+      await logUserAction(user, 'cart_updated', `Cleared cart with ${cartItems.length} items`);
+    }
+    
     setCartItems([]);
   };
 
@@ -144,8 +172,16 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     return cartItem?.quantity || 0;
   };
 
-  const toggleBookmark = (itemId: string) => {
+  const toggleBookmark = async (itemId: string, user?: AuthUser | null) => {
     console.log('toggleBookmark called:', itemId, 'Current bookmarks:', bookmarkedItems.length);
+    
+    const isCurrentlyBookmarked = bookmarkedItems.includes(itemId);
+    
+    // Log the action
+    if (user) {
+      await logUserAction(user, 'item_bookmarked', isCurrentlyBookmarked ? 'Removed bookmark' : 'Added bookmark', itemId);
+    }
+    
     setBookmarkedItems(prev => {
       if (prev.includes(itemId)) {
         const newBookmarks = prev.filter(id => id !== itemId);

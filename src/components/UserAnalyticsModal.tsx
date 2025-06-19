@@ -455,7 +455,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 soldAt: new Date(),
                 soldPrice: price,
                 userEarnings: userEarnings,
-                adminEarnings: adminEarnings
+                adminEarnings: adminEarnings,
+                saleType: 'in-store'
             });
             
             if (isAdmin) {

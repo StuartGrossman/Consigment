@@ -1207,6 +1207,10 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
         isOpen={isItemDetailModalOpen}
         onClose={handleItemDetailModalClose}
         item={selectedItem}
+        onItemUpdated={() => {
+          fetchUserData();
+          fetchMyListings();
+        }}
       />
 
       {/* Tracking Modal */}

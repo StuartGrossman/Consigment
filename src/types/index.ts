@@ -16,6 +16,8 @@ export interface ConsignmentItem {
   buyerId?: string;
   buyerName?: string;
   buyerEmail?: string;
+  // Sale type tracking
+  saleType?: 'in-store' | 'online';
   // Buyer information for sold items
   buyerInfo?: {
     name: string;
@@ -36,6 +38,7 @@ export interface ConsignmentItem {
   // Barcode tracking
   barcodeData?: string;
   barcodeGeneratedAt?: Date;
+  barcodeImageUrl?: string; // URL to the stored barcode image
   printConfirmedAt?: Date;
   // New filtering fields
   category?: string;
@@ -45,6 +48,11 @@ export interface ConsignmentItem {
   condition?: 'New' | 'Like New' | 'Good' | 'Fair' | '';
   material?: string;
   color?: string;
+  // Discount tracking
+  originalPrice?: number; // Store original price when discount is applied
+  discountPercentage?: number; // Percentage discount applied
+  discountAppliedAt?: Date; // When discount was applied
+  discountReason?: string; // Reason for discount (e.g., "Shelf time over 30 days")
 }
 
 export interface User {

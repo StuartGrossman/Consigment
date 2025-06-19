@@ -3,6 +3,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import { AuthUser } from '../types';
+import { logUserAction } from '../services/firebaseService';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -120,7 +121,10 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
       }
 
       // Add item to Firestore
-      await addDoc(collection(db, 'items'), itemData);
+      const docRef = await addDoc(collection(db, 'items'), itemData);
+
+      // Log the action
+      await logUserAction(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
 
       // Show success message
       setShowSuccess(true);

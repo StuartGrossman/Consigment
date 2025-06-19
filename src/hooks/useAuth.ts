@@ -3,6 +3,7 @@ import { User, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously, 
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../config/firebase';
 import { PhoneUser, AuthUser } from '../types';
+import { logUserAction } from '../services/firebaseService';
 
 export const useAuth = () => {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -100,6 +101,8 @@ export const useAuth = () => {
   const signInWithGoogle = async () => {
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      // Log the login action
+      await logUserAction(result.user, 'user_login', 'User logged in with Google');
       // User data will be stored automatically via onAuthStateChanged
       return result.user;
     } catch (error) {
@@ -146,6 +149,9 @@ export const useAuth = () => {
       // Set the user directly since we're not using Firebase Auth
       setUser(phoneUser);
       
+      // Log the login action
+      await logUserAction(phoneUser, 'user_login', 'User logged in with phone number');
+      
       console.log('Phone authentication completed successfully');
       
       return phoneUser;
@@ -169,6 +175,11 @@ export const useAuth = () => {
 
   const logout = async () => {
     try {
+      // Log the logout action before clearing user state
+      if (user) {
+        await logUserAction(user, 'user_logout', 'User logged out');
+      }
+      
       // Check if this is a phone user
       const phoneUserSession = localStorage.getItem('phoneUserSession');
       

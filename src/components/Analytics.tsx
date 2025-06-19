@@ -510,7 +510,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
             {activeTab === 'sold' && (
               <div className="space-y-8">
                 {/* Summary Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white">
                     <h3 className="text-lg font-semibold mb-2">Total Revenue</h3>
                     <p className="text-3xl font-bold">
@@ -539,6 +539,13 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                     <h3 className="text-lg font-semibold mb-2">Items Sold</h3>
                     <p className="text-3xl font-bold">{soldItems.length}</p>
                   </div>
+                  <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Sale Types</h3>
+                    <div className="text-sm space-y-1">
+                      <div>In-Store: {soldItems.filter(item => item.saleType === 'in-store').length}</div>
+                      <div>Online: {soldItems.filter(item => item.saleType === 'online').length}</div>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Sold Items Table */}
@@ -554,6 +561,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Price</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sold Price</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sale Type</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barcode</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Sold</th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -578,6 +586,15 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.sellerName}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.price)}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-600">{formatCurrency(soldPrice)}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  item.saleType === 'online' 
+                                    ? 'bg-blue-100 text-blue-800' 
+                                    : 'bg-green-100 text-green-800'
+                                }`}>
+                                  {item.saleType === 'online' ? '🌐 Online' : '🏪 In-Store'}
+                                </span>
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                 {item.barcodeData ? (
                                   <span className="text-green-600">✓ Generated</span>
@@ -665,6 +682,10 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
           isOpen={isItemDetailModalOpen}
           onClose={handleItemDetailModalClose}
           item={selectedItem}
+          onItemUpdated={() => {
+            fetchDashboardData();
+            fetchSoldItems();
+          }}
         />
       </div>
     </div>

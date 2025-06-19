@@ -5,6 +5,7 @@ import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
 import { doc, updateDoc, deleteDoc, addDoc, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { logUserAction } from '../services/firebaseService';
 
 // Initialize Stripe with the provided publishable key
 const stripePromise = loadStripe('pk_test_51Rbnai4cE043YuFEryAiYmPIDw6WPTfMk0JFoJyi3eSpEZZBDpTY0tIusq95YjDXqttmcrbAePTHNot0kf3J85Q100Gz9jtjn3');
@@ -55,7 +56,10 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
             city: customerInfo.city,
             zipCode: customerInfo.zipCode
           },
-          saleTransactionId: purchaseRecord.paymentInfo.transactionId
+          saleTransactionId: purchaseRecord.paymentInfo.transactionId,
+          saleType: 'online',
+          userEarnings: item.price * 0.75,
+          adminEarnings: item.price * 0.25
         });
 
         // 2. Create a sale record for analytics
@@ -195,9 +199,12 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
         }
       }
       
+      // Log the purchase action
+      await logUserAction(user, 'item_purchased', `Purchased ${cartItems.length} items for $${getCartTotal().toFixed(2)}`);
+      
       // Clear cart and show success
       console.log('Clearing cart after successful checkout...');
-      clearCart();
+      await clearCart(user);
       
       // Show success message
       onSuccess();

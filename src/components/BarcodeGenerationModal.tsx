@@ -2,7 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
 import { ConsignmentItem } from '../types';
 import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, storage } from '../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { logUserAction } from '../services/firebaseService';
+import { useAuth } from '../hooks/useAuth';
 
 interface BarcodeGenerationModalProps {
   isOpen: boolean;
@@ -21,6 +24,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
     if (isOpen && item) {
@@ -153,20 +157,42 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
   };
 
   const handleConfirmAndApprove = async () => {
-    if (!item || !barcodeData) return;
+    if (!item || !barcodeData || !canvasRef.current) return;
 
     setIsConfirming(true);
     
     try {
+      // Generate and upload barcode image to Firebase Storage
+      let barcodeImageUrl = '';
+      
+      await new Promise<void>((resolve) => {
+        canvasRef.current!.toBlob(async (blob) => {
+          if (blob) {
+            try {
+              const storageRef = ref(storage, `barcodes/${item.id}_${barcodeData}.png`);
+              await uploadBytes(storageRef, blob);
+              barcodeImageUrl = await getDownloadURL(storageRef);
+            } catch (error) {
+              console.error('Error uploading barcode image:', error);
+            }
+          }
+          resolve();
+        }, 'image/png');
+      });
+
       // Save barcode data and approve the item
       const itemRef = doc(db, 'items', item.id);
       await updateDoc(itemRef, {
         barcodeData: barcodeData,
         barcodeGeneratedAt: new Date(),
+        barcodeImageUrl: barcodeImageUrl,
         printConfirmedAt: new Date(),
         status: 'approved',
         approvedAt: new Date()
       });
+
+      // Log the action
+      await logUserAction(user, 'item_approved', 'Generated barcode and approved item', item.id, item.title);
 
       // Call the parent callback
       onConfirmPrint(item, barcodeData);
