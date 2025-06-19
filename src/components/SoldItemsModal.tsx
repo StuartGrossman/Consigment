@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
-import { User as FirebaseUser } from 'firebase/auth';
 import { db } from '../config/firebase';
-import { ConsignmentItem } from '../types';
+import { ConsignmentItem, AuthUser } from '../types';
 
 interface SoldItemsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    user: FirebaseUser | null;
+    user: AuthUser | null;
     refreshTrigger?: number;
 }
 
@@ -26,20 +25,27 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
     const fetchSoldItems = async () => {
         setLoading(true);
         try {
+            console.log('Fetching sold items...');
             const itemsRef = collection(db, 'items');
             let q = query(itemsRef, where('status', '==', 'sold'));
 
+            let querySnapshot;
             try {
-                q = query(q, orderBy('soldAt', 'desc'));
-            } catch (error) {
-                console.warn('Could not order by soldAt, using unordered query');
+                // Try with orderBy first
+                const orderedQuery = query(q, orderBy('soldAt', 'desc'));
+                querySnapshot = await getDocs(orderedQuery);
+                console.log('Successfully fetched with orderBy');
+            } catch (orderError) {
+                console.warn('Could not order by soldAt, using unordered query:', orderError);
+                // Fall back to unordered query
+                querySnapshot = await getDocs(q);
             }
 
-            const querySnapshot = await getDocs(q);
             const items: ConsignmentItem[] = [];
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
+                console.log('Found sold item:', doc.id, data.title, data.status);
                 items.push({
                     id: doc.id,
                     ...data,
@@ -50,12 +56,14 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                 } as ConsignmentItem);
             });
 
+            // Sort manually if we couldn't use orderBy
             items.sort((a, b) => {
                 const aTime = a.soldAt || a.createdAt;
                 const bTime = b.soldAt || b.createdAt;
                 return bTime.getTime() - aTime.getTime();
             });
 
+            console.log('Total sold items found:', items.length);
             setSoldItems(items);
         } catch (error) {
             console.error('Error fetching sold items:', error);
@@ -70,6 +78,20 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
     const totalRevenue = soldItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
     const totalOriginalPrice = soldItems.reduce((sum, item) => sum + item.price, 0);
     const averageMarkdown = totalOriginalPrice > 0 ? ((totalOriginalPrice - totalRevenue) / totalOriginalPrice) * 100 : 0;
+    
+    // Calculate admin earnings (25% of sold items)
+    const totalAdminEarnings = soldItems.reduce((sum, item) => {
+        const soldPrice = item.soldPrice || item.price;
+        const adminEarnings = item.adminEarnings || (soldPrice * 0.25);
+        return sum + adminEarnings;
+    }, 0);
+    
+    // Calculate user earnings (75% of sold items)
+    const totalUserEarnings = soldItems.reduce((sum, item) => {
+        const soldPrice = item.soldPrice || item.price;
+        const userEarnings = item.userEarnings || (soldPrice * 0.75);
+        return sum + userEarnings;
+    }, 0);
 
     if (!isOpen) return null;
 
@@ -100,18 +122,22 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                         </div>
                     ) : (
                         <div className="space-y-8">
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                                 <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
                                     <h3 className="text-lg font-semibold mb-2">Total Revenue</h3>
                                     <p className="text-3xl font-bold">{formatCurrency(totalRevenue)}</p>
                                 </div>
+                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
+                                    <h3 className="text-lg font-semibold mb-2">Admin Earnings (25%)</h3>
+                                    <p className="text-3xl font-bold">{formatCurrency(totalAdminEarnings)}</p>
+                                </div>
+                                <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white">
+                                    <h3 className="text-lg font-semibold mb-2">User Earnings (75%)</h3>
+                                    <p className="text-3xl font-bold">{formatCurrency(totalUserEarnings)}</p>
+                                </div>
                                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
                                     <h3 className="text-lg font-semibold mb-2">Items Sold</h3>
                                     <p className="text-3xl font-bold">{soldItems.length}</p>
-                                </div>
-                                <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
-                                    <h3 className="text-lg font-semibold mb-2">Avg Markdown</h3>
-                                    <p className="text-3xl font-bold">{averageMarkdown.toFixed(1)}%</p>
                                 </div>
                             </div>
 
@@ -127,12 +153,16 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Original Price</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sold Price</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admin (25%)</th>
+                                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User (75%)</th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Sold</th>
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
                                             {soldItems.map((item) => {
                                                 const soldPrice = item.soldPrice || item.price;
+                                                const adminEarnings = item.adminEarnings || (soldPrice * 0.25);
+                                                const userEarnings = item.userEarnings || (soldPrice * 0.75);
                                                 
                                                 return (
                                                     <tr key={item.id} className="hover:bg-gray-50">
@@ -149,6 +179,8 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.sellerName}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{formatCurrency(item.price)}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">{formatCurrency(soldPrice)}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-orange-600">{formatCurrency(adminEarnings)}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-purple-600">{formatCurrency(userEarnings)}</td>
                                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(item.soldAt || new Date())}</td>
                                                     </tr>
                                                 );

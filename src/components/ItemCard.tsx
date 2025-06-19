@@ -5,9 +5,10 @@ interface ItemCardProps {
   item: ConsignmentItem;
   isAdmin?: boolean;
   onMarkAsSold?: (item: ConsignmentItem, soldPrice: number) => Promise<void>;
+  onClick?: (item: ConsignmentItem) => void;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold, onClick }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isMarkingSold, setIsMarkingSold] = useState(false);
   const [showSoldModal, setShowSoldModal] = useState(false);
@@ -53,8 +54,21 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
     setSoldPrice(item.price.toString());
   };
 
+  const handleCardClick = () => {
+    if (onClick) {
+      onClick(item);
+    }
+  };
+
+  const stopPropagation = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden">
+    <div 
+      className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer"
+      onClick={handleCardClick}
+    >
       {/* Image Section */}
       <div className="relative h-48 bg-gray-200">
         {item.images.length > 0 ? (
@@ -67,7 +81,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
             {item.images.length > 1 && (
               <>
                 <button
-                  onClick={prevImage}
+                  onClick={(e) => { stopPropagation(e); prevImage(); }}
                   className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white rounded-full p-1 hover:bg-opacity-75 transition-opacity"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -75,7 +89,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
                   </svg>
                 </button>
                 <button
-                  onClick={nextImage}
+                  onClick={(e) => { stopPropagation(e); nextImage(); }}
                   className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black bg-opacity-50 text-white rounded-full p-1 hover:bg-opacity-75 transition-opacity"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,7 +128,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
         </p>
 
         {/* Item Details */}
-        {(item.category || item.brand || item.size || item.condition) && (
+        {(item.category || item.brand || item.size || item.condition || item.color) && (
           <div className="mb-3 p-2 bg-gray-50 rounded-md">
             <div className="flex flex-wrap gap-2 text-xs">
               {item.category && (
@@ -131,6 +145,9 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
               )}
               {item.gender && (
                 <span className="bg-pink-100 text-pink-800 px-2 py-1 rounded-full">{item.gender}</span>
+              )}
+              {item.color && (
+                <span className="bg-red-100 text-red-800 px-2 py-1 rounded-full">{item.color}</span>
               )}
             </div>
           </div>
@@ -162,7 +179,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
           {isAdmin && item.status === 'live' && (
             <div className="mt-3 pt-3 border-t border-gray-100">
               <button
-                onClick={handleMarkAsSold}
+                onClick={(e) => { stopPropagation(e); handleMarkAsSold(); }}
                 disabled={isMarkingSold}
                 className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
                   isMarkingSold 

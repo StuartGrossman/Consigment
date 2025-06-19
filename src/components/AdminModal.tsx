@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ConsignmentItem } from '../types';
+import { ConsignmentItem, AuthUser } from '../types';
+import BarcodeGenerationModal from './BarcodeGenerationModal';
 
 interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User | null;
+  user: AuthUser | null;
 }
 
 const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
@@ -17,6 +17,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   
   // Modal states
   const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
@@ -70,30 +71,24 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     setShowRejectModal(true);
   };
 
-  const confirmApprove = async () => {
+  const confirmApprove = () => {
     if (!selectedItem) return;
     
-    setProcessingItemId(selectedItem.id);
     setShowApproveModal(false);
-    
-    try {
-      await updateDoc(doc(db, 'items', selectedItem.id), {
-        status: 'approved',
-        approvedAt: serverTimestamp()
-      });
-      
-      // Remove from pending list
-      setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
-      setModalMessage('Item approved! It will be available to employees for 3 days before going live.');
-      setShowSuccessModal(true);
-    } catch (error) {
-      console.error('Error approving item:', error);
-      setModalMessage('Error approving item. Please try again.');
-      setShowErrorModal(true);
-    } finally {
-      setProcessingItemId(null);
-      setSelectedItem(null);
-    }
+    setShowBarcodeModal(true);
+  };
+
+  const handleBarcodeConfirmed = async (item: ConsignmentItem, barcodeData: string) => {
+    // Remove from pending list since it's now approved with barcode
+    setPendingItems(prev => prev.filter(i => i.id !== item.id));
+    setModalMessage('Item approved with barcode generated! It will be available to employees for 3 days before going live.');
+    setShowSuccessModal(true);
+    setSelectedItem(null);
+  };
+
+  const handleBarcodeModalClose = () => {
+    setShowBarcodeModal(false);
+    setSelectedItem(null);
   };
 
   const confirmReject = async () => {
@@ -249,8 +244,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               <h3 className="text-lg font-semibold text-gray-900">Approve Item</h3>
             </div>
             <p className="text-gray-600 mb-6">
-              Are you sure you want to approve "<span className="font-medium">{selectedItem.title}</span>"? 
-              This will make it available to employees for 3 days before going live to all customers.
+              Approving "<span className="font-medium">{selectedItem.title}</span>" will generate a barcode label that must be printed.
+              After printing, the item will be available to employees for 3 days before going live to all customers.
             </p>
             <div className="flex justify-end space-x-3">
               <button
@@ -259,12 +254,12 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               >
                 Cancel
               </button>
-              <button
-                onClick={confirmApprove}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-              >
-                Approve Item
-              </button>
+                              <button
+                  onClick={confirmApprove}
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                >
+                  Generate Label & Approve
+                </button>
             </div>
           </div>
         </div>
@@ -357,6 +352,16 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Barcode Generation Modal */}
+      {showBarcodeModal && selectedItem && (
+        <BarcodeGenerationModal
+          isOpen={showBarcodeModal}
+          onClose={handleBarcodeModalClose}
+          item={selectedItem}
+          onConfirmPrint={handleBarcodeConfirmed}
+        />
       )}
     </div>
   );

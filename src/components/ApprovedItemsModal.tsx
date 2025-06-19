@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ConsignmentItem } from '../types';
+import { ConsignmentItem, AuthUser } from '../types';
 
 interface ApprovedItemsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User | null;
+  user: AuthUser | null;
 }
 
 const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose, user }) => {
@@ -44,7 +43,9 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
           ...data,
           createdAt: data.createdAt?.toDate() || new Date(),
           approvedAt: data.approvedAt?.toDate() || new Date(),
-          liveAt: data.liveAt?.toDate()
+          liveAt: data.liveAt?.toDate(),
+          barcodeGeneratedAt: data.barcodeGeneratedAt?.toDate(),
+          printConfirmedAt: data.printConfirmedAt?.toDate()
         } as ConsignmentItem);
       });
 
@@ -87,8 +88,8 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   const confirmMakeLive = async () => {
     if (!selectedItem) return;
     
-    setProcessingItemId(selectedItem.id);
     setShowMakeLiveModal(false);
+    setProcessingItemId(selectedItem.id);
     
     try {
       await updateDoc(doc(db, 'items', selectedItem.id), {
@@ -96,8 +97,8 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
         liveAt: serverTimestamp()
       });
       
-      // Remove from approved list
-      setApprovedItems(prev => prev.filter(item => item.id !== selectedItem.id));
+      // Remove from approved list since it's now live
+      setApprovedItems(prev => prev.filter(i => i.id !== selectedItem.id));
       setModalMessage('Item is now live!');
       setShowSuccessModal(true);
     } catch (error) {
@@ -246,6 +247,22 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                           <div>
                             <strong>Approved:</strong> {item.approvedAt?.toLocaleDateString()}
                           </div>
+                          {item.barcodeData && (
+                            <>
+                              <div>
+                                <strong>Barcode:</strong> {item.barcodeData}
+                              </div>
+                              <div>
+                                <strong>Label Generated:</strong> {
+                                  item.barcodeGeneratedAt 
+                                    ? (item.barcodeGeneratedAt instanceof Date 
+                                        ? item.barcodeGeneratedAt.toLocaleDateString()
+                                        : new Date(item.barcodeGeneratedAt).toLocaleDateString())
+                                    : 'N/A'
+                                }
+                              </div>
+                            </>
+                          )}
                         </div>
 
                         {/* Action Buttons */}
@@ -298,6 +315,11 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
             <p className="text-gray-600 mb-6">
               Are you sure you want to make "<span className="font-medium">{selectedItem.title}</span>" live? 
               This will make it available to all customers immediately.
+              {selectedItem.barcodeData ? (
+                <span className="block mt-2 text-green-600 text-sm">✓ Barcode label has been generated and printed.</span>
+              ) : (
+                <span className="block mt-2 text-amber-600 text-sm">⚠ Note: No barcode label has been generated for this item.</span>
+              )}
             </p>
             <div className="flex justify-end space-x-3">
               <button
@@ -362,6 +384,8 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
           </div>
         </div>
       )}
+
+
     </div>
   );
 };

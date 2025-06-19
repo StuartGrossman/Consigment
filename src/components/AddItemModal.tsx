@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { User } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
+import { AuthUser } from '../types';
 
 interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: User | null;
+  user: AuthUser | null;
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) => {
@@ -26,6 +26,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const [brand, setBrand] = useState('');
   const [condition, setCondition] = useState('');
   const [material, setMaterial] = useState('');
+  const [color, setColor] = useState('');
 
   if (!isOpen) return null;
 
@@ -82,25 +83,44 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
       // Upload images to Firebase Storage
       const imageUrls = await uploadImages(images);
 
-      // Add item to Firestore
-      await addDoc(collection(db, 'items'), {
+      // Prepare item data, only including fields that have values
+      const itemData: any = {
         title: title.trim(),
         description: description.trim(),
         price: parseFloat(price),
         images: imageUrls,
         sellerId: user.uid,
         sellerName: user.displayName || 'Anonymous',
-        sellerEmail: user.email,
+        sellerEmail: user.email || ('phoneNumber' in user ? user.phoneNumber : ''),
         status: 'pending',
         createdAt: serverTimestamp(),
-        // New fields
-        category: category || undefined,
-        gender: gender || undefined,
-        size: size || undefined,
-        brand: brand.trim() || undefined,
-        condition: condition || undefined,
-        material: material.trim() || undefined,
-      });
+      };
+
+      // Only add optional fields if they have values
+      if (category && category.trim()) {
+        itemData.category = category.trim();
+      }
+      if (gender && gender.trim()) {
+        itemData.gender = gender;
+      }
+      if (size && size.trim()) {
+        itemData.size = size.trim();
+      }
+      if (brand && brand.trim()) {
+        itemData.brand = brand.trim();
+      }
+      if (condition && condition.trim()) {
+        itemData.condition = condition;
+      }
+      if (material && material.trim()) {
+        itemData.material = material.trim();
+      }
+      if (color && color.trim()) {
+        itemData.color = color.trim();
+      }
+
+      // Add item to Firestore
+      await addDoc(collection(db, 'items'), itemData);
 
       // Show success message
       setShowSuccess(true);
@@ -127,6 +147,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
     setBrand('');
     setCondition('');
     setMaterial('');
+    setColor('');
   };
 
   const handleClose = () => {
@@ -223,7 +244,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                 </div>
 
                 {/* Item Details Preview */}
-                {(category || gender || size || brand || condition || material) && (
+                {(category || gender || size || brand || condition || material || color) && (
                   <div className="mb-4 p-4 bg-gray-50 rounded-lg">
                     <h4 className="text-sm font-medium text-gray-900 mb-2">Item Details</h4>
                     <div className="grid grid-cols-2 gap-2 text-sm">
@@ -244,6 +265,9 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                       )}
                       {material && (
                         <div><span className="text-gray-500">Material:</span> <span className="font-medium">{material}</span></div>
+                      )}
+                      {color && (
+                        <div><span className="text-gray-500">Color:</span> <span className="font-medium">{color}</span></div>
                       )}
                     </div>
                   </div>
@@ -488,6 +512,37 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="e.g., Gore-Tex, Merino Wool, Cotton"
                 />
+              </div>
+
+              {/* Color */}
+              <div>
+                <label htmlFor="color" className="block text-sm font-medium text-gray-700 mb-2">
+                  Color
+                </label>
+                <select
+                  id="color"
+                  value={color}
+                  onChange={(e) => setColor(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select Color</option>
+                  <option value="Black">Black</option>
+                  <option value="White">White</option>
+                  <option value="Gray">Gray</option>
+                  <option value="Red">Red</option>
+                  <option value="Blue">Blue</option>
+                  <option value="Green">Green</option>
+                  <option value="Yellow">Yellow</option>
+                  <option value="Orange">Orange</option>
+                  <option value="Purple">Purple</option>
+                  <option value="Pink">Pink</option>
+                  <option value="Brown">Brown</option>
+                  <option value="Navy">Navy</option>
+                  <option value="Burgundy">Burgundy</option>
+                  <option value="Olive">Olive</option>
+                  <option value="Tan">Tan</option>
+                  <option value="Multicolor">Multicolor</option>
+                </select>
               </div>
             </div>
           </div>

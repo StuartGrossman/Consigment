@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { useCart } from '../hooks/useCart';
 import { collection, query, where, getDocs, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem } from '../types';
@@ -9,25 +10,50 @@ import AdminModal from './AdminModal';
 import ApprovedItemsModal from './ApprovedItemsModal';
 import UserAnalyticsModal from './UserAnalyticsModal';
 import SoldItemsModal from './SoldItemsModal';
+import LoginModal from './LoginModal';
+import Dashboard from './Dashboard';
+import ItemDetailModal from './ItemDetailModal';
+import CartModal from './CartModal';
+import BookmarksModal from './BookmarksModal';
+import Checkout from './Checkout';
+import Analytics from './Analytics';
+import UserAnalytics from './UserAnalytics';
 
 const Home: React.FC = () => {
-    const { user, loading, signInWithGoogle, logout, isAuthenticated } = useAuth();
+    const { user, loading, signInWithGoogle, signInWithPhone, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin } = useAuth();
+    const { getCartItemCount, getBookmarkCount } = useCart();
     const [items, setItems] = useState<ConsignmentItem[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     const [isApprovedModalOpen, setIsApprovedModalOpen] = useState(false);
     const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
     const [isSoldItemsModalOpen, setIsSoldItemsModalOpen] = useState(false);
+    const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+    const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
+    const [isCartModalOpen, setIsCartModalOpen] = useState(false);
+    const [isBookmarksModalOpen, setIsBookmarksModalOpen] = useState(false);
+    const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [showOrderSuccess, setShowOrderSuccess] = useState(false);
     const [loadingItems, setLoadingItems] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [userMenuOpen, setUserMenuOpen] = useState(false);
+    const userMenuRef = useRef<HTMLDivElement>(null);
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const [alertsMenuOpen, setAlertsMenuOpen] = useState(false);
+    const alertsMenuRef = useRef<HTMLDivElement>(null);
+    const [recentItems, setRecentItems] = useState<ConsignmentItem[]>([]);
+    const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
+    const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
     const [filters, setFilters] = useState({
         category: '',
         gender: '',
         size: '',
         brand: '',
+        color: '',
         priceRange: '',
-        sortBy: 'newest'
+        sortBy: 'newest',
+        searchQuery: ''
     });
     const [notificationCounts, setNotificationCounts] = useState({
         pending: 0,
@@ -38,10 +64,19 @@ const Home: React.FC = () => {
     useEffect(() => {
         if (isAuthenticated) {
             fetchItems();
+            fetchRecentItems();
             checkAdminStatus();
         } else {
             setLoadingItems(false);
             setIsAdmin(false);
+        }
+    }, [isAuthenticated, userIsAdmin]);
+
+    // Fetch recent items every 30 seconds
+    useEffect(() => {
+        if (isAuthenticated) {
+            const interval = setInterval(fetchRecentItems, 30000);
+            return () => clearInterval(interval);
         }
     }, [isAuthenticated]);
 
@@ -52,18 +87,42 @@ const Home: React.FC = () => {
             const interval = setInterval(fetchNotificationCounts, 30000);
             return () => clearInterval(interval);
         }
+        // Refresh alerts when admin status changes
+        if (isAuthenticated) {
+            fetchRecentItems();
+        }
     }, [isAdmin]);
 
-    const checkAdminStatus = async () => {
+    // Handle clicking outside menus
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+                setUserMenuOpen(false);
+            }
+            if (alertsMenuRef.current && !alertsMenuRef.current.contains(event.target as Node)) {
+                setAlertsMenuOpen(false);
+            }
+        };
+
+        if (userMenuOpen || alertsMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [userMenuOpen, alertsMenuOpen]);
+
+    const checkAdminStatus = () => {
         if (!user) return;
         
-        try {
-            const adminDoc = await getDoc(doc(db, 'admins', user.uid));
-            setIsAdmin(adminDoc.exists());
-        } catch (error) {
-            console.error('Error checking admin status:', error);
-            setIsAdmin(false);
-        }
+        // Admin status is now purely controlled by the test admin toggle
+        console.log('Admin status check:', { 
+            userId: user.uid, 
+            userIsAdmin,
+            adminStatus: userIsAdmin 
+        });
+        setIsAdmin(userIsAdmin);
     };
 
     const fetchNotificationCounts = async () => {
@@ -80,19 +139,25 @@ const Home: React.FC = () => {
             const approvedQuery = query(itemsRef, where('status', '==', 'approved'));
             const approvedSnapshot = await getDocs(approvedQuery);
             
-            // Get recently sold items count (sold in last 24 hours)
-            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const soldQuery = query(
-                itemsRef, 
-                where('status', '==', 'sold'),
-                where('soldAt', '>=', oneDayAgo)
-            );
+            // Get all sold items and filter client-side for recent ones
+            const soldQuery = query(itemsRef, where('status', '==', 'sold'));
             const soldSnapshot = await getDocs(soldQuery);
+            
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            let recentSoldCount = 0;
+            
+            soldSnapshot.forEach((doc) => {
+                const data = doc.data();
+                const soldAt = data.soldAt?.toDate();
+                if (soldAt && soldAt >= oneDayAgo) {
+                    recentSoldCount++;
+                }
+            });
             
             setNotificationCounts({
                 pending: pendingSnapshot.size,
                 approved: approvedSnapshot.size,
-                sold: soldSnapshot.size
+                sold: recentSoldCount
             });
         } catch (error) {
             console.error('Error fetching notification counts:', error);
@@ -102,21 +167,7 @@ const Home: React.FC = () => {
     const fetchItems = async () => {
         try {
             const itemsRef = collection(db, 'items');
-            
-            let q;
-            try {
-                q = query(
-                    itemsRef, 
-                    where('status', '==', 'live'),
-                    orderBy('liveAt', 'desc')
-                );
-            } catch (indexError) {
-                q = query(
-                    itemsRef, 
-                    where('status', '==', 'live')
-                );
-            }
-            
+            const q = query(itemsRef, where('status', '==', 'live'));
             const querySnapshot = await getDocs(q);
             const fetchedItems: ConsignmentItem[] = [];
             
@@ -131,6 +182,7 @@ const Home: React.FC = () => {
                 } as ConsignmentItem);
             });
             
+            // Sort client-side by live date or creation date
             fetchedItems.sort((a, b) => {
                 const aTime = a.liveAt || a.createdAt;
                 const bTime = b.liveAt || b.createdAt;
@@ -146,6 +198,116 @@ const Home: React.FC = () => {
         }
     };
 
+    const fetchRecentItems = async () => {
+        if (!user) return;
+        
+        try {
+            const itemsRef = collection(db, 'items');
+            const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            
+            let fetchedItems: ConsignmentItem[] = [];
+            
+            if (isAdmin) {
+                // For admins: Get all items that have had activity in the last 24 hours
+                // This includes newly created items, approved items, items that went live, and sold items
+                
+                // Get all items and filter for recent activity
+                const q = query(itemsRef);
+                const querySnapshot = await getDocs(q);
+                
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const item = { 
+                        id: doc.id, 
+                        ...data,
+                        createdAt: data.createdAt?.toDate() || new Date(),
+                        approvedAt: data.approvedAt?.toDate(),
+                        liveAt: data.liveAt?.toDate(),
+                        soldAt: data.soldAt?.toDate()
+                    } as ConsignmentItem;
+                    
+                    // Check if item has any activity in the last 24 hours
+                    const hasRecentActivity = 
+                        (item.createdAt && item.createdAt >= twentyFourHoursAgo) ||
+                        (item.approvedAt && item.approvedAt >= twentyFourHoursAgo) ||
+                        (item.liveAt && item.liveAt >= twentyFourHoursAgo) ||
+                        (item.soldAt && item.soldAt >= twentyFourHoursAgo);
+                    
+                    if (hasRecentActivity) {
+                        fetchedItems.push(item);
+                    }
+                });
+                
+                // Sort by most recent activity
+                fetchedItems.sort((a, b) => {
+                    const aTime = Math.max(
+                        a.createdAt?.getTime() || 0,
+                        a.approvedAt?.getTime() || 0,
+                        a.liveAt?.getTime() || 0,
+                        a.soldAt?.getTime() || 0
+                    );
+                    const bTime = Math.max(
+                        b.createdAt?.getTime() || 0,
+                        b.approvedAt?.getTime() || 0,
+                        b.liveAt?.getTime() || 0,
+                        b.soldAt?.getTime() || 0
+                    );
+                    return bTime - aTime;
+                });
+                
+            } else {
+                // For regular users: Only get their own items that have had activity in the last 24 hours
+                const q = query(itemsRef, where('sellerUid', '==', user.uid));
+                const querySnapshot = await getDocs(q);
+                
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    const item = { 
+                        id: doc.id, 
+                        ...data,
+                        createdAt: data.createdAt?.toDate() || new Date(),
+                        approvedAt: data.approvedAt?.toDate(),
+                        liveAt: data.liveAt?.toDate(),
+                        soldAt: data.soldAt?.toDate()
+                    } as ConsignmentItem;
+                    
+                    // Check if the user's item has any activity in the last 24 hours
+                    const hasRecentActivity = 
+                        (item.createdAt && item.createdAt >= twentyFourHoursAgo) ||
+                        (item.approvedAt && item.approvedAt >= twentyFourHoursAgo) ||
+                        (item.liveAt && item.liveAt >= twentyFourHoursAgo) ||
+                        (item.soldAt && item.soldAt >= twentyFourHoursAgo);
+                    
+                    if (hasRecentActivity) {
+                        fetchedItems.push(item);
+                    }
+                });
+                
+                // Sort by most recent activity
+                fetchedItems.sort((a, b) => {
+                    const aTime = Math.max(
+                        a.createdAt?.getTime() || 0,
+                        a.approvedAt?.getTime() || 0,
+                        a.liveAt?.getTime() || 0,
+                        a.soldAt?.getTime() || 0
+                    );
+                    const bTime = Math.max(
+                        b.createdAt?.getTime() || 0,
+                        b.approvedAt?.getTime() || 0,
+                        b.liveAt?.getTime() || 0,
+                        b.soldAt?.getTime() || 0
+                    );
+                    return bTime - aTime;
+                });
+            }
+            
+            // Limit to 15 most recent items for better coverage
+            setRecentItems(fetchedItems.slice(0, 15));
+        } catch (error) {
+            console.error('Error fetching recent items:', error);
+        }
+    };
+
     const handleAddItem = () => {
         setIsModalOpen(true);
     };
@@ -153,6 +315,8 @@ const Home: React.FC = () => {
     const handleModalClose = () => {
         setIsModalOpen(false);
         fetchItems();
+        fetchRecentItems();
+        if (isAdmin) fetchNotificationCounts();
     };
 
     const handleAdminModal = () => {
@@ -162,6 +326,7 @@ const Home: React.FC = () => {
     const handleAdminModalClose = () => {
         setIsAdminModalOpen(false);
         fetchItems();
+        fetchRecentItems();
         if (isAdmin) fetchNotificationCounts();
     };
 
@@ -172,6 +337,7 @@ const Home: React.FC = () => {
     const handleApprovedModalClose = () => {
         setIsApprovedModalOpen(false);
         fetchItems();
+        fetchRecentItems();
         if (isAdmin) fetchNotificationCounts();
     };
 
@@ -193,13 +359,84 @@ const Home: React.FC = () => {
         fetchItems();
     };
 
+    const handleDashboard = () => {
+        setIsDashboardOpen(true);
+    };
+
+    const handleDashboardClose = () => {
+        setIsDashboardOpen(false);
+    };
+
+    const handleItemClick = (item: ConsignmentItem) => {
+        setSelectedItem(item);
+        setIsItemDetailModalOpen(true);
+        setAlertsMenuOpen(false);
+    };
+
+    const handleItemDetailModalClose = () => {
+        setSelectedItem(null);
+        setIsItemDetailModalOpen(false);
+    };
+
+    const handleCheckout = () => {
+        setIsCheckoutOpen(true);
+    };
+
+    const handleCheckoutClose = () => {
+        setIsCheckoutOpen(false);
+    };
+
+    const handleOrderSuccess = () => {
+        setIsCheckoutOpen(false);
+        setShowOrderSuccess(true);
+        // Hide success message after 5 seconds
+        setTimeout(() => {
+            setShowOrderSuccess(false);
+        }, 5000);
+    };
+
+    const getRecentActivity = (item: ConsignmentItem) => {
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        // Check which activities happened in the last 24 hours, prioritizing most recent
+        const activities = [];
+        
+        if (item.soldAt && item.soldAt >= twentyFourHoursAgo) {
+            activities.push({ type: 'sold', time: item.soldAt, icon: '💰', message: 'Sold', color: 'text-green-600' });
+        }
+        if (item.liveAt && item.liveAt >= twentyFourHoursAgo) {
+            activities.push({ type: 'live', time: item.liveAt, icon: '🟢', message: 'Went Live', color: 'text-green-600' });
+        }
+        if (item.approvedAt && item.approvedAt >= twentyFourHoursAgo) {
+            activities.push({ type: 'approved', time: item.approvedAt, icon: '✅', message: 'Approved', color: 'text-blue-600' });
+        }
+        if (item.createdAt && item.createdAt >= twentyFourHoursAgo) {
+            activities.push({ type: 'created', time: item.createdAt, icon: '📝', message: 'Listed', color: 'text-purple-600' });
+        }
+        
+        // Return the most recent activity
+        if (activities.length > 0) {
+            activities.sort((a, b) => b.time.getTime() - a.time.getTime());
+            return activities[0];
+        }
+        
+        return null;
+    };
+
     const handleMarkAsSold = async (item: ConsignmentItem, soldPrice: number) => {
         try {
             const itemRef = doc(db, 'items', item.id);
+            
+            // Calculate earnings split: User gets 75%, Admin gets 25%
+            const userEarnings = soldPrice * 0.75;
+            const adminEarnings = soldPrice * 0.25;
+            
             await updateDoc(itemRef, {
                 status: 'sold',
                 soldAt: new Date(),
-                soldPrice: soldPrice
+                soldPrice: soldPrice,
+                userEarnings: userEarnings,
+                adminEarnings: adminEarnings
             });
             
             // Refresh the items list to remove the sold item
@@ -228,13 +465,33 @@ const Home: React.FC = () => {
             gender: '',
             size: '',
             brand: '',
+            color: '',
             priceRange: '',
-            sortBy: 'newest'
+            sortBy: 'newest',
+            searchQuery: ''
         });
     };
 
     const getFilteredAndSortedItems = () => {
         let filtered = [...items];
+
+        // Apply search query filter
+        if (filters.searchQuery) {
+            const searchLower = filters.searchQuery.toLowerCase();
+            filtered = filtered.filter(item => {
+                return (
+                    item.title?.toLowerCase().includes(searchLower) ||
+                    item.description?.toLowerCase().includes(searchLower) ||
+                    item.brand?.toLowerCase().includes(searchLower) ||
+                    item.category?.toLowerCase().includes(searchLower) ||
+                    item.color?.toLowerCase().includes(searchLower) ||
+                    item.size?.toLowerCase().includes(searchLower) ||
+                    item.condition?.toLowerCase().includes(searchLower) ||
+                    item.gender?.toLowerCase().includes(searchLower) ||
+                    item.sellerName?.toLowerCase().includes(searchLower)
+                );
+            });
+        }
 
         // Apply filters
         if (filters.category) {
@@ -248,6 +505,9 @@ const Home: React.FC = () => {
         }
         if (filters.brand) {
             filtered = filtered.filter(item => item.brand?.toLowerCase().includes(filters.brand.toLowerCase()));
+        }
+        if (filters.color) {
+            filtered = filtered.filter(item => item.color?.toLowerCase().includes(filters.color.toLowerCase()));
         }
         if (filters.priceRange) {
             const [min, max] = filters.priceRange.split('-').map(Number);
@@ -310,7 +570,7 @@ const Home: React.FC = () => {
                                 </div>
                             </div>
                             <button
-                                onClick={signInWithGoogle}
+                                onClick={() => setIsLoginModalOpen(true)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors flex items-center gap-2"
                             >
                                 <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -348,7 +608,7 @@ const Home: React.FC = () => {
                             </p>
                             <div className="flex flex-col sm:flex-row gap-4 justify-center">
                                 <button
-                                    onClick={signInWithGoogle}
+                                    onClick={() => setIsLoginModalOpen(true)}
                                     className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-4 rounded-lg text-lg font-semibold transition-colors flex items-center justify-center gap-2"
                                 >
                                     <svg className="w-6 h-6" viewBox="0 0 24 24">
@@ -360,7 +620,7 @@ const Home: React.FC = () => {
                                     Enter Store
                                 </button>
                                 <button
-                                    onClick={signInWithGoogle}
+                                    onClick={() => setIsLoginModalOpen(true)}
                                     className="border-2 border-orange-400 text-orange-400 hover:bg-orange-400 hover:text-white px-8 py-4 rounded-lg text-lg font-semibold transition-colors"
                                 >
                                     Start Selling
@@ -440,7 +700,7 @@ const Home: React.FC = () => {
                         
                         <div className="text-center mt-12">
                             <button
-                                onClick={signInWithGoogle}
+                                onClick={() => setIsLoginModalOpen(true)}
                                 className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
                             >
                                 Sign In to Browse All Items
@@ -459,7 +719,7 @@ const Home: React.FC = () => {
                             Join thousands of mountain enthusiasts buying and selling quality gear
                         </p>
                         <button
-                            onClick={signInWithGoogle}
+                            onClick={() => setIsLoginModalOpen(true)}
                             className="bg-white text-orange-600 hover:bg-gray-100 px-8 py-4 rounded-lg text-lg font-semibold transition-colors flex items-center justify-center gap-2 mx-auto"
                         >
                             <svg className="w-6 h-6" viewBox="0 0 24 24">
@@ -472,14 +732,29 @@ const Home: React.FC = () => {
                         </button>
                     </div>
                 </div>
+
+                {/* LoginModal for unauthenticated users */}
+                <LoginModal 
+                    isOpen={isLoginModalOpen}
+                    onClose={() => setIsLoginModalOpen(false)}
+                    onGoogleLogin={async () => {
+                        await signInWithGoogle();
+                    }}
+                    onPhoneLogin={async (phoneNumber: string) => {
+                        await signInWithPhone(phoneNumber);
+                    }}
+                />
             </div>
         );
     }
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header */}
-            <div className="bg-white shadow-sm border-b">
+            {/* Main Store Content - Hidden when analytics page is shown */}
+            {!showAnalyticsPage && (
+                <>
+                    {/* Header */}
+                    <div className="bg-white shadow-sm border-b">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
                     <div className="flex justify-between items-center">
                         <div className="flex items-center space-x-3">
@@ -526,47 +801,269 @@ const Home: React.FC = () => {
                                             </span>
                                         )}
                                     </button>
-                                    <button
-                                        onClick={handleSoldItemsModal}
-                                        className="relative bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm"
-                                    >
-                                        Sold Items
-                                        {notificationCounts.sold > 0 && (
-                                            <span className="absolute -top-2 -right-2 bg-yellow-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                                                {notificationCounts.sold > 9 ? '9+' : notificationCounts.sold}
-                                            </span>
-                                        )}
-                                    </button>
                                 </>
                             )}
                             
+                            {/* Bookmarks Icon */}
                             <button
-                                onClick={handleAnalyticsModal}
-                                className={`px-4 py-2 rounded-lg transition-colors text-sm ${
-                                    isAdmin 
-                                        ? 'bg-teal-500 text-white hover:bg-teal-600' 
-                                        : 'bg-gray-500 text-white hover:bg-gray-600'
-                                }`}
+                                onClick={() => setIsBookmarksModalOpen(true)}
+                                className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Bookmarked Items"
                             >
-                                {isAdmin ? 'User Analytics' : 'My Statistics'}
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                </svg>
+                                {getBookmarkCount() > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                        {getBookmarkCount() > 9 ? '9+' : getBookmarkCount()}
+                                    </span>
+                                )}
                             </button>
-                            
-                            <div className="flex items-center gap-3 pl-4 border-l border-gray-200">
-                                <img 
-                                    src={user?.photoURL || ''} 
-                                    alt={user?.displayName || 'User'} 
-                                    className="w-8 h-8 rounded-full"
-                                />
-                                <div className="text-sm">
-                                    <div className="font-medium text-gray-700">{user?.displayName}</div>
-                                    {isAdmin && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Admin</span>}
-                                </div>
+
+                            {/* Cart Icon */}
+                            <button
+                                onClick={() => setIsCartModalOpen(true)}
+                                className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                title="Shopping Cart"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                                </svg>
+                                {getCartItemCount() > 0 && (
+                                    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                        {getCartItemCount() > 9 ? '9+' : getCartItemCount()}
+                                    </span>
+                                )}
+                            </button>
+
+                            {/* Alerts/Notifications Icon */}
+                            <div ref={alertsMenuRef} className="relative">
                                 <button
-                                    onClick={logout}
-                                    className="text-sm text-gray-500 hover:text-red-500 ml-2"
+                                    onClick={() => setAlertsMenuOpen(!alertsMenuOpen)}
+                                    className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
                                 >
-                                    Logout
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                    </svg>
+                                    {recentItems.length > 0 && (
+                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                            {recentItems.length > 9 ? '9+' : recentItems.length}
+                                        </span>
+                                    )}
                                 </button>
+
+                                {/* Alerts Dropdown */}
+                                {alertsMenuOpen && (
+                                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-hidden">
+                                        <div className="p-4 border-b border-gray-100">
+                                            <h3 className="font-semibold text-gray-900">
+                                                {isAdmin ? 'Platform Activity' : 'My Item Updates'}
+                                            </h3>
+                                            <p className="text-xs text-gray-500">
+                                                {isAdmin 
+                                                    ? 'All item activity in the last 24 hours' 
+                                                    : 'Your items with recent activity'
+                                                }
+                                            </p>
+                                        </div>
+                                        
+                                        <div className="max-h-72 overflow-y-auto">
+                                            {recentItems.length === 0 ? (
+                                                <div className="p-4 text-center text-gray-500">
+                                                    <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                                    </svg>
+                                                    <p className="text-sm">
+                                                        {isAdmin 
+                                                            ? 'No platform activity in the last 24 hours' 
+                                                            : 'No updates on your items recently'
+                                                        }
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="divide-y divide-gray-100">
+                                                    {recentItems.map((item) => {
+                                                        const recentActivity = getRecentActivity(item);
+                                                        return (
+                                                            <button
+                                                                key={item.id}
+                                                                onClick={() => handleItemClick(item)}
+                                                                className="w-full p-4 text-left hover:bg-gray-50 transition-colors focus:outline-none focus:bg-gray-50"
+                                                            >
+                                                                <div className="flex items-start gap-3">
+                                                                    {item.images && item.images.length > 0 ? (
+                                                                        <img 
+                                                                            src={item.images[0]} 
+                                                                            alt={item.title}
+                                                                            className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                                                            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                            </svg>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-start justify-between">
+                                                                            <div className="flex-1 min-w-0">
+                                                                                <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                                                                                <p className="text-sm text-orange-600 font-semibold">${item.price}</p>
+                                                                            </div>
+                                                                            <span className={`ml-2 px-2 py-1 text-xs rounded-full flex-shrink-0 ${
+                                                                                item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                                                item.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                                                                item.status === 'live' ? 'bg-green-100 text-green-800' :
+                                                                                'bg-gray-100 text-gray-800'
+                                                                            }`}>
+                                                                                {item.status === 'pending' ? 'Pending' :
+                                                                                 item.status === 'approved' ? 'Approved' :
+                                                                                 item.status === 'live' ? 'Live' :
+                                                                                 item.status}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="flex items-center justify-between mt-1">
+                                                                            <p className="text-xs text-gray-500">
+                                                                                by {item.sellerName}
+                                                                            </p>
+                                                                            {recentActivity && (
+                                                                                <div className={`flex items-center gap-1 text-xs ${recentActivity.color} font-medium`}>
+                                                                                    <span>{recentActivity.icon}</span>
+                                                                                    <span>{recentActivity.message}</span>
+                                                                                    <span className="text-gray-400">
+                                                                                        {recentActivity.time.toLocaleTimeString([], { 
+                                                                                            hour: '2-digit', 
+                                                                                            minute: '2-digit' 
+                                                                                        })}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        {recentItems.length > 0 && (
+                                            <div className="p-3 border-t border-gray-100 bg-gray-50">
+                                                <p className="text-xs text-gray-500 text-center">
+                                                    {isAdmin 
+                                                        ? 'Click on any item to view details and manage' 
+                                                        : 'Click on your items to view status updates'
+                                                    }
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div ref={userMenuRef} className="relative flex items-center gap-3 pl-4 border-l border-gray-200">
+                                <button
+                                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                                    className="flex items-center gap-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
+                                >
+                                    {user?.photoURL && user.photoURL.startsWith('http') ? (
+                                        <img 
+                                            src={user.photoURL} 
+                                            alt={user?.displayName || 'User'} 
+                                            className="w-8 h-8 rounded-full object-cover"
+                                            onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.style.display = 'none';
+                                            }}
+                                        />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
+                                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                            </svg>
+                                        </div>
+                                    )}
+                                    <div className="text-sm">
+                                        <div className="font-medium text-gray-700">{user?.displayName}</div>
+                                        {isAdmin && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Admin</span>}
+                                    </div>
+                                    <svg className={`w-4 h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {/* Dropdown Menu */}
+                                {userMenuOpen && (
+                                    <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                        <div className="p-4 border-b border-gray-100">
+                                            <div className="text-sm font-medium text-gray-900">{user?.displayName}</div>
+                                            <div className="text-xs text-gray-500">
+                                                {user?.email || (user && 'phoneNumber' in user ? (user as any).phoneNumber : 'No contact info')}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-4 space-y-3">
+                                            {/* Admin Toggle */}
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <div className="text-sm font-medium text-gray-700">Admin Mode</div>
+                                                    <div className="text-xs text-gray-500">Toggle admin privileges and features</div>
+                                                </div>
+                                                <button
+                                                    onClick={toggleAdmin}
+                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                                                        userIsAdmin ? 'bg-purple-600' : 'bg-gray-200'
+                                                    }`}
+                                                >
+                                                    <span
+                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                                            userIsAdmin ? 'translate-x-6' : 'translate-x-1'
+                                                        }`}
+                                                    />
+                                                </button>
+                                            </div>
+                                            
+                                            {/* View Mode Indicator */}
+                                            <div className="text-xs bg-gray-50 rounded-lg p-3">
+                                                <div className="font-medium text-gray-700">Current View:</div>
+                                                <div className={`font-semibold ${isAdmin ? 'text-purple-600' : 'text-gray-600'}`}>
+                                                    {isAdmin ? '👑 Admin Mode' : '👤 User Mode'}
+                                                </div>
+                                            </div>
+
+                                            <div className="border-t border-gray-200 pt-3">
+                                                <div className="text-xs font-medium text-gray-700 mb-2">
+                                                    {isAdmin ? 'Analytics & Tools' : 'My History'}
+                                                </div>
+                                                
+                                                {/* Analytics Page Button */}
+                                                <button
+                                                    onClick={() => {
+                                                        setShowAnalyticsPage(true);
+                                                        setUserMenuOpen(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-2"
+                                                >
+                                                    {isAdmin ? '📊 Analytics Dashboard' : '📊 My User History'}
+                                                </button>
+                                            </div>
+                                            
+                                            {/* Logout Button */}
+                                            <div className="border-t border-gray-200 pt-3">
+                                                <button
+                                                    onClick={() => {
+                                                        logout();
+                                                        setUserMenuOpen(false);
+                                                    }}
+                                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                >
+                                                    Sign Out
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -587,6 +1084,40 @@ const Home: React.FC = () => {
                                 >
                                     Clear All
                                 </button>
+                            </div>
+
+                            {/* Search */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={filters.searchQuery}
+                                        onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
+                                        placeholder="Search items..."
+                                        className="w-full pl-10 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                    />
+                                    {filters.searchQuery && (
+                                        <button
+                                            onClick={() => handleFilterChange('searchQuery', '')}
+                                            className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                        >
+                                            <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                                {filters.searchQuery && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Searching in titles, descriptions, brands, and more
+                                    </p>
+                                )}
                             </div>
 
                             {/* Sort By */}
@@ -680,6 +1211,34 @@ const Home: React.FC = () => {
                                 />
                             </div>
 
+                            {/* Color */}
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                                <select
+                                    value={filters.color}
+                                    onChange={(e) => handleFilterChange('color', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                >
+                                    <option value="">All Colors</option>
+                                    <option value="Black">Black</option>
+                                    <option value="White">White</option>
+                                    <option value="Gray">Gray</option>
+                                    <option value="Red">Red</option>
+                                    <option value="Blue">Blue</option>
+                                    <option value="Green">Green</option>
+                                    <option value="Yellow">Yellow</option>
+                                    <option value="Orange">Orange</option>
+                                    <option value="Purple">Purple</option>
+                                    <option value="Pink">Pink</option>
+                                    <option value="Brown">Brown</option>
+                                    <option value="Navy">Navy</option>
+                                    <option value="Burgundy">Burgundy</option>
+                                    <option value="Olive">Olive</option>
+                                    <option value="Tan">Tan</option>
+                                    <option value="Multicolor">Multicolor</option>
+                                </select>
+                            </div>
+
                             {/* Price Range */}
                             <div className="mb-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
@@ -703,8 +1262,38 @@ const Home: React.FC = () => {
                     {/* Main Content Area */}
                     <div className="flex-1">
                         <div className="mb-8">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">Available Gear</h2>
-                            <p className="text-gray-600">Quality mountain equipment from fellow outdoor enthusiasts</p>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                                <div>
+                                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Available Gear</h2>
+                                    <p className="text-gray-600">Quality mountain equipment from fellow outdoor enthusiasts</p>
+                                </div>
+                                
+                                {/* Quick Search Bar */}
+                                <div className="relative w-full sm:w-80">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={filters.searchQuery}
+                                        onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
+                                        placeholder="Search gear..."
+                                        className="w-full pl-10 pr-10 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white shadow-sm"
+                                    />
+                                    {filters.searchQuery && (
+                                        <button
+                                            onClick={() => handleFilterChange('searchQuery', '')}
+                                            className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                                        >
+                                            <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                         
                         {loadingItems ? (
@@ -721,10 +1310,20 @@ const Home: React.FC = () => {
                                         </svg>
                                     </div>
                                     <h3 className="text-lg font-medium text-gray-900 mb-2">
-                                        {items.length === 0 ? 'No items available yet' : 'No items match your filters'}
+                                        {items.length === 0 
+                                            ? 'No items available yet' 
+                                            : filters.searchQuery 
+                                                ? `No results found for "${filters.searchQuery}"` 
+                                                : 'No items match your filters'
+                                        }
                                     </h3>
                                     <p className="text-gray-500 mb-6">
-                                        {items.length === 0 ? 'Be the first to list your mountain gear!' : 'Try adjusting your search criteria'}
+                                        {items.length === 0 
+                                            ? 'Be the first to list your mountain gear!' 
+                                            : filters.searchQuery
+                                                ? 'Try different keywords or check your spelling'
+                                                : 'Try adjusting your search criteria'
+                                        }
                                     </p>
                                     {items.length === 0 ? (
                                         <button
@@ -744,8 +1343,33 @@ const Home: React.FC = () => {
                                 </div>
                             ) : (
                                 <div>
-                                    <div className="mb-4 text-sm text-gray-600">
-                                        Showing {filteredItems.length} of {items.length} items
+                                    <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                        <div className="text-sm text-gray-600">
+                                            {filters.searchQuery ? (
+                                                <span>
+                                                    Found <span className="font-semibold">{filteredItems.length}</span> results 
+                                                    {filteredItems.length !== items.length && (
+                                                        <span> of {items.length} total items</span>
+                                                    )}
+                                                    {filters.searchQuery && (
+                                                        <span> for "<span className="font-medium text-gray-900">{filters.searchQuery}</span>"</span>
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <span>Showing {filteredItems.length} of {items.length} items</span>
+                                            )}
+                                        </div>
+                                        {filters.searchQuery && (
+                                            <button
+                                                onClick={() => handleFilterChange('searchQuery', '')}
+                                                className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                                Clear search
+                                            </button>
+                                        )}
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                         {filteredItems.map((item) => (
@@ -754,6 +1378,7 @@ const Home: React.FC = () => {
                                                 item={item} 
                                                 isAdmin={isAdmin}
                                                 onMarkAsSold={handleMarkAsSold}
+                                                onClick={handleItemClick}
                                             />
                                         ))}
                                     </div>
@@ -763,6 +1388,121 @@ const Home: React.FC = () => {
                     </div>
                 </div>
             </div>
+                </>
+            )}
+
+            {/* Analytics Page */}
+            {showAnalyticsPage && (
+                <div className="fixed inset-0 bg-white z-[60] overflow-auto">
+                    <div className="min-h-screen">
+                        {/* Use the same header structure as the main page */}
+                        <div className="bg-white shadow-sm border-b">
+                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center space-x-3">
+                                        <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-9 7-6-2 1-14z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <h1 className="text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
+                                            <p className="text-xs text-gray-500">Mountain Consignment Store</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-4">
+                                        <button
+                                            onClick={() => setShowAnalyticsPage(false)}
+                                            className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors font-medium"
+                                        >
+                                            Back to Store
+                                        </button>
+                                        
+                                        {/* Bookmarks Icon */}
+                                        <button
+                                            onClick={() => setIsBookmarksModalOpen(true)}
+                                            className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                            title="Bookmarked Items"
+                                        >
+                                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                            </svg>
+                                            {getBookmarkCount() > 0 && (
+                                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                    {getBookmarkCount() > 9 ? '9+' : getBookmarkCount()}
+                                                </span>
+                                            )}
+                                        </button>
+
+
+
+                                        {/* User Menu */}
+                                        <div ref={userMenuRef} className="relative flex items-center gap-3 pl-4 border-l border-gray-200">
+                                            <button
+                                                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                                                className="flex items-center gap-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
+                                            >
+                                                {user?.photoURL && user.photoURL.startsWith('http') ? (
+                                                    <img 
+                                                        src={user.photoURL} 
+                                                        alt={user?.displayName || 'User'} 
+                                                        className="w-8 h-8 rounded-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
+                                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                        </svg>
+                                                    </div>
+                                                )}
+                                                <div className="text-sm">
+                                                    <div className="font-medium text-gray-700">{user?.displayName}</div>
+                                                    {isAdmin && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Admin</span>}
+                                                </div>
+                                                <svg className={`w-4 h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                </svg>
+                                            </button>
+
+                                            {/* User Dropdown Menu */}
+                                            {userMenuOpen && (
+                                                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                                    <div className="p-4 border-b border-gray-100">
+                                                        <div className="text-sm font-medium text-gray-900">{user?.displayName}</div>
+                                                        <div className="text-xs text-gray-500">
+                                                            {user?.email || (user && 'phoneNumber' in user ? (user as any).phoneNumber : 'No contact info')}
+                                                        </div>
+                                                    </div>
+                                                    <div className="p-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                logout();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        >
+                                                            Sign Out
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                            {isAdmin ? (
+                                <Analytics user={user} isAdmin={isAdmin} />
+                            ) : (
+                                <UserAnalytics user={user} />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Modals */}
             <AddItemModal 
@@ -786,22 +1526,51 @@ const Home: React.FC = () => {
                 </>
             )}
 
-            <UserAnalyticsModal 
-                isOpen={isAnalyticsModalOpen} 
-                onClose={handleAnalyticsModalClose}
-                user={user}
-                isAdmin={isAdmin}
-                refreshTrigger={refreshTrigger}
+            <LoginModal 
+                isOpen={isLoginModalOpen}
+                onClose={() => setIsLoginModalOpen(false)}
+                onGoogleLogin={async () => { await signInWithGoogle(); }}
+                onPhoneLogin={async (phoneNumber: string) => { await signInWithPhone(phoneNumber); }}
             />
 
-            {isAdmin && (
-                <SoldItemsModal 
-                    isOpen={isSoldItemsModalOpen} 
-                    onClose={handleSoldItemsModalClose}
-                    user={user}
-                    refreshTrigger={refreshTrigger}
-                />
+            <ItemDetailModal 
+                isOpen={isItemDetailModalOpen}
+                onClose={handleItemDetailModalClose}
+                item={selectedItem}
+            />
+
+            <CartModal 
+                isOpen={isCartModalOpen}
+                onClose={() => setIsCartModalOpen(false)}
+                onCheckout={handleCheckout}
+            />
+
+            <BookmarksModal 
+                isOpen={isBookmarksModalOpen}
+                onClose={() => setIsBookmarksModalOpen(false)}
+                items={items}
+                onItemClick={handleItemClick}
+            />
+
+            <Checkout 
+                isOpen={isCheckoutOpen}
+                onClose={handleCheckoutClose}
+                onSuccess={handleOrderSuccess}
+            />
+
+            {/* Order Success Toast */}
+            {showOrderSuccess && (
+                <div className="fixed top-4 right-4 z-50 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <div>
+                        <h3 className="font-semibold">Order Successful!</h3>
+                        <p className="text-sm opacity-90">Thank you for your purchase. You'll receive a confirmation email soon.</p>
+                    </div>
+                </div>
             )}
+
         </div>
     );
 };

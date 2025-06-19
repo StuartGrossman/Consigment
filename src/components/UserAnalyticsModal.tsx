@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, orderBy, doc, updateDoc, deleteDoc, getDoc } from 'firebase/firestore';
-import { User as FirebaseUser } from 'firebase/auth';
+import { collection, query, where, getDocs, orderBy, doc, updateDoc, deleteDoc, getDoc, addDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ConsignmentItem, UserAnalytics, PaymentRecord, User } from '../types';
+import { ConsignmentItem, UserAnalytics, PaymentRecord, User, StoreCreditTransaction, AuthUser } from '../types';
 
 interface UserAnalyticsModalProps {
     isOpen: boolean;
     onClose: () => void;
-    user: FirebaseUser | null;
+    user: AuthUser | null;
     isAdmin?: boolean;
     refreshTrigger?: number;
 }
@@ -21,8 +20,12 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const [allUsers, setAllUsers] = useState<User[]>([]);
     const [editingItem, setEditingItem] = useState<ConsignmentItem | null>(null);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [showCashPaymentModal, setShowCashPaymentModal] = useState(false);
     const [paymentAmount, setPaymentAmount] = useState('');
     const [paymentNotes, setPaymentNotes] = useState('');
+    const [showUserRedeemModal, setShowUserRedeemModal] = useState(false);
+    const [redeemAmount, setRedeemAmount] = useState('');
+    const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<string | null>(null);
     const [showSoldModal, setShowSoldModal] = useState(false);
@@ -30,15 +33,29 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const [soldPrice, setSoldPrice] = useState('');
 
     useEffect(() => {
-        console.log('UserAnalyticsModal useEffect triggered:', { isOpen, isAdmin, refreshTrigger });
+        console.log('UserAnalyticsModal useEffect triggered:', { 
+            isOpen, 
+            isAdmin, 
+            refreshTrigger, 
+            userId: user?.uid 
+        });
         if (isOpen) {
             if (isAdmin) {
+                console.log('Fetching ALL user analytics (admin mode)');
                 fetchAllUserAnalytics();
             } else if (user) {
+                console.log('Fetching single user analytics (user mode):', user.uid);
                 fetchUserAnalytics(user.uid);
             }
         }
     }, [isOpen, isAdmin, user, refreshTrigger]);
+
+    // Fetch payment history when a user is selected
+    useEffect(() => {
+        if (selectedUser && isAdmin) {
+            fetchPaymentHistory(selectedUser);
+        }
+    }, [selectedUser, isAdmin]);
 
     const fetchAllUserAnalytics = async () => {
         setLoading(true);
@@ -83,6 +100,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         totalEarnings: 0,
                         totalPaid: 0,
                         outstandingBalance: 0,
+                        storeCredit: 0,
                         activeItems: [],
                         soldItems: [],
                         pendingItems: [],
@@ -106,7 +124,17 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                     case 'sold':
                         analytics.soldItems.push(item);
                         analytics.totalItemsSold++;
-                        analytics.totalEarnings += item.soldPrice || item.price;
+                        // User gets 75% of the sold price
+                        const soldPrice = item.soldPrice || item.price;
+                        const userEarnings = item.userEarnings || (soldPrice * 0.75);
+                        analytics.totalEarnings += userEarnings;
+                        break;
+                    case 'archived':
+                        // Initialize archivedItems array if it doesn't exist
+                        if (!analytics.archivedItems) {
+                            analytics.archivedItems = [];
+                        }
+                        analytics.archivedItems.push(item);
                         break;
                 }
             });
@@ -134,12 +162,13 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         userMap.set(userId, {
                             userId,
                             userName: user.displayName,
-                            userEmail: user.email,
+                            userEmail: user.email || userData.phoneNumber || '',
                             totalItemsListed: 0,
                             totalItemsSold: 0,
                             totalEarnings: 0,
                             totalPaid: 0,
                             outstandingBalance: 0,
+                            storeCredit: 0,
                             activeItems: [],
                             soldItems: [],
                             pendingItems: [],
@@ -149,7 +178,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         // Update existing user info with more complete data
                         const analytics = userMap.get(userId)!;
                         analytics.userName = userData.displayName || userData.name || analytics.userName;
-                        analytics.userEmail = userData.email || analytics.userEmail;
+                        analytics.userEmail = userData.email || userData.phoneNumber || analytics.userEmail;
                     }
                 });
             } catch (usersError) {
@@ -174,6 +203,23 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             } catch (paymentsError) {
                 console.log('Payments collection not found or error:', paymentsError);
                 setPaymentRecords([]);
+            }
+
+            // Get store credit information
+            try {
+                const usersRef = collection(db, 'users');
+                const usersSnapshot = await getDocs(usersRef);
+                
+                usersSnapshot.forEach((doc) => {
+                    const userData = doc.data();
+                    const userId = doc.id;
+                    
+                    if (userMap.has(userId)) {
+                        userMap.get(userId)!.storeCredit = userData.storeCredit || 0;
+                    }
+                });
+            } catch (storeCreditError) {
+                console.log('Error fetching store credit:', storeCreditError);
             }
 
             // Calculate outstanding balances
@@ -219,6 +265,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 totalEarnings: 0,
                 totalPaid: 0,
                 outstandingBalance: 0,
+                storeCredit: 0,
                 activeItems: [],
                 soldItems: [],
                 pendingItems: [],
@@ -251,7 +298,17 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                     case 'sold':
                         analytics.soldItems.push(item);
                         analytics.totalItemsSold++;
-                        analytics.totalEarnings += item.soldPrice || item.price;
+                        // User gets 75% of the sold price
+                        const soldPrice = item.soldPrice || item.price;
+                        const userEarnings = item.userEarnings || (soldPrice * 0.75);
+                        analytics.totalEarnings += userEarnings;
+                        break;
+                    case 'archived':
+                        // Initialize archivedItems array if it doesn't exist
+                        if (!analytics.archivedItems) {
+                            analytics.archivedItems = [];
+                        }
+                        analytics.archivedItems.push(item);
                         break;
                 }
             });
@@ -290,6 +347,29 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         }
     };
 
+    const fetchPaymentHistory = async (userId: string) => {
+        try {
+            const paymentsRef = collection(db, 'payments');
+            const paymentsQuery = query(paymentsRef, where('userId', '==', userId), orderBy('paidAt', 'desc'));
+            const paymentsSnapshot = await getDocs(paymentsQuery);
+            
+            const payments: PaymentRecord[] = [];
+            paymentsSnapshot.forEach((doc) => {
+                const data = doc.data();
+                payments.push({
+                    id: doc.id,
+                    ...data,
+                    paidAt: data.paidAt?.toDate() || new Date()
+                } as PaymentRecord);
+            });
+            
+            setPaymentHistory(payments);
+        } catch (error) {
+            console.log('Error fetching payment history:', error);
+            setPaymentHistory([]);
+        }
+    };
+
     const handleEditItem = (item: ConsignmentItem) => {
         setEditingItem(item);
     };
@@ -325,14 +405,21 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         if (!itemToDelete) return;
         
         try {
-            await deleteDoc(doc(db, 'items', itemToDelete));
+            // Instead of deleting, archive the item
+            const itemRef = doc(db, 'items', itemToDelete);
+            await updateDoc(itemRef, {
+                status: 'archived',
+                archivedAt: new Date(),
+                archiveReason: 'Manually archived by admin'
+            });
+            
             if (isAdmin) {
                 fetchAllUserAnalytics();
             } else if (user) {
                 fetchUserAnalytics(user.uid);
             }
         } catch (error) {
-            console.error('Error deleting item:', error);
+            console.error('Error archiving item:', error);
         } finally {
             setShowDeleteModal(false);
             setItemToDelete(null);
@@ -358,10 +445,17 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         
         try {
             const itemRef = doc(db, 'items', itemToMarkSold.id);
+            
+            // Calculate earnings split: User gets 75%, Admin gets 25%
+            const userEarnings = price * 0.75;
+            const adminEarnings = price * 0.25;
+            
             await updateDoc(itemRef, {
                 status: 'sold',
                 soldAt: new Date(),
-                soldPrice: price
+                soldPrice: price,
+                userEarnings: userEarnings,
+                adminEarnings: adminEarnings
             });
             
             if (isAdmin) {
@@ -384,35 +478,144 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         setSoldPrice('');
     };
 
-    const handlePayUser = async () => {
-        if (!selectedUser || !paymentAmount) return;
+    const handleCashPayment = async () => {
+        if (!selectedUser || !paymentAmount) {
+            alert('Please enter a payment amount');
+            return;
+        }
         
         const userData = userAnalytics.find(u => u.userId === selectedUser);
-        if (!userData) return;
+        if (!userData) {
+            alert('User data not found');
+            return;
+        }
+        
+        const amount = parseFloat(paymentAmount);
+        if (isNaN(amount) || amount <= 0) {
+            alert('Please enter a valid amount greater than 0');
+            return;
+        }
+        
+        if (amount > userData.outstandingBalance) {
+            alert('Payment amount cannot exceed outstanding balance');
+            return;
+        }
         
         try {
-            const paymentsRef = collection(db, 'payments');
-            await getDocs(paymentsRef); // Just to add the document
+            setLoading(true);
             
-            const paymentData = {
+            // Add payment record
+            const paymentsRef = collection(db, 'payments');
+            const paymentData: Omit<PaymentRecord, 'id'> = {
                 userId: selectedUser,
                 userName: userData.userName,
                 userEmail: userData.userEmail,
-                amount: parseFloat(paymentAmount),
+                amount: amount,
+                type: 'cash',
                 itemsSold: userData.soldItems.map(item => item.id),
                 paidAt: new Date(),
-                notes: paymentNotes
+                notes: paymentNotes || `Cash payment of $${amount.toFixed(2)}`
             };
             
-            // In a real app, you'd add this to the payments collection
-            console.log('Payment record:', paymentData);
+            await addDoc(paymentsRef, paymentData);
             
-            setShowPaymentModal(false);
+            // Close modal and reset
+            setShowCashPaymentModal(false);
             setPaymentAmount('');
             setPaymentNotes('');
-            fetchAllUserAnalytics();
+            
+            // Refresh data
+            await fetchAllUserAnalytics();
+            if (selectedUser) {
+                await fetchPaymentHistory(selectedUser);
+            }
+            
+            alert(`Successfully recorded cash payment of $${amount.toFixed(2)} to ${userData.userName}!`);
         } catch (error) {
-            console.error('Error processing payment:', error);
+            console.error('Error processing cash payment:', error);
+            alert('Failed to record cash payment. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+
+    const handleUserRedeemStoreCredit = async () => {
+        if (!user || !currentUserAnalytics) return;
+        
+        const amount = parseFloat(redeemAmount);
+        if (isNaN(amount) || amount <= 0) {
+            alert('Please enter a valid amount');
+            return;
+        }
+        
+        const outstandingBalance = currentUserAnalytics.totalEarnings - currentUserAnalytics.totalPaid;
+        if (amount > outstandingBalance) {
+            alert('Cannot redeem more than your outstanding balance');
+            return;
+        }
+        
+        try {
+            setLoading(true);
+            
+            // Create payment record for the redemption
+            const paymentRecord: Omit<PaymentRecord, 'id'> = {
+                userId: user.uid,
+                userName: user.displayName || 'Unknown User',
+                userEmail: user.email || '',
+                amount: amount,
+                type: 'store_credit',
+                itemsSold: [],
+                paidAt: new Date(),
+                notes: `Store credit redeemed by user`
+            };
+            
+            await addDoc(collection(db, 'payments'), paymentRecord);
+            
+            // Create store credit transaction
+            const storeCreditTransaction = {
+                userId: user.uid,
+                userName: user.displayName || 'Unknown User',
+                userEmail: user.email || '',
+                amount: amount,
+                type: 'earned',
+                description: 'Redeemed earnings as store credit',
+                createdAt: new Date()
+            };
+            
+            await addDoc(collection(db, 'store_credit_transactions'), storeCreditTransaction);
+            
+            // Update user's store credit balance
+            const userRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userRef);
+            const currentStoreCredit = userDoc.exists() ? (userDoc.data().storeCredit || 0) : 0;
+            
+            if (userDoc.exists()) {
+                await updateDoc(userRef, {
+                    storeCredit: currentStoreCredit + amount
+                });
+            } else {
+                await setDoc(userRef, {
+                    storeCredit: amount,
+                    email: user.email || ('phoneNumber' in user ? (user as any).phoneNumber : ''),
+                    displayName: user.displayName
+                });
+            }
+            
+            // Refresh data
+            await fetchUserAnalytics(user.uid);
+            
+            // Close modal and reset
+            setShowUserRedeemModal(false);
+            setRedeemAmount('');
+            
+            alert(`Successfully redeemed $${amount.toFixed(2)} as store credit!`);
+        } catch (error) {
+            console.error('Error redeeming store credit:', error);
+            alert('Failed to redeem store credit. Please try again.');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -504,18 +707,18 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                             <div>
                                                 <div className="flex justify-between items-center mb-4">
                                                     <h3 className="text-lg font-semibold">{analytics.userName}</h3>
-                                                    {analytics.outstandingBalance > 0 && (
-                                                        <button
-                                                            onClick={() => setShowPaymentModal(true)}
-                                                            className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
-                                                        >
-                                                            Pay User
-                                                        </button>
-                                                    )}
+                                                                                        {analytics.outstandingBalance > 0 && (
+                                        <button
+                                            onClick={() => setShowCashPaymentModal(true)}
+                                            className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 flex items-center gap-2"
+                                        >
+                                            💵 Pay With Cash
+                                        </button>
+                                    )}
                                                 </div>
 
                                                 {/* Stats Grid */}
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                                                     <div className="bg-blue-50 p-4 rounded-lg">
                                                         <div className="text-blue-600 text-sm font-medium">Items Listed</div>
                                                         <div className="text-2xl font-bold text-blue-900">{analytics.totalItemsListed}</div>
@@ -532,7 +735,58 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                                         <div className="text-orange-600 text-sm font-medium">Outstanding</div>
                                                         <div className="text-2xl font-bold text-orange-900">{formatCurrency(analytics.outstandingBalance)}</div>
                                                     </div>
+                                                    <div className="bg-indigo-50 p-4 rounded-lg">
+                                                        <div className="text-indigo-600 text-sm font-medium">Store Credit</div>
+                                                        <div className="text-2xl font-bold text-indigo-900">{formatCurrency(analytics.storeCredit)}</div>
+                                                    </div>
                                                 </div>
+
+                                                {/* Payment History Section */}
+                                                {paymentHistory.length > 0 && (
+                                                    <div className="mb-6">
+                                                        <h4 className="font-medium mb-3 text-gray-900">
+                                                            Payment History ({paymentHistory.length})
+                                                        </h4>
+                                                        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                                            <div className="max-h-64 overflow-y-auto">
+                                                                <table className="min-w-full divide-y divide-gray-200">
+                                                                    <thead className="bg-gray-50">
+                                                                        <tr>
+                                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                                        {paymentHistory.map((payment) => (
+                                                                            <tr key={payment.id} className="hover:bg-gray-50">
+                                                                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                                                                                    {payment.paidAt.toLocaleDateString()}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 whitespace-nowrap">
+                                                                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                                                                        payment.type === 'cash' 
+                                                                                            ? 'bg-green-100 text-green-800' 
+                                                                                            : 'bg-purple-100 text-purple-800'
+                                                                                    }`}>
+                                                                                        {payment.type === 'cash' ? '💵 Cash' : '🎁 Store Credit'}
+                                                                                    </span>
+                                                                                </td>
+                                                                                <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                                                                    {formatCurrency(payment.amount)}
+                                                                                </td>
+                                                                                <td className="px-4 py-3 text-sm text-gray-500 max-w-xs truncate">
+                                                                                    {payment.notes || '-'}
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
 
                                                 {/* Items Sections */}
                                                 {['activeItems', 'soldItems', 'approvedItems', 'pendingItems'].map((section) => {
@@ -571,9 +825,9 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                                                             )}
                                                                             <button
                                                                                 onClick={() => handleDeleteItem(item.id)}
-                                                                                className="text-red-600 hover:text-red-800 text-sm"
+                                                                                className="text-orange-600 hover:text-orange-800 text-sm"
                                                                             >
-                                                                                Delete
+                                                                                Archive
                                                                             </button>
                                                                         </div>
                                                                     </div>
@@ -599,7 +853,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                             ) : (
                                 <div>
                                     {/* User's Personal Statistics */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                                     <div className="bg-blue-50 p-4 rounded-lg">
                                         <div className="text-blue-600 text-sm font-medium">Items Listed</div>
                                         <div className="text-2xl font-bold text-blue-900">{currentUserAnalytics.totalItemsListed}</div>
@@ -616,7 +870,31 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                         <div className="text-orange-600 text-sm font-medium">Outstanding</div>
                                         <div className="text-2xl font-bold text-orange-900">{formatCurrency(currentUserAnalytics.outstandingBalance)}</div>
                                     </div>
+                                    <div className="bg-indigo-50 p-4 rounded-lg">
+                                        <div className="text-indigo-600 text-sm font-medium">Store Credit</div>
+                                        <div className="text-2xl font-bold text-indigo-900">{formatCurrency(currentUserAnalytics.storeCredit)}</div>
+                                    </div>
                                 </div>
+
+                                {/* Redeem Store Credit Button */}
+                                {currentUserAnalytics.outstandingBalance > 0 && (
+                                    <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="font-medium text-purple-900 mb-1">💰 Redeem Your Earnings</h3>
+                                                <p className="text-purple-700 text-sm">
+                                                    You have {formatCurrency(currentUserAnalytics.outstandingBalance)} available to redeem as store credit
+                                                </p>
+                                            </div>
+                                            <button
+                                                onClick={() => setShowUserRedeemModal(true)}
+                                                className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
+                                            >
+                                                🎁 Redeem Store Credit
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* User's Items */}
                                 {['activeItems', 'soldItems', 'approvedItems', 'pendingItems'].map((section) => {
@@ -705,6 +983,87 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                     </div>
                 )}
 
+
+
+
+
+                {/* Cash Payment Modal */}
+                {showCashPaymentModal && selectedUser && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                            <div className="flex items-center mb-4">
+                                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-green-600 text-xl">💵</span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Cash Payment</h3>
+                            </div>
+                            {(() => {
+                                const userData = userAnalytics.find(u => u.userId === selectedUser);
+                                if (!userData) return null;
+                                
+                                return (
+                                    <>
+                                        <p className="text-gray-600 mb-4">
+                                            Record cash payment to <span className="font-medium">{userData.userName}</span>
+                                        </p>
+                                        <div className="bg-gray-50 p-3 rounded-lg mb-4">
+                                            <div className="text-sm text-gray-600">Outstanding Balance</div>
+                                            <div className="text-xl font-bold text-gray-900">{formatCurrency(userData.outstandingBalance)}</div>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Cash Amount</label>
+                                                <input
+                                                    type="number"
+                                                    value={paymentAmount}
+                                                    onChange={(e) => setPaymentAmount(e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                                    placeholder="0.00"
+                                                    max={userData.outstandingBalance}
+                                                    min="0"
+                                                    step="0.01"
+                                                />
+                                                {paymentAmount && parseFloat(paymentAmount) > userData.outstandingBalance && (
+                                                    <p className="text-red-500 text-sm mt-1">Amount cannot exceed outstanding balance</p>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                                                <textarea
+                                                    value={paymentNotes}
+                                                    onChange={(e) => setPaymentNotes(e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                                    rows={2}
+                                                    placeholder="Payment method, check number, etc."
+                                                />
+                                            </div>
+                                            <div className="flex gap-2 pt-4">
+                                                <button
+                                                    onClick={handleCashPayment}
+                                                    disabled={!paymentAmount || parseFloat(paymentAmount) <= 0 || parseFloat(paymentAmount) > userData.outstandingBalance || loading}
+                                                    className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                                >
+                                                    {loading ? 'Processing...' : 'Record Cash Payment'}
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowCashPaymentModal(false);
+                                                        setPaymentAmount('');
+                                                        setPaymentNotes('');
+                                                    }}
+                                                    className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                )}
+
                 {/* Payment Modal */}
                 {showPaymentModal && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -733,7 +1092,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                 </div>
                                 <div className="flex gap-2 pt-4">
                                     <button
-                                        onClick={handlePayUser}
+                                        onClick={handleCashPayment}
                                         className="flex-1 bg-green-500 text-white py-2 rounded-lg hover:bg-green-600"
                                     >
                                         Record Payment
@@ -750,18 +1109,18 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                     </div>
                 )}
 
-                {/* Delete Item Modal */}
+                {/* Archive Item Modal */}
                 {showDeleteModal && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
                             <div className="flex items-center mb-4">
-                                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
-                                    <span className="text-red-600 text-xl">🗑️</span>
+                                <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-orange-600 text-xl">📦</span>
                                 </div>
-                                <h3 className="text-lg font-semibold text-gray-900">Delete Item</h3>
+                                <h3 className="text-lg font-semibold text-gray-900">Archive Item</h3>
                             </div>
                             <p className="text-gray-600 mb-6">
-                                Are you sure you want to delete this item? This action cannot be undone.
+                                Are you sure you want to archive this item? The item will be moved to archived status and hidden from active listings, but can be restored later.
                             </p>
                             <div className="flex justify-end space-x-3">
                                 <button
@@ -772,9 +1131,9 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                 </button>
                                 <button
                                     onClick={confirmDeleteItem}
-                                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                                    className="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition-colors"
                                 >
-                                    Delete Item
+                                    Archive Item
                                 </button>
                             </div>
                         </div>
@@ -825,6 +1184,68 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                 >
                                     Confirm Sale
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* User Redeem Store Credit Modal */}
+                {showUserRedeemModal && currentUserAnalytics && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+                            <div className="flex items-center mb-4">
+                                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center mr-3">
+                                    <span className="text-purple-600 text-xl">🎁</span>
+                                </div>
+                                <h3 className="text-lg font-semibold text-gray-900">Redeem Store Credit</h3>
+                            </div>
+                            <p className="text-gray-600 mb-4">
+                                Convert your earnings into store credit that you can use for future purchases
+                            </p>
+                            <div className="bg-gray-50 p-3 rounded-lg mb-4">
+                                <div className="text-sm text-gray-600">Available to Redeem</div>
+                                <div className="text-xl font-bold text-gray-900">{formatCurrency(currentUserAnalytics.outstandingBalance)}</div>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount to Redeem</label>
+                                    <input
+                                        type="number"
+                                        value={redeemAmount}
+                                        onChange={(e) => setRedeemAmount(e.target.value)}
+                                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                                        placeholder="0.00"
+                                        max={currentUserAnalytics.outstandingBalance}
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                    {redeemAmount && parseFloat(redeemAmount) > currentUserAnalytics.outstandingBalance && (
+                                        <p className="text-red-500 text-sm mt-1">Amount cannot exceed available balance</p>
+                                    )}
+                                </div>
+                                <div className="bg-purple-50 p-3 rounded-lg">
+                                    <div className="text-sm text-purple-700">
+                                        💡 Store credit can be used for future purchases in the app
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 pt-4">
+                                    <button
+                                        onClick={handleUserRedeemStoreCredit}
+                                        disabled={!redeemAmount || parseFloat(redeemAmount) <= 0 || parseFloat(redeemAmount) > currentUserAnalytics.outstandingBalance || loading}
+                                        className="flex-1 bg-purple-500 text-white py-2 rounded-lg hover:bg-purple-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                                    >
+                                        {loading ? 'Processing...' : 'Redeem Store Credit'}
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setShowUserRedeemModal(false);
+                                            setRedeemAmount('');
+                                        }}
+                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

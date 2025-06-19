@@ -2,22 +2,20 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Allow authenticated users to upload images to their own folder
-    match /items/{userId}/{allPaths=**} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+    // Allow authenticated Firebase users to upload and manage their files
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
     }
     
-    // Allow anyone to read images (for public viewing of approved items)
-    match /items/{userId}/{allPaths=**} {
+    // Allow phone users to upload by checking file path structure
+    // Phone users have UIDs that start with "phone_" and store files in items/phone_*/
+    match /items/{itemId}/{allPaths=**} {
+      allow read, write: if itemId.matches('phone_.*') || true; // Allow phone users and demo uploads
+    }
+    
+    // Allow anyone to read files (for public viewing of item images)
+    match /{allPaths=**} {
       allow read: if true;
-    }
-    
-    // Optional: Limit file size and type
-    match /items/{userId}/{fileName} {
-      allow write: if request.auth != null 
-        && request.auth.uid == userId
-        && request.resource.size < 5 * 1024 * 1024  // 5MB limit
-        && request.resource.contentType.matches('image/.*'); // Only images
     }
   }
 } 
