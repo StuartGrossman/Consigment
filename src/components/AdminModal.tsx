@@ -82,8 +82,6 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const handleBarcodeConfirmed = async (item: ConsignmentItem, barcodeData: string) => {
     // Remove from pending list since it's now approved with barcode
     setPendingItems(prev => prev.filter(i => i.id !== item.id));
-    setModalMessage('Item approved with barcode generated! It will be available to employees for 3 days before going live.');
-    setShowSuccessModal(true);
     setSelectedItem(null);
   };
 

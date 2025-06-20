@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ConsignmentItem } from '../types';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logUserAction } from '../services/firebaseService';
@@ -14,6 +14,30 @@ interface ItemDetailModalProps {
   item: ConsignmentItem | null;
   onItemUpdated?: () => void;
 }
+
+// Helper function to safely convert Firebase Timestamps to Date objects
+const safeToDate = (timestamp: any): Date | null => {
+  if (!timestamp) return null;
+  try {
+    if (timestamp instanceof Date) return timestamp;
+    if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+      return timestamp.toDate();
+    }
+    if (timestamp.seconds) {
+      return new Date(timestamp.seconds * 1000);
+    }
+    return new Date(timestamp);
+  } catch (error) {
+    console.error('Error converting timestamp:', error);
+    return null;
+  }
+};
+
+// Helper function to format dates safely
+const formatDate = (timestamp: any): string => {
+  const date = safeToDate(timestamp);
+  return date ? date.toLocaleDateString() : 'N/A';
+};
 
 const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item, onItemUpdated }) => {
   const { 
@@ -28,6 +52,15 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   
   const { isAdmin, user } = useAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Mark as Sold state
+  const [showSoldModal, setShowSoldModal] = useState(false);
+  const [soldPrice, setSoldPrice] = useState('');
+  const [isProcessingSale, setIsProcessingSale] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundPassword, setRefundPassword] = useState('');
+  const [isProcessingRefund, setIsProcessingRefund] = useState(false);
 
   // Debug bookmark state changes
   useEffect(() => {
@@ -36,6 +69,13 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
       console.log('Total bookmarked items:', bookmarkedItems.length);
     }
   }, [bookmarkedItems, item, isBookmarked]);
+
+  // Initialize sold price when modal opens
+  useEffect(() => {
+    if (item) {
+      setSoldPrice(item.price.toString());
+    }
+  }, [item]);
 
   if (!isOpen || !item) return null;
 
@@ -99,6 +139,123 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   };
 
   const canPurchase = item.status === 'live';
+
+  // Mark as Sold functionality
+  const handleMarkAsSold = () => {
+    setShowSoldModal(true);
+  };
+
+  const handleConfirmSold = async () => {
+    if (!soldPrice || parseFloat(soldPrice) <= 0) return;
+    
+    setIsProcessingSale(true);
+    try {
+      const itemRef = doc(db, 'items', item.id);
+      const salePrice = parseFloat(soldPrice);
+      
+      await updateDoc(itemRef, {
+        status: 'sold',
+        soldAt: new Date(),
+        soldPrice: salePrice,
+        saleType: 'in-store' // Admin marked as sold = in-store sale
+      });
+
+      // Log the action
+      await logUserAction(user, 'item_marked_sold', `Marked item as sold for $${salePrice}`, item.id, item.title);
+
+      setShowSoldModal(false);
+      setSoldPrice('');
+      
+      // Show success message briefly
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    } finally {
+      setIsProcessingSale(false);
+    }
+  };
+
+  const handleIssueRefund = () => {
+    setShowRefundModal(true);
+  };
+
+  const handleCancelRefund = () => {
+    setShowRefundModal(false);
+    setRefundReason('');
+    setRefundPassword('');
+  };
+
+  const handleCancelSold = () => {
+    setShowSoldModal(false);
+    setSoldPrice('');
+  };
+
+  const handleConfirmRefund = async () => {
+    if (!refundReason.trim()) {
+      alert('Please provide a reason for the refund.');
+      return;
+    }
+    
+    if (refundPassword !== '123') {
+      alert('Invalid password. Please enter the correct password.');
+      return;
+    }
+
+    setIsProcessingRefund(true);
+    try {
+      // Create refund record
+      const refundRecord = {
+        id: `refund_${item.id}_${Date.now()}`,
+        itemId: item.id,
+        itemTitle: item.title,
+        originalPrice: item.soldPrice || item.price,
+        refundAmount: item.soldPrice || item.price,
+        reason: refundReason.trim(),
+        refundedAt: new Date(),
+        refundedBy: user?.uid || '',
+        refundedByName: user?.displayName || user?.email || 'Admin',
+        originalBuyerId: item.buyerId || '',
+        originalBuyerName: item.buyerName || item.buyerInfo?.name || 'Unknown Buyer',
+        sellerName: item.sellerName,
+        sellerId: item.sellerId
+      };
+
+      // Add refund record to Firebase
+      const refundsRef = collection(db, 'refunds');
+      await addDoc(refundsRef, refundRecord);
+
+      // Update item status back to approved
+      const itemRef = doc(db, 'items', item.id);
+      await updateDoc(itemRef, {
+        status: 'approved',
+        soldAt: null,
+        soldPrice: null,
+        buyerId: null,
+        buyerName: null,
+        buyerEmail: null,
+        saleType: null,
+        refundedAt: new Date(),
+        refundReason: refundReason.trim()
+      });
+
+      // Log the action
+      await logUserAction(user, 'item_refunded', `Issued refund: ${refundReason}`, item.id, item.title);
+
+      setShowRefundModal(false);
+      setRefundReason('');
+      setRefundPassword('');
+      
+      // Close modal after brief delay
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (error) {
+      console.error('Error processing refund:', error);
+      alert('Error processing refund. Please try again.');
+    } finally {
+      setIsProcessingRefund(false);
+    }
+  };
 
   // Generate barcode and save as image to Firebase Storage
   const generateAndSaveBarcode = async (barcodeData: string): Promise<string | null> => {
@@ -187,19 +344,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
             </div>
             <div class="print-info">
               <p>Barcode: ${item.barcodeData}</p>
-              <p>Generated: ${(() => {
-                try {
-                  if (!item.barcodeGeneratedAt) return new Date().toLocaleDateString();
-                  const date = item.barcodeGeneratedAt instanceof Date 
-                    ? item.barcodeGeneratedAt
-                    : (item.barcodeGeneratedAt as any).toDate?.()
-                      ? (item.barcodeGeneratedAt as any).toDate()
-                      : new Date(item.barcodeGeneratedAt as any);
-                  return date.toLocaleDateString();
-                } catch (error) {
-                  return new Date().toLocaleDateString();
-                }
-              })()}</p>
+              <p>Generated: ${formatDate(item.barcodeGeneratedAt) || formatDate(new Date())}</p>
               <p>Printed: ${new Date().toLocaleString()}</p>
             </div>
           </body>
@@ -280,22 +425,34 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
+      <div className={`bg-white rounded-xl shadow-2xl ${item.status === 'sold' ? 'max-w-7xl' : 'max-w-4xl'} w-full max-h-[90vh] overflow-hidden`}>
+        <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div className="flex-1">
-              <h2 className="text-2xl font-bold text-gray-800">{item.title}</h2>
-              <div className="flex items-center gap-3 mt-2">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(item.status)}`}>
+              <div className="flex items-center gap-3 mb-2">
+                <h2 className="text-2xl font-bold text-gray-800">{item.title}</h2>
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(item.status)}`}>
                   {getStatusText(item.status)}
                 </span>
-                <span className="text-2xl font-bold text-orange-600">${item.price}</span>
+                <span className="text-2xl font-bold text-green-600">${item.price}</span>
               </div>
               
-              {/* Admin Actions - Moved to top */}
-              {isAdmin && (
-                <div className="flex flex-wrap gap-2 mt-4">
+              {/* Admin Actions - Only show for non-sold items */}
+              {isAdmin && item.status !== 'sold' && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {item.status === 'approved' && (
+                    <button
+                      onClick={handleMarkAsSold}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-500 text-white hover:bg-slate-600 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      Mark as Sold
+                    </button>
+                  )}
+                  
                   {item.status !== 'pending' && (
                     <button
                       onClick={() => handleAdminAction('pending')}
@@ -334,6 +491,34 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                   )}
                 </div>
               )}
+
+              {/* Admin Actions for Sold Items - Issue Refund */}
+              {isAdmin && item.status === 'sold' && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button
+                    onClick={handleIssueRefund}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
+                    </svg>
+                    Issue Refund
+                  </button>
+                  
+                  {/* Barcode Print Button */}
+                  {item.barcodeImageUrl && (
+                    <button
+                      onClick={() => printBarcode(item.barcodeImageUrl!)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-500 text-white hover:bg-slate-600 transition-colors flex items-center gap-1"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                      </svg>
+                      Print Barcode
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -346,80 +531,87 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
-          {/* Item Images */}
-          {item.images && item.images.length > 0 && (
-            <div className="mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {item.images.slice(0, 4).map((image, index) => (
-                  <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
-                    <img 
-                      src={image} 
-                      alt={`${item.title} ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                ))}
+        {/* Static Content - No Scrolling */}
+        <div className="p-6">
+          {/* Item Images and Details - Side by Side for Sold Items */}
+          <div className={`${item.status === 'sold' ? 'grid grid-cols-1 lg:grid-cols-2 gap-8' : ''}`}>
+            {/* Item Images */}
+            {item.images && item.images.length > 0 && (
+              <div className="mb-6">
+                <div className={`grid ${item.status === 'sold' ? 'grid-cols-2 gap-2' : 'grid-cols-1 md:grid-cols-2 gap-4'}`}>
+                  {item.images.slice(0, 4).map((image, index) => (
+                    <div key={index} className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <img 
+                        src={image} 
+                        alt={`${item.title} ${index + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+                {item.images.length > 4 && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    +{item.images.length - 4} more images
+                  </p>
+                )}
               </div>
-              {item.images.length > 4 && (
-                <p className="text-sm text-gray-500 mt-2">
-                  +{item.images.length - 4} more images
-                </p>
-              )}
-            </div>
-          )}
+            )}
 
-          {/* Item Details */}
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Description</h3>
-              <p className="text-gray-600 whitespace-pre-wrap">{item.description}</p>
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {/* Item Details */}
+            <div className="space-y-4">
               <div>
-                <h4 className="font-medium text-gray-800">Category</h4>
-                <p className="text-gray-600">{item.category}</p>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2">Description</h3>
+                <p className="text-gray-600 whitespace-pre-wrap">{item.description}</p>
               </div>
-              
-              {item.brand && (
-                <div>
-                  <h4 className="font-medium text-gray-800">Brand</h4>
-                  <p className="text-gray-600">{item.brand}</p>
-                </div>
-              )}
-              
-              {item.size && (
-                <div>
-                  <h4 className="font-medium text-gray-800">Size</h4>
-                  <p className="text-gray-600">{item.size}</p>
-                </div>
-              )}
-              
-              {item.color && (
-                <div>
-                  <h4 className="font-medium text-gray-800">Color</h4>
-                  <p className="text-gray-600">{item.color}</p>
-                </div>
-              )}
-              
-              {item.condition && (
-                <div>
-                  <h4 className="font-medium text-gray-800">Condition</h4>
-                  <p className="text-gray-600">{item.condition}</p>
-                </div>
-              )}
-              
-              {item.gender && (
-                <div>
-                  <h4 className="font-medium text-gray-800">Gender</h4>
-                  <p className="text-gray-600">{item.gender}</p>
-                </div>
-              )}
-            </div>
 
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <h4 className="font-medium text-gray-800">Category</h4>
+                  <p className="text-gray-600">{item.category}</p>
+                </div>
+                
+                {item.brand && (
+                  <div>
+                    <h4 className="font-medium text-gray-800">Brand</h4>
+                    <p className="text-gray-600">{item.brand}</p>
+                  </div>
+                )}
+                
+                {item.size && (
+                  <div>
+                    <h4 className="font-medium text-gray-800">Size</h4>
+                    <p className="text-gray-600">{item.size}</p>
+                  </div>
+                )}
+                
+                {item.color && (
+                  <div>
+                    <h4 className="font-medium text-gray-800">Color</h4>
+                    <p className="text-gray-600">{item.color}</p>
+                  </div>
+                )}
+                
+                {item.condition && (
+                  <div>
+                    <h4 className="font-medium text-gray-800">Condition</h4>
+                    <p className="text-gray-600">{item.condition}</p>
+                  </div>
+                )}
+                
+                {item.gender && (
+                  <div>
+                    <h4 className="font-medium text-gray-800">Gender</h4>
+                    <p className="text-gray-600">{item.gender}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Additional Information Sections */}
+          <div className={`${item.status === 'sold' ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6' : 'mt-6'}`}>
             {/* Seller Information */}
-            <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <div className="p-4 bg-gray-50 rounded-lg">
               <h4 className="font-medium text-gray-800 mb-2">Seller Information</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                 <div>
@@ -432,12 +624,12 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                 </div>
                 <div>
                   <span className="text-gray-600">Listed:</span>
-                  <span className="ml-2">{item.createdAt?.toLocaleDateString() || 'N/A'}</span>
+                  <span className="ml-2">{formatDate(item.createdAt)}</span>
                 </div>
                 {item.approvedAt && (
                   <div>
                     <span className="text-gray-600">Approved:</span>
-                    <span className="ml-2">{item.approvedAt.toLocaleDateString()}</span>
+                    <span className="ml-2">{formatDate(item.approvedAt)}</span>
                   </div>
                 )}
               </div>
@@ -445,7 +637,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
             {/* Barcode Information (Admin Only) */}
             {isAdmin && item.barcodeData && (
-              <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <div className="p-4 bg-blue-50 rounded-lg">
                 <h4 className="font-medium text-gray-800 mb-2">Barcode Information</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <div>
@@ -455,20 +647,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                   {item.barcodeGeneratedAt && (
                     <div>
                       <span className="text-gray-600">Generated:</span>
-                      <span className="ml-2">{
-                        (() => {
-                          try {
-                            const date = item.barcodeGeneratedAt instanceof Date 
-                              ? item.barcodeGeneratedAt
-                              : (item.barcodeGeneratedAt as any).toDate?.()
-                                ? (item.barcodeGeneratedAt as any).toDate()
-                                : new Date(item.barcodeGeneratedAt as any);
-                            return date.toLocaleDateString();
-                          } catch (error) {
-                            return 'Unknown date';
-                          }
-                        })()
-                      }</span>
+                      <span className="ml-2">{formatDate(item.barcodeGeneratedAt)}</span>
                     </div>
                   )}
                   {item.barcodeImageUrl && (
@@ -486,12 +665,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                 </div>
               </div>
             )}
-
           </div>
         </div>
-
-        {/* Hidden canvas for barcode generation */}
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
 
         {/* Action Buttons */}
         {!isAdmin && canPurchase ? (
@@ -584,7 +759,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                   </div>
                   <div>
                     <span className="text-gray-600">Sold Date:</span>
-                    <span className="ml-2 font-medium">{item.soldAt?.toLocaleDateString() || 'N/A'}</span>
+                    <span className="ml-2 font-medium">{formatDate(item.soldAt)}</span>
                   </div>
                   {item.saleTransactionId && (
                     <div className="col-span-2">
@@ -617,11 +792,11 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                             <body>
                               <div class="item-info">
                                 <h3>${item.title}</h3>
-                                <p>Price: $${item.soldPrice || item.price} | Sold: ${item.soldAt?.toLocaleDateString() || 'N/A'}</p>
+                                <p>Price: $${item.soldPrice || item.price} | Sold: ${formatDate(item.soldAt)}</p>
                               </div>
                               <div class="barcode-container">
                                 <p>Barcode: ${item.barcodeData}</p>
-                                <p>Generated: ${item.barcodeGeneratedAt?.toLocaleDateString() || 'N/A'}</p>
+                                <p>Generated: ${formatDate(item.barcodeGeneratedAt) || formatDate(new Date())}</p>
                               </div>
                             </body>
                           </html>
@@ -678,7 +853,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                                 <div class="item-details">
                                   <p><strong>Item:</strong> ${item.title}</p>
                                   <p><strong>Order ID:</strong> ${item.saleTransactionId || 'N/A'}</p>
-                                  <p><strong>Sold Date:</strong> ${item.soldAt?.toLocaleDateString() || 'N/A'}</p>
+                                  <p><strong>Sold Date:</strong> ${formatDate(item.soldAt)}</p>
                                 </div>
                               </div>
                             </body>
@@ -717,6 +892,117 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
           </div>
         )}
       </div>
+
+      {/* Mark as Sold Modal */}
+      {showSoldModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[90]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Mark Item as Sold</h3>
+            <p className="text-gray-600 mb-4">Enter the sale price for this item:</p>
+            <input
+              type="number"
+              value={soldPrice}
+              onChange={(e) => setSoldPrice(e.target.value)}
+              placeholder="Enter sale price"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 mb-4"
+              min="0"
+              step="0.01"
+            />
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelSold}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                disabled={isProcessingSale}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSold}
+                disabled={isProcessingSale || !soldPrice || parseFloat(soldPrice) <= 0}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+              >
+                {isProcessingSale ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </>
+                ) : (
+                  'Confirm Sale'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Issue Refund Modal */}
+      {showRefundModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[90]">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Issue Refund</h3>
+            <div className="mb-4">
+              <p className="text-gray-600 mb-2">Item: <strong>{item.title}</strong></p>
+              <p className="text-gray-600 mb-4">Refund Amount: <strong>${item.soldPrice || item.price}</strong></p>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reason for Refund <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Please describe why this refund is being issued..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                rows={3}
+                required
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Admin Password <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={refundPassword}
+                onChange={(e) => setRefundPassword(e.target.value)}
+                placeholder="Enter admin password"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">Testing password: 123</p>
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelRefund}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                disabled={isProcessingRefund}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRefund}
+                disabled={isProcessingRefund || !refundReason.trim() || !refundPassword}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+              >
+                {isProcessingRefund ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Processing...
+                  </>
+                ) : (
+                  'Issue Refund'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Hidden canvas for barcode generation */}
+      <canvas ref={canvasRef} style={{ display: 'none' }} />
     </div>
   );
 };

@@ -179,8 +179,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                 <strong>Next Steps:</strong><br />
                 1. Bring your item to the front desk<br />
                 2. Our team will inspect and approve it<br />
-                3. After approval, employees get first pick for 3 days<br />
-                4. Then it goes live for all customers
+                3. Then it goes live for all customers
               </p>
             </div>
             <button

@@ -108,6 +108,8 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
       case 'cart_updated': return '🛍️';
       case 'status_changed': return '🔄';
       case 'barcode_generated': return '📊';
+      case 'shipping_label_generated': return '📦';
+      case 'item_shipped': return '🚚';
       default: return '📊';
     }
   };
@@ -128,6 +130,8 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
       case 'cart_updated': return 'bg-teal-100 text-teal-800';
       case 'status_changed': return 'bg-cyan-100 text-cyan-800';
       case 'barcode_generated': return 'bg-emerald-100 text-emerald-800';
+      case 'shipping_label_generated': return 'bg-blue-100 text-blue-800';
+      case 'item_shipped': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -201,6 +205,8 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
               <option value="bulk_discount">Bulk Discount</option>
               <option value="status_changed">Status Changed</option>
               <option value="barcode_generated">Barcode Generated</option>
+              <option value="shipping_label_generated">Shipping Label Generated</option>
+              <option value="item_shipped">Item Shipped</option>
               <option value="user_login">User Login</option>
               <option value="bulk_action">Bulk Actions</option>
               <option value="item_bookmarked">Item Bookmarked</option>

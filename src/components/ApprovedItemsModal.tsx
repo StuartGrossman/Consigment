@@ -98,14 +98,9 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       
       // Remove from approved list since it's now live
       setApprovedItems(prev => prev.filter(i => i.id !== selectedItem.id));
-      setModalMessage('Item is now live!');
-      setShowSuccessModal(true);
       
-      // Auto-close success modal after 1 second and close main modal
-      setTimeout(() => {
-        setShowSuccessModal(false);
-        onClose();
-      }, 1000);
+      // Close the main modal immediately without showing success modal
+      onClose();
     } catch (error) {
       console.error('Error making item live:', error);
       setModalMessage('Error making item live. Please try again.');

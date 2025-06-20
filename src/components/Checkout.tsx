@@ -31,6 +31,7 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
     city: '',
     zipCode: ''
   });
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<'pickup' | 'shipping'>('shipping');
 
   const processPurchaseCompletion = async (purchaseRecord: any) => {
     console.log('Processing purchase completion for items:', cartItems.length);
@@ -58,6 +59,9 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
           },
           saleTransactionId: purchaseRecord.paymentInfo.transactionId,
           saleType: 'online',
+          fulfillmentMethod: fulfillmentMethod,
+          trackingNumber: fulfillmentMethod === 'shipping' ? `TRK${Date.now().toString().slice(-8)}` : undefined,
+          shippingLabelGenerated: false,
           userEarnings: item.price * 0.75,
           adminEarnings: item.price * 0.25
         });
@@ -139,7 +143,7 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
         const purchaseRecord = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           orderNumber: `ORD-${Date.now().toString().slice(-6)}`,
-          total: getCartTotal(),
+          total: getCartTotal() + (fulfillmentMethod === 'shipping' ? 5.99 : 0),
           purchaseDate: new Date().toISOString(),
           items: cartItems.map(cartItem => ({
             id: cartItem.item.id,
@@ -169,9 +173,9 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
           },
           status: 'completed' as const,
           orderStatus: 'processing' as const,
-          estimatedDelivery: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
-          trackingNumber: `TRK${Date.now().toString().slice(-8)}`,
-          fulfillmentMethod: 'shipping' as const, // Default to shipping, can be changed in sales page
+          estimatedDelivery: fulfillmentMethod === 'shipping' ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined, // 7 days from now if shipping
+          trackingNumber: fulfillmentMethod === 'shipping' ? `TRK${Date.now().toString().slice(-8)}` : undefined,
+          fulfillmentMethod: fulfillmentMethod,
           shippingLabelGenerated: false
         };
 
@@ -200,7 +204,8 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
       }
       
       // Log the purchase action
-      await logUserAction(user, 'item_purchased', `Purchased ${cartItems.length} items for $${getCartTotal().toFixed(2)}`);
+      const totalWithShipping = getCartTotal() + (fulfillmentMethod === 'shipping' ? 5.99 : 0);
+      await logUserAction(user, 'item_purchased', `Purchased ${cartItems.length} items for $${totalWithShipping.toFixed(2)} (${fulfillmentMethod})`);
       
       // Clear cart and show success
       console.log('Clearing cart after successful checkout...');
@@ -229,9 +234,71 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
               <span>${(cartItem.item.price * cartItem.quantity).toFixed(2)}</span>
             </div>
           ))}
+          {fulfillmentMethod === 'shipping' && (
+            <div className="flex justify-between text-sm text-gray-600">
+              <span>Shipping</span>
+              <span>$5.99</span>
+            </div>
+          )}
           <div className="border-t pt-2 flex justify-between font-semibold">
             <span>Total</span>
-            <span>${getCartTotal().toFixed(2)}</span>
+            <span>${(getCartTotal() + (fulfillmentMethod === 'shipping' ? 5.99 : 0)).toFixed(2)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Fulfillment Method Selection */}
+      <div>
+        <h3 className="font-semibold text-gray-900 mb-3">Fulfillment Method</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div 
+            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+              fulfillmentMethod === 'pickup' 
+                ? 'border-orange-500 bg-orange-50' 
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => setFulfillmentMethod('pickup')}
+          >
+            <div className="flex items-center space-x-3">
+              <input
+                type="radio"
+                name="fulfillmentMethod"
+                value="pickup"
+                checked={fulfillmentMethod === 'pickup'}
+                onChange={() => setFulfillmentMethod('pickup')}
+                className="text-orange-500"
+              />
+              <div>
+                <h4 className="font-medium text-gray-900">🏪 Store Pickup</h4>
+                <p className="text-sm text-gray-600">Pick up your items at Summit Gear Exchange</p>
+                <p className="text-xs text-gray-500 mt-1">Free • Available next business day</p>
+              </div>
+            </div>
+          </div>
+          
+          <div 
+            className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
+              fulfillmentMethod === 'shipping' 
+                ? 'border-orange-500 bg-orange-50' 
+                : 'border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => setFulfillmentMethod('shipping')}
+          >
+            <div className="flex items-center space-x-3">
+              <input
+                type="radio"
+                name="fulfillmentMethod"
+                value="shipping"
+                checked={fulfillmentMethod === 'shipping'}
+                onChange={() => setFulfillmentMethod('shipping')}
+                className="text-orange-500"
+              />
+              <div>
+                <h4 className="font-medium text-gray-900">📦 Home Delivery</h4>
+                <p className="text-sm text-gray-600">We'll ship your items to your address</p>
+                <p className="text-xs text-gray-500 mt-1">$5.99 shipping • 5-7 business days</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -270,36 +337,40 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
               required
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-            <input
-              type="text"
-              value={customerInfo.address}
-              onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
-            <input
-              type="text"
-              value={customerInfo.city}
-              onChange={(e) => setCustomerInfo(prev => ({ ...prev, city: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
-            <input
-              type="text"
-              value={customerInfo.zipCode}
-              onChange={(e) => setCustomerInfo(prev => ({ ...prev, zipCode: e.target.value }))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-              required
-            />
-          </div>
+          {fulfillmentMethod === 'shipping' && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                <input
+                  type="text"
+                  value={customerInfo.address}
+                  onChange={(e) => setCustomerInfo(prev => ({ ...prev, address: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                <input
+                  type="text"
+                  value={customerInfo.city}
+                  onChange={(e) => setCustomerInfo(prev => ({ ...prev, city: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+                <input
+                  type="text"
+                  value={customerInfo.zipCode}
+                  onChange={(e) => setCustomerInfo(prev => ({ ...prev, zipCode: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  required
+                />
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -357,7 +428,7 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              Complete Order - ${getCartTotal().toFixed(2)}
+              Complete Order - ${(getCartTotal() + (fulfillmentMethod === 'shipping' ? 5.99 : 0)).toFixed(2)}
             </>
           )}
         </button>

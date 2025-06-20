@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
 import { collection, query, where, getDocs, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -69,34 +69,12 @@ const Home: React.FC = () => {
     useEffect(() => {
         if (isAuthenticated) {
             fetchItems();
-            fetchRecentItems();
             checkAdminStatus();
         } else {
             setLoadingItems(false);
             setIsAdmin(false);
         }
     }, [isAuthenticated, userIsAdmin]);
-
-    // Fetch recent items every 30 seconds
-    useEffect(() => {
-        if (isAuthenticated) {
-            const interval = setInterval(fetchRecentItems, 30000);
-            return () => clearInterval(interval);
-        }
-    }, [isAuthenticated]);
-
-    useEffect(() => {
-        if (isAdmin) {
-            fetchNotificationCounts();
-            // Set up interval to refresh counts every 30 seconds
-            const interval = setInterval(fetchNotificationCounts, 30000);
-            return () => clearInterval(interval);
-        }
-        // Refresh alerts when admin status changes
-        if (isAuthenticated) {
-            fetchRecentItems();
-        }
-    }, [isAdmin]);
 
     // Handle clicking outside menus
     useEffect(() => {
@@ -130,7 +108,7 @@ const Home: React.FC = () => {
         setIsAdmin(userIsAdmin);
     };
 
-    const fetchNotificationCounts = async () => {
+    const fetchNotificationCounts = useCallback(async () => {
         if (!user) return;
         
         try {
@@ -159,15 +137,18 @@ const Home: React.FC = () => {
                 }
             });
             
-            setNotificationCounts({
+            const newCounts = {
                 pending: pendingSnapshot.size,
                 approved: approvedSnapshot.size,
                 sold: recentSoldCount
-            });
+            };
+            
+            console.log('Updating notification counts:', newCounts);
+            setNotificationCounts(newCounts);
         } catch (error) {
             console.error('Error fetching notification counts:', error);
         }
-    };
+    }, [user]);
 
     const fetchItems = async () => {
         try {
@@ -203,7 +184,7 @@ const Home: React.FC = () => {
         }
     };
 
-    const fetchRecentItems = async () => {
+    const fetchRecentItems = useCallback(async () => {
         if (!user) return;
         
         try {
@@ -307,11 +288,31 @@ const Home: React.FC = () => {
             }
             
             // Limit to 15 most recent items for better coverage
-            setRecentItems(fetchedItems.slice(0, 15));
+            const limitedItems = fetchedItems.slice(0, 15);
+            console.log('Updating recent items:', limitedItems.length, 'items for', isAdmin ? 'admin' : 'user');
+            setRecentItems(limitedItems);
         } catch (error) {
             console.error('Error fetching recent items:', error);
         }
-    };
+    }, [user, isAdmin]);
+
+    // Fetch recent items every 30 seconds
+    useEffect(() => {
+        if (isAuthenticated && user) {
+            fetchRecentItems();
+            const interval = setInterval(fetchRecentItems, 30000);
+            return () => clearInterval(interval);
+        }
+    }, [isAuthenticated, user, fetchRecentItems]);
+
+    useEffect(() => {
+        if (isAdmin && user) {
+            fetchNotificationCounts();
+            // Set up interval to refresh counts every 30 seconds
+            const interval = setInterval(fetchNotificationCounts, 30000);
+            return () => clearInterval(interval);
+        }
+    }, [isAdmin, user, fetchNotificationCounts]);
 
     const handleAddItem = async () => {
         await logUserAction(user, 'modal_opened', 'Opened Add Item modal');
@@ -432,38 +433,7 @@ const Home: React.FC = () => {
         return null;
     };
 
-    const handleMarkAsSold = async (item: ConsignmentItem, soldPrice: number) => {
-        try {
-            const itemRef = doc(db, 'items', item.id);
-            
-            // Calculate earnings split: User gets 75%, Admin gets 25%
-            const userEarnings = soldPrice * 0.75;
-            const adminEarnings = soldPrice * 0.25;
-            
-            await updateDoc(itemRef, {
-                status: 'sold',
-                soldAt: new Date(),
-                soldPrice: soldPrice,
-                userEarnings: userEarnings,
-                adminEarnings: adminEarnings,
-                saleType: 'in-store'
-            });
-            
-            // Log the action
-            await logUserAction(user, 'item_sold', `Marked item as sold for $${soldPrice}`, item.id, item.title);
-            
-            // Refresh the items list to remove the sold item
-            await fetchItems();
-            // Trigger refresh for any open modals
-            setRefreshTrigger(prev => {
-                console.log('Incrementing refresh trigger from', prev, 'to', prev + 1);
-                return prev + 1;
-            });
-        } catch (error) {
-            console.error('Error marking item as sold:', error);
-            throw error;
-        }
-    };
+
 
     const handleFilterChange = (filterType: string, value: string) => {
         setFilters(prev => ({
@@ -1379,23 +1349,54 @@ const Home: React.FC = () => {
                                     
                                     <div className="flex flex-wrap items-center gap-2">
                                         {[
-                                            { key: 'newest', label: '🆕 Newest', desc: 'Recently added' },
-                                            { key: 'popular', label: '🔥 Popular', desc: 'Trending items' },
-                                            { key: 'price-low', label: '💰 Price ↗', desc: 'Low to high' },
-                                            { key: 'price-high', label: '💎 Price ↘', desc: 'High to low' },
-                                            { key: 'alphabetical', label: '🔤 A-Z', desc: 'Alphabetical' },
-                                            { key: 'category', label: '📂 Category', desc: 'By type' }
+                                            { 
+                                                key: 'newest', 
+                                                label: 'Newest', 
+                                                desc: 'Recently added',
+                                                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                            },
+                                            { 
+                                                key: 'popular', 
+                                                label: 'Popular', 
+                                                desc: 'Trending items',
+                                                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                                            },
+                                            { 
+                                                key: 'price-low', 
+                                                label: 'Price ↗', 
+                                                desc: 'Low to high',
+                                                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /></svg>
+                                            },
+                                            { 
+                                                key: 'price-high', 
+                                                label: 'Price ↘', 
+                                                desc: 'High to low',
+                                                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" /></svg>
+                                            },
+                                            { 
+                                                key: 'alphabetical', 
+                                                label: 'A-Z', 
+                                                desc: 'Alphabetical',
+                                                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h9m5-4v12m0 0l-4-4m4 4l4-4" /></svg>
+                                            },
+                                            { 
+                                                key: 'category', 
+                                                label: 'Category', 
+                                                desc: 'By type',
+                                                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                                            }
                                         ].map((sort) => (
                                             <button
                                                 key={sort.key}
                                                 onClick={() => handleFilterChange('sortBy', sort.key)}
-                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-1 ${
+                                                className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
                                                     filters.sortBy === sort.key
                                                         ? 'bg-orange-500 text-white shadow-md transform scale-105'
                                                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:shadow-sm'
                                                 }`}
                                                 title={sort.desc}
                                             >
+                                                {sort.icon}
                                                 {sort.label}
                                             </button>
                                         ))}
@@ -1499,7 +1500,6 @@ const Home: React.FC = () => {
                                                 key={item.id} 
                                                 item={item} 
                                                 isAdmin={isAdmin}
-                                                onMarkAsSold={handleMarkAsSold}
                                                 onClick={handleItemClick}
                                             />
                                         ))}

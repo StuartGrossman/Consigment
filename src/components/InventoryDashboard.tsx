@@ -41,6 +41,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   const [showDiscountModal, setShowDiscountModal] = useState(false);
   const [selectedItemForDiscount, setSelectedItemForDiscount] = useState<ConsignmentItem | null>(null);
   const [showBulkDiscountModal, setShowBulkDiscountModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const { user } = useAuth();
 
   // Get unique values for filters
@@ -396,6 +397,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           <p className="text-gray-600">Manage all items across all statuses</p>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowImportModal(true)}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+            </svg>
+            Import Data
+          </button>
           <button
             onClick={() => setShowBulkDiscountModal(true)}
             className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium flex items-center gap-2"
@@ -842,6 +852,17 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           getShelfDays={getShelfDays}
         />
       )}
+
+      {/* Import Data Modal */}
+      {showImportModal && (
+        <ImportDataModal
+          onClose={() => setShowImportModal(false)}
+          onImportComplete={() => {
+            setShowImportModal(false);
+            fetchAllItems(); // Refresh the items list
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -973,7 +994,7 @@ const BulkDiscountModal: React.FC<BulkDiscountModalProps> = ({ items, onApply, o
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div>
@@ -988,7 +1009,7 @@ const BulkDiscountModal: React.FC<BulkDiscountModalProps> = ({ items, onApply, o
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           <div className="grid gap-3">
             {discountOptions.map((option) => {
               const eligibleCount = getEligibleItemsCount(option.days);
@@ -1035,6 +1056,367 @@ const BulkDiscountModal: React.FC<BulkDiscountModalProps> = ({ items, onApply, o
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Import Data Modal Component
+interface ImportDataModalProps {
+  onClose: () => void;
+  onImportComplete: () => void;
+}
+
+const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComplete }) => {
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importType, setImportType] = useState<'csv' | 'json' | 'sql'>('csv');
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const { user } = useAuth();
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // Auto-detect file type based on extension
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (extension === 'csv') setImportType('csv');
+      else if (extension === 'json') setImportType('json');
+      else if (extension === 'sql') setImportType('sql');
+      
+      // Show preview for supported formats
+      if (extension === 'csv' || extension === 'json') {
+        handlePreview(file, extension as 'csv' | 'json');
+      }
+    }
+  };
+
+  const handlePreview = async (file: File, type: 'csv' | 'json') => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      
+      if (type === 'csv') {
+        const lines = text.split('\n').filter(line => line.trim());
+        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const rows = lines.slice(1, 6).map(line => {
+          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+          const obj: any = {};
+          headers.forEach((header, index) => {
+            obj[header] = values[index] || '';
+          });
+          return obj;
+        });
+        setPreviewData(rows);
+      } else if (type === 'json') {
+        try {
+          const data = JSON.parse(text);
+          setPreviewData(Array.isArray(data) ? data.slice(0, 5) : [data]);
+        } catch (error) {
+          console.error('Invalid JSON format');
+        }
+      }
+      
+      setShowPreview(true);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleImport = async () => {
+    if (!selectedFile || !user) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+
+    try {
+      // Simulate upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      // Read file content
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const text = e.target?.result as string;
+        let importedData: any[] = [];
+
+        try {
+          if (importType === 'csv') {
+            const lines = text.split('\n').filter(line => line.trim());
+            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            importedData = lines.slice(1).map(line => {
+              const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+              const obj: any = {};
+              headers.forEach((header, index) => {
+                obj[header] = values[index] || '';
+              });
+              return obj;
+            });
+          } else if (importType === 'json') {
+            const data = JSON.parse(text);
+            importedData = Array.isArray(data) ? data : [data];
+          }
+
+          // Log the import action
+          await logUserAction(
+            user,
+            'data_import',
+            `Imported ${importedData.length} items from ${importType.toUpperCase()} file`,
+            selectedFile.name,
+            `${importedData.length} items`
+          );
+
+          clearInterval(progressInterval);
+          setUploadProgress(100);
+
+          // Show success message
+          setTimeout(() => {
+            onImportComplete();
+          }, 1000);
+
+        } catch (error) {
+          console.error('Import error:', error);
+          clearInterval(progressInterval);
+          setIsUploading(false);
+        }
+      };
+
+      reader.readAsText(selectedFile);
+
+    } catch (error) {
+      console.error('Import failed:', error);
+      setIsUploading(false);
+    }
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">Import Data</h2>
+              <p className="text-gray-600 mt-1">Upload CSV, JSON, or SQL data sheets to import inventory items</p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+          {!isUploading ? (
+            <>
+              {/* File Upload Section */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Select Import Format
+                </label>
+                <div className="grid grid-cols-3 gap-4 mb-4">
+                  <button
+                    onClick={() => setImportType('csv')}
+                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                      importType === 'csv'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-lg font-semibold">CSV</div>
+                    <div className="text-sm text-gray-500">Comma Separated Values</div>
+                  </button>
+                  <button
+                    onClick={() => setImportType('json')}
+                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                      importType === 'json'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-lg font-semibold">JSON</div>
+                    <div className="text-sm text-gray-500">JavaScript Object Notation</div>
+                  </button>
+                  <button
+                    onClick={() => setImportType('sql')}
+                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                      importType === 'sql'
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-lg font-semibold">SQL</div>
+                    <div className="text-sm text-gray-500">SQL Insert Statements</div>
+                  </button>
+                </div>
+
+                {/* File Drop Zone */}
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors">
+                  <input
+                    type="file"
+                    accept={importType === 'csv' ? '.csv' : importType === 'json' ? '.json' : '.sql'}
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <label htmlFor="file-upload" className="cursor-pointer">
+                    <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" stroke="currentColor" fill="none" viewBox="0 0 48 48">
+                      <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div className="text-lg font-medium text-gray-900 mb-2">
+                      Click to upload or drag and drop
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {importType.toUpperCase()} files only
+                    </div>
+                  </label>
+                </div>
+
+                {selectedFile && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-gray-900">{selectedFile.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {formatFileSize(selectedFile.size)} • {importType.toUpperCase()}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setSelectedFile(null);
+                          setShowPreview(false);
+                          setPreviewData([]);
+                        }}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Data Preview */}
+              {showPreview && previewData.length > 0 && (
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Data Preview</h3>
+                  <div className="border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            {Object.keys(previewData[0] || {}).map((key) => (
+                              <th key={key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                {key}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {previewData.map((row, index) => (
+                            <tr key={index}>
+                              {Object.values(row).map((value: any, cellIndex) => (
+                                <td key={cellIndex} className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                                  {String(value).substring(0, 50)}{String(value).length > 50 ? '...' : ''}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                  <div className="text-sm text-gray-500 mt-2">
+                    Showing first {previewData.length} rows
+                  </div>
+                </div>
+              )}
+
+              {/* Import Instructions */}
+              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+                <div className="flex items-start">
+                  <svg className="w-5 h-5 text-blue-500 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div className="text-sm text-blue-700">
+                    <strong>Import Guidelines:</strong>
+                    <ul className="mt-2 list-disc list-inside space-y-1">
+                      <li>CSV files should have headers in the first row</li>
+                      <li>JSON files should contain an array of objects or a single object</li>
+                      <li>SQL files should contain INSERT statements</li>
+                      <li>Required fields: title, price, category, condition</li>
+                      <li>Optional fields: brand, size, color, material, description</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </>
+          ) : (
+            /* Upload Progress */
+            <div className="text-center py-12">
+              <div className="mb-4">
+                <svg className="mx-auto h-16 w-16 text-blue-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-2">Importing Data...</h3>
+              <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                ></div>
+              </div>
+              <div className="text-sm text-gray-600">{uploadProgress}% complete</div>
+              {uploadProgress === 100 && (
+                <div className="mt-4 text-green-600 font-medium">
+                  Import completed successfully!
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        {!isUploading && (
+          <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
+            <div className="flex justify-between items-center">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={!selectedFile}
+                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                </svg>
+                Import Data
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

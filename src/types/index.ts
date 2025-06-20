@@ -29,6 +29,13 @@ export interface ConsignmentItem {
   };
   // Sale transaction details
   saleTransactionId?: string;
+  // Fulfillment method for online orders
+  fulfillmentMethod?: 'pickup' | 'shipping';
+  // Shipping tracking
+  trackingNumber?: string;
+  shippingLabelGenerated?: boolean;
+  shippedAt?: Date;
+  deliveredAt?: Date;
   // Earnings split (user gets 75%, admin gets 25%)
   userEarnings?: number;
   adminEarnings?: number;
@@ -123,4 +130,20 @@ export interface StoreCreditTransaction {
   createdAt: Date;
   relatedItemId?: string; // If related to a purchase
   relatedPaymentId?: string; // If related to a payment
+}
+
+export interface RefundRecord {
+  id: string;
+  itemId: string;
+  itemTitle: string;
+  originalPrice: number;
+  refundAmount: number;
+  reason: string;
+  refundedAt: Date;
+  refundedBy: string; // admin user ID
+  refundedByName: string; // admin display name
+  originalBuyerId?: string;
+  originalBuyerName?: string;
+  sellerName: string;
+  sellerId: string;
 } 

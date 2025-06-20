@@ -7,6 +7,9 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import ItemDetailModal from './ItemDetailModal';
+import ShippedItemsModal from './ShippedItemsModal';
+import UnshippedItemsModal from './UnshippedItemsModal';
+import IssuedRefundsModal from './IssuedRefundsModal';
 
 interface AnalyticsProps {
   user: AuthUser | null;
@@ -14,7 +17,7 @@ interface AnalyticsProps {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'sold'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'sold' | 'shipped' | 'unshipped' | 'refunds'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [userAnalytics, setUserAnalytics] = useState<UserAnalytics[]>([]);
@@ -22,6 +25,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
   const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
+  const [isShippedItemsModalOpen, setIsShippedItemsModalOpen] = useState(false);
+  const [isUnshippedItemsModalOpen, setIsUnshippedItemsModalOpen] = useState(false);
+  const [isRefundsModalOpen, setIsRefundsModalOpen] = useState(false);
 
   // Muted color palette
   const COLORS = ['#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0', '#f1f5f9'];
@@ -33,6 +39,12 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       fetchUserAnalytics();
     } else if (activeTab === 'sold') {
       fetchSoldItems();
+    } else if (activeTab === 'shipped' && isAdmin) {
+      setIsShippedItemsModalOpen(true);
+    } else if (activeTab === 'unshipped' && isAdmin) {
+      setIsUnshippedItemsModalOpen(true);
+    } else if (activeTab === 'refunds' && isAdmin) {
+      setIsRefundsModalOpen(true);
     }
   }, [activeTab, user, isAdmin]);
 
@@ -350,16 +362,48 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
               Sold Items
             </button>
             {isAdmin && (
-              <button
-                onClick={() => setActiveTab('users')}
-                className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                  activeTab === 'users'
-                    ? 'border-slate-500 text-slate-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                User Analytics
-              </button>
+              <>
+                <button
+                  onClick={() => setActiveTab('unshipped')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'unshipped'
+                      ? 'border-slate-500 text-slate-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Unshipped Items
+                </button>
+                <button
+                  onClick={() => setActiveTab('shipped')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'shipped'
+                      ? 'border-slate-500 text-slate-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Shipped Items
+                </button>
+                <button
+                  onClick={() => setActiveTab('refunds')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'refunds'
+                      ? 'border-slate-500 text-slate-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Refunds
+                </button>
+                <button
+                  onClick={() => setActiveTab('users')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'users'
+                      ? 'border-slate-500 text-slate-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  User Analytics
+                </button>
+              </>
             )}
           </nav>
         </div>
@@ -687,6 +731,37 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
             fetchSoldItems();
           }}
         />
+
+        {/* Shipped Items Modal */}
+        <ShippedItemsModal 
+          isOpen={isShippedItemsModalOpen}
+          onClose={() => {
+            setIsShippedItemsModalOpen(false);
+            setActiveTab('dashboard'); // Reset to dashboard when closing
+          }}
+          onItemClick={handleItemClick}
+        />
+
+        {/* Unshipped Items Modal */}
+        <UnshippedItemsModal 
+          isOpen={isUnshippedItemsModalOpen}
+          onClose={() => {
+            setIsUnshippedItemsModalOpen(false);
+            setActiveTab('dashboard'); // Reset to dashboard when closing
+          }}
+          user={user}
+          onItemClick={handleItemClick}
+        />
+
+        {/* Refunds Modal */}
+        <IssuedRefundsModal 
+          isOpen={isRefundsModalOpen}
+          onClose={() => {
+            setIsRefundsModalOpen(false);
+            setActiveTab('dashboard'); // Reset to dashboard when closing
+          }}
+        />
+
       </div>
     </div>
   );

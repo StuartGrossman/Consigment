@@ -4,54 +4,18 @@ import { ConsignmentItem } from '../types';
 interface ItemCardProps {
   item: ConsignmentItem;
   isAdmin?: boolean;
-  onMarkAsSold?: (item: ConsignmentItem, soldPrice: number) => Promise<void>;
   onClick?: (item: ConsignmentItem) => void;
 }
 
-const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold, onClick }) => {
+const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [isMarkingSold, setIsMarkingSold] = useState(false);
-  const [showSoldModal, setShowSoldModal] = useState(false);
-  const [soldPrice, setSoldPrice] = useState(item.price.toString());
 
   const nextImage = () => {
-    setCurrentImageIndex((prev) => 
-      prev === item.images.length - 1 ? 0 : prev + 1
-    );
+    setCurrentImageIndex((prev) => (prev + 1) % item.images.length);
   };
 
   const prevImage = () => {
-    setCurrentImageIndex((prev) => 
-      prev === 0 ? item.images.length - 1 : prev - 1
-    );
-  };
-
-  const handleMarkAsSold = () => {
-    setShowSoldModal(true);
-  };
-
-  const handleConfirmSold = async () => {
-    if (!onMarkAsSold) return;
-    
-    const price = parseFloat(soldPrice);
-    if (isNaN(price) || price <= 0) {
-      return; // Don't proceed with invalid price
-    }
-    
-    setIsMarkingSold(true);
-    try {
-      await onMarkAsSold(item, price);
-      setShowSoldModal(false);
-    } catch (error) {
-      console.error('Error marking item as sold:', error);
-    } finally {
-      setIsMarkingSold(false);
-    }
-  };
-
-  const handleCancelSold = () => {
-    setShowSoldModal(false);
-    setSoldPrice(item.price.toString());
+    setCurrentImageIndex((prev) => (prev - 1 + item.images.length) % item.images.length);
   };
 
   const handleCardClick = () => {
@@ -174,94 +138,8 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onMarkAsSold
               {item.status}
             </span>
           </div>
-          
-          {/* Admin Actions */}
-          {isAdmin && item.status === 'live' && (
-            <div className="mt-3 pt-3 border-t border-gray-100">
-              <button
-                onClick={(e) => { stopPropagation(e); handleMarkAsSold(); }}
-                disabled={isMarkingSold}
-                className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                  isMarkingSold 
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-500 hover:bg-green-600 text-white'
-                }`}
-              >
-                {isMarkingSold ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                    Processing...
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Mark as Sold
-                  </div>
-                )}
-              </button>
-            </div>
-          )}
         </div>
       </div>
-
-      {/* Mark as Sold Modal */}
-      {showSoldModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mr-3">
-                <span className="text-orange-600 text-xl">💰</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Mark as Sold</h3>
-            </div>
-            <p className="text-gray-600 mb-4">
-              Mark "<span className="font-medium">{item.title}</span>" as sold
-            </p>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Final Sale Price
-              </label>
-              <input
-                type="number"
-                value={soldPrice}
-                onChange={(e) => setSoldPrice(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                placeholder="Enter sale price"
-                min="0"
-                step="0.01"
-              />
-              {soldPrice && parseFloat(soldPrice) <= 0 && (
-                <p className="text-red-500 text-sm mt-1">Please enter a valid price greater than 0</p>
-              )}
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={handleCancelSold}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-                disabled={isMarkingSold}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmSold}
-                disabled={isMarkingSold || !soldPrice || parseFloat(soldPrice) <= 0}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
-              >
-                {isMarkingSold ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Updating...
-                  </>
-                ) : (
-                  'Confirm Sale'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
