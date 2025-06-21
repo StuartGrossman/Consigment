@@ -10,6 +10,7 @@ import AddItemModal from './AddItemModal';
 import AdminModal from './AdminModal';
 import ApprovedItemsModal from './ApprovedItemsModal';
 import UserAnalyticsModal from './UserAnalyticsModal';
+import ApplicationTestModal from './ApplicationTestModal';
 import SoldItemsModal from './SoldItemsModal';
 import LoginModal from './LoginModal';
 import Dashboard from './Dashboard';
@@ -21,6 +22,7 @@ import Analytics from './Analytics';
 import UserAnalytics from './UserAnalytics';
 import InventoryDashboard from './InventoryDashboard';
 import ActionsDashboard from './ActionsDashboard';
+import TestResultsModal from './TestResultsModal';
 
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, signInWithPhone, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin } = useAuth();
@@ -30,8 +32,10 @@ const Home: React.FC = () => {
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     const [isApprovedModalOpen, setIsApprovedModalOpen] = useState(false);
     const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
+    const [isApplicationTestModalOpen, setIsApplicationTestModalOpen] = useState(false);
     const [isSoldItemsModalOpen, setIsSoldItemsModalOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+    const [isTestResultsModalOpen, setIsTestResultsModalOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
     const [showActionsPage, setShowActionsPage] = useState(false);
@@ -367,6 +371,22 @@ const Home: React.FC = () => {
     const handleAnalyticsModalClose = () => {
         setIsAnalyticsModalOpen(false);
         fetchItems();
+    };
+
+    const handleApplicationTestModal = () => {
+        setIsApplicationTestModalOpen(true);
+    };
+
+    const handleApplicationTestModalClose = () => {
+        setIsApplicationTestModalOpen(false);
+    };
+
+    const handleTestResultsModal = () => {
+        setIsTestResultsModalOpen(true);
+    };
+
+    const handleTestResultsModalClose = () => {
+        setIsTestResultsModalOpen(false);
     };
 
     const handleSoldItemsModal = () => {
@@ -1091,6 +1111,24 @@ const Home: React.FC = () => {
                                                                     className={`mobile-user-menu-item ${showActionsPage ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
                                                         >
                                                             🎯 Actions Dashboard
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleApplicationTestModal();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                                        >
+                                                            🧪 Application Test & Performance
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleTestResultsModal();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                                        >
+                                                            📊 Test Results Dashboard
                                                         </button>
                                                     </>
                                                 )}
@@ -1854,6 +1892,24 @@ const Home: React.FC = () => {
                                                                 >
                                                                     🎯 Actions Dashboard
                                                                 </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        handleApplicationTestModal();
+                                                                        setUserMenuOpen(false);
+                                                                    }}
+                                                                    className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                                                                >
+                                                                    🧪 Application Test & Performance
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        handleTestResultsModal();
+                                                                        setUserMenuOpen(false);
+                                                                    }}
+                                                                    className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                                                                >
+                                                                    📊 Test Results Dashboard
+                                                                </button>
                                                             </>
                                                         )}
                                                         
@@ -1922,6 +1978,14 @@ const Home: React.FC = () => {
                         isOpen={isApprovedModalOpen} 
                         onClose={handleApprovedModalClose}
                         user={user}
+                    />
+                    <ApplicationTestModal 
+                        isOpen={isApplicationTestModalOpen} 
+                        onClose={handleApplicationTestModalClose}
+                    />
+                    <TestResultsModal 
+                        isOpen={isTestResultsModalOpen} 
+                        onClose={handleTestResultsModalClose}
                     />
                 </>
             )}

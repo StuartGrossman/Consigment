@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+firebase-admin
+pytest
+pytest-asyncio
+httpx
+pytest-mock
+coverage
+pytest-cov 
