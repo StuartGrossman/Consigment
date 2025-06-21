@@ -24,7 +24,7 @@ import ActionsDashboard from './ActionsDashboard';
 
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, signInWithPhone, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin } = useAuth();
-    const { getCartItemCount, getBookmarkCount } = useCart();
+    const { getCartItemCount, getBookmarkCount, switchUser } = useCart();
     const [items, setItems] = useState<ConsignmentItem[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -65,6 +65,8 @@ const Home: React.FC = () => {
         approved: 0,
         sold: 0
     });
+    const [filtersOpen, setFiltersOpen] = useState(false); // For mobile filter collapse
+    const filtersRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -76,6 +78,11 @@ const Home: React.FC = () => {
         }
     }, [isAuthenticated, userIsAdmin]);
 
+    // Switch cart user when authentication state changes
+    useEffect(() => {
+        switchUser(user?.uid || null);
+    }, [user, switchUser]);
+
     // Handle clicking outside menus
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -85,16 +92,19 @@ const Home: React.FC = () => {
             if (alertsMenuRef.current && !alertsMenuRef.current.contains(event.target as Node)) {
                 setAlertsMenuOpen(false);
             }
+            if (filtersRef.current && !filtersRef.current.contains(event.target as Node) && window.innerWidth < 1024) {
+                setFiltersOpen(false);
+            }
         };
 
-        if (userMenuOpen || alertsMenuOpen) {
+        if (userMenuOpen || alertsMenuOpen || filtersOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [userMenuOpen, alertsMenuOpen]);
+    }, [userMenuOpen, alertsMenuOpen, filtersOpen]);
 
     const checkAdminStatus = () => {
         if (!user) return;
@@ -436,10 +446,11 @@ const Home: React.FC = () => {
 
 
     const handleFilterChange = (filterType: string, value: string) => {
-        setFilters(prev => ({
-            ...prev,
-            [filterType]: value
-        }));
+        setFilters(prev => ({ ...prev, [filterType]: value }));
+        // Auto-close mobile filters when a filter is selected (except for search as users might type continuously)
+        if (filterType !== 'searchQuery' && window.innerWidth < 1024) {
+            setFiltersOpen(false);
+        }
     };
 
     const clearFilters = () => {
@@ -756,12 +767,12 @@ const Home: React.FC = () => {
     return (
         <div className="min-h-screen bg-gray-50">
             {/* Main Store Content - Hidden when analytics page is shown */}
-            {!showAnalyticsPage && (
+            {!showAnalyticsPage && !showInventoryPage && !showActionsPage && (
                 <>
                     {/* Header */}
-                    <div className="bg-white shadow-sm border-b">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                    <div className="flex justify-between items-center">
+                    <div className="desktop-nav-header">
+                        <div className="desktop-nav-container">
+                            <div className="desktop-nav-content">
                         <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -769,58 +780,64 @@ const Home: React.FC = () => {
                                 </svg>
                             </div>
                             <div>
-                                <h1 className="text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
+                                        <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
                                 <p className="text-xs text-gray-500">Mountain Consignment Store</p>
                             </div>
                         </div>
                         
-                        <div className="flex items-center gap-4">
+                                <div className="desktop-nav-actions">
+                                    <div className="desktop-nav-buttons">
                             <button
                                 onClick={handleAddItem}
-                                className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors font-medium"
+                                            className="desktop-button-primary"
                             >
-                                List Item
+                                            <span className="hidden sm:inline">List Item</span>
+                                            <span className="sm:hidden">List</span>
                             </button>
                             
                             {isAdmin && (
                                 <>
                                     <button
                                         onClick={handleAdminModal}
-                                        className="relative bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                                                    className="desktop-button-secondary relative"
                                     >
-                                        Pending Items
+                                                    <span className="hidden sm:inline">Pending Items</span>
+                                                    <span className="sm:hidden">Pending</span>
                                         {notificationCounts.pending > 0 && (
-                                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                        <span className="absolute -top-2 -right-2 bg-yellow-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                 {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
                                             </span>
                                         )}
                                     </button>
                                     <button
                                         onClick={handleApprovedModal}
-                                        className="relative bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors text-sm"
+                                                    className="desktop-button-secondary relative"
                                     >
-                                        Approve Items
+                                                    <span className="hidden sm:inline">Approved Items</span>
+                                                    <span className="sm:hidden">Approved</span>
                                         {notificationCounts.approved > 0 && (
-                                            <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                        <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                 {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
                                             </span>
                                         )}
                                     </button>
                                 </>
                             )}
+                                    </div>
                             
+                                    <div className="desktop-nav-icons">
                             {/* Bookmarks Icon - Only for non-admin users */}
                             {!isAdmin && (
                                 <button
                                     onClick={() => setIsBookmarksModalOpen(true)}
-                                    className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                                className="desktop-icon-button"
                                     title="Bookmarked Items"
                                 >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                     </svg>
                                     {getBookmarkCount() > 0 && (
-                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                             {getBookmarkCount() > 9 ? '9+' : getBookmarkCount()}
                                         </span>
                                     )}
@@ -831,14 +848,14 @@ const Home: React.FC = () => {
                             {!isAdmin && (
                                 <button
                                     onClick={() => setIsCartModalOpen(true)}
-                                    className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                                className="desktop-icon-button"
                                     title="Shopping Cart"
                                 >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
                                     </svg>
                                     {getCartItemCount() > 0 && (
-                                        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                    <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                             {getCartItemCount() > 9 ? '9+' : getCartItemCount()}
                                         </span>
                                     )}
@@ -849,13 +866,13 @@ const Home: React.FC = () => {
                             <div ref={alertsMenuRef} className="relative">
                                 <button
                                     onClick={() => setAlertsMenuOpen(!alertsMenuOpen)}
-                                    className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                                className="desktop-icon-button"
                                 >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                     </svg>
                                     {recentItems.length > 0 && (
-                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                             {recentItems.length > 9 ? '9+' : recentItems.length}
                                         </span>
                                     )}
@@ -863,7 +880,7 @@ const Home: React.FC = () => {
 
                                 {/* Alerts Dropdown */}
                                 {alertsMenuOpen && (
-                                    <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-hidden">
+                                                <div className="absolute right-0 top-full mt-2 w-80 sm:w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[80vh] overflow-hidden">
                                         <div className="p-4 border-b border-gray-100">
                                             <h3 className="font-semibold text-gray-900">
                                                 {isAdmin ? 'Platform Activity' : 'My Item Updates'}
@@ -971,141 +988,139 @@ const Home: React.FC = () => {
                                 )}
                             </div>
                             
-                            <div ref={userMenuRef} className="relative flex items-center gap-3 pl-4 border-l border-gray-200">
+                                        {/* User Menu */}
+                                        <div ref={userMenuRef} className="desktop-nav-user-section">
                                 <button
                                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                    className="flex items-center gap-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
+                                                className="desktop-nav-user-button mobile-touch-target"
                                 >
                                     {user?.photoURL && user.photoURL.startsWith('http') ? (
                                         <img 
                                             src={user.photoURL} 
                                             alt={user?.displayName || 'User'} 
-                                            className="w-8 h-8 rounded-full object-cover"
-                                            onError={(e) => {
-                                                const target = e.target as HTMLImageElement;
-                                                target.style.display = 'none';
-                                            }}
+                                                        className="w-6 h-6 sm:w-8 sm:h-8 rounded-full object-cover"
                                         />
                                     ) : (
-                                        <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
-                                            <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-orange-500 flex items-center justify-center">
+                                                        <svg className="w-3 h-3 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                             </svg>
                                         </div>
                                     )}
-                                    <div className="text-sm">
+                                                <div className="text-xs sm:text-sm hidden sm:block">
                                         <div className="font-medium text-gray-700">{user?.displayName}</div>
                                         {isAdmin && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Admin</span>}
                                     </div>
-                                    <svg className={`w-4 h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                     </svg>
                                 </button>
 
-                                {/* Dropdown Menu */}
+                                            {/* Mobile Backdrop */}
                                 {userMenuOpen && (
-                                    <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                                        <div className="p-4 border-b border-gray-100">
-                                            <div className="text-sm font-medium text-gray-900">{user?.displayName}</div>
-                                            <div className="text-xs text-gray-500">
-                                                {user?.email || (user && 'phoneNumber' in user ? (user as any).phoneNumber : 'No contact info')}
-                                            </div>
-                                        </div>
-                                        
-                                        <div className="p-4 space-y-3">
-                                            {/* Admin Toggle */}
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="text-sm font-medium text-gray-700">Admin Mode</div>
-                                                    <div className="text-xs text-gray-500">Toggle admin privileges and features</div>
-                                                </div>
-                                                <button
-                                                    onClick={toggleAdmin}
-                                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
-                                                        userIsAdmin ? 'bg-purple-600' : 'bg-gray-200'
-                                                    }`}
-                                                >
-                                                    <span
-                                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                                            userIsAdmin ? 'translate-x-6' : 'translate-x-1'
-                                                        }`}
-                                                    />
-                                                </button>
-                                            </div>
-                                            
-                                            {/* View Mode Indicator */}
-                                            <div className="text-xs bg-gray-50 rounded-lg p-3">
-                                                <div className="font-medium text-gray-700">Current View:</div>
-                                                <div className={`font-semibold ${isAdmin ? 'text-purple-600' : 'text-gray-600'}`}>
-                                                    {isAdmin ? '👑 Admin Mode' : '👤 User Mode'}
-                                                </div>
-                                            </div>
+                                                <div className="mobile-backdrop" 
+                                                     onClick={() => setUserMenuOpen(false)}
+                                                     aria-hidden="true" />
+                                            )}
 
-                                            <div className="border-t border-gray-200 pt-3">
-                                                <div className="text-xs font-medium text-gray-700 mb-2">
-                                                    {isAdmin ? 'Analytics & Tools' : 'My History'}
+                                            {/* User Dropdown Menu */}
+                                            {userMenuOpen && (
+                                                <div className="absolute right-0 top-full mt-2 mobile-user-menu">
+                                                    <div className="p-4 sm:p-4 border-b border-gray-100">
+                                                        <div className="flex items-center gap-3">
+                                                            {user?.photoURL && user.photoURL.startsWith('http') ? (
+                                                                <img 
+                                                                    src={user.photoURL} 
+                                                                    alt={user?.displayName || 'User'} 
+                                                                    className="w-10 h-10 sm:w-8 sm:h-8 rounded-full object-cover flex-shrink-0"
+                                                                />
+                                                            ) : (
+                                                                <div className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+                                                                    <svg className="w-5 h-5 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                                    </svg>
+                                            </div>
+                                                            )}
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-sm font-medium text-gray-900 truncate">{user?.displayName}</div>
+                                                                <div className="text-xs text-gray-500 truncate">
+                                                                    {user?.email || (user && 'phoneNumber' in user ? (user as any).phoneNumber : 'No contact info')}
                                                 </div>
+                                                                {isAdmin && (
+                                                                    <span className="inline-block mt-1 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">Admin</span>
+                                                                )}
+                                            </div>
+                                                </div>
+                                                    </div>
+                                                    <div className="p-2 space-y-1">
+                                                        {/* Dashboard Navigation */}
+                                                        <div className="text-xs font-medium text-gray-700 mb-2 px-3">Dashboards</div>
                                                 
-                                                {/* Analytics Page Button */}
                                                 <button
-                                                    onClick={async () => {
-                                                        await logUserAction(user, 'dashboard_navigation', isAdmin ? 'Opened Analytics Dashboard' : 'Opened User History');
+                                                            onClick={() => {
                                                         setShowAnalyticsPage(true);
                                                         setShowInventoryPage(false);
                                                         setShowActionsPage(false);
                                                         setUserMenuOpen(false);
                                                     }}
-                                                    className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-2"
+                                                            className={`mobile-user-menu-item ${showAnalyticsPage ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
                                                 >
-                                                    {isAdmin ? '📊 Analytics Dashboard' : '📊 My User History'}
+                                                            📊 {isAdmin ? 'Analytics Dashboard' : 'My User History'}
                                                 </button>
 
-                                                {/* Admin-only dashboards */}
                                                 {isAdmin && (
                                                     <>
                                                         <button
-                                                            onClick={async () => {
-                                                                await logUserAction(user, 'dashboard_navigation', 'Opened Inventory Dashboard');
+                                                                    onClick={() => {
                                                                 setShowInventoryPage(true);
                                                                 setShowAnalyticsPage(false);
                                                                 setShowActionsPage(false);
                                                                 setUserMenuOpen(false);
                                                             }}
-                                                            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-2"
+                                                                    className={`mobile-user-menu-item ${showInventoryPage ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
                                                         >
                                                             📦 Inventory Dashboard
                                                         </button>
                                                         <button
-                                                            onClick={async () => {
-                                                                await logUserAction(user, 'dashboard_navigation', 'Opened Actions Dashboard');
+                                                                    onClick={() => {
                                                                 setShowActionsPage(true);
                                                                 setShowAnalyticsPage(false);
                                                                 setShowInventoryPage(false);
                                                                 setUserMenuOpen(false);
                                                             }}
-                                                            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 rounded-lg transition-colors flex items-center gap-2"
+                                                                    className={`mobile-user-menu-item ${showActionsPage ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
                                                         >
                                                             🎯 Actions Dashboard
                                                         </button>
                                                     </>
                                                 )}
-                                            </div>
                                             
-                                            {/* Logout Button */}
-                                            <div className="border-t border-gray-200 pt-3">
+                                                        <div className="border-t border-gray-200 my-3 sm:my-2"></div>
+                                                        
+                                                        {/* Swap Admin Button */}
+                                                        <button
+                                                            onClick={() => {
+                                                                toggleAdmin();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                                        >
+                                                            🔄 {isAdmin ? 'Exit Admin Mode' : 'Enter Admin Mode'}
+                                                        </button>
+                                                        
                                                 <button
                                                     onClick={() => {
                                                         logout();
                                                         setUserMenuOpen(false);
                                                     }}
-                                                    className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            className="mobile-user-menu-item mobile-user-menu-item-danger"
                                                 >
                                                     Sign Out
                                                 </button>
-                                            </div>
                                         </div>
                                     </div>
                                 )}
+                                        </div>
                             </div>
                         </div>
                     </div>
@@ -1113,13 +1128,35 @@ const Home: React.FC = () => {
             </div>
 
             {/* Main Content with Sidebar */}
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                <div className="flex gap-8">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+                        <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                     {/* Left Sidebar - Filters */}
-                    <div className="w-64 flex-shrink-0">
-                        <div className="bg-white rounded-lg shadow-sm border p-6 sticky top-8">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-lg font-semibold text-gray-900">Filters</h3>
+                            <div ref={filtersRef} className="w-full lg:w-64 lg:flex-shrink-0">
+                                {/* Mobile Filter Toggle Button */}
+                                <button
+                                    onClick={() => setFiltersOpen(!filtersOpen)}
+                                    className="w-full lg:hidden mb-4 bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between text-left"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-1.414.924l-2-1A1 1 0 0110 17.414V13.414a1 1 0 00-.293-.707L3.293 6.293A1 1 0 013 5.586V4z" />
+                                        </svg>
+                                        <span className="font-medium text-gray-900">Filters & Search</span>
+                                        {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery) && (
+                                            <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">Active</span>
+                                        )}
+                                    </div>
+                                    <svg className={`w-5 h-5 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {/* Filter Panel */}
+                                <div className={`bg-white rounded-lg shadow-sm border p-4 sm:p-6 lg:sticky lg:top-8 ${
+                                    filtersOpen ? 'block' : 'hidden lg:block'
+                                }`}>
+                                    <div className="flex justify-between items-center mb-4 sm:mb-6">
+                                        <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filters</h3>
                                 <button
                                     onClick={clearFilters}
                                     className="text-sm text-orange-600 hover:text-orange-700"
@@ -1494,7 +1531,7 @@ const Home: React.FC = () => {
                                             </button>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                                         {filteredItems.map((item) => (
                                             <ItemCard 
                                                 key={item.id} 
@@ -1518,9 +1555,9 @@ const Home: React.FC = () => {
                 <div className="fixed inset-0 bg-white z-[60] overflow-auto">
                     <div className="min-h-screen">
                         {/* Use the same header structure as the main page */}
-                        <div className="bg-white shadow-sm border-b">
-                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-                                <div className="flex justify-between items-center">
+                        <div className="desktop-nav-header">
+                            <div className="desktop-nav-container">
+                                <div className="desktop-nav-content">
                                     <div className="flex items-center space-x-3">
                                         <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
                                             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1528,78 +1565,253 @@ const Home: React.FC = () => {
                                             </svg>
                                         </div>
                                         <div>
-                                            <h1 className="text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
+                                            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
                                             <p className="text-xs text-gray-500">Mountain Consignment Store</p>
                                         </div>
                                     </div>
                                     
-                                    <div className="flex items-center gap-4">
+                                    <div className="desktop-nav-actions">
+                                        <div className="desktop-nav-buttons">
                                         <button
                                             onClick={() => {
                                                 setShowAnalyticsPage(false);
                                                 setShowInventoryPage(false);
                                                 setShowActionsPage(false);
                                             }}
-                                            className="bg-gray-500 text-white px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors font-medium"
+                                                className="bg-gray-500 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-gray-600 transition-colors font-medium text-sm sm:text-base flex-shrink-0"
                                         >
-                                            Back to Store
+                                                <span className="hidden sm:inline">Back to Store</span>
+                                                <span className="sm:hidden">Back</span>
                                         </button>
+                                        </div>
                                         
+                                        <div className="desktop-nav-icons">
                                         {/* Bookmarks Icon - Only for non-admin users */}
                                         {!isAdmin && (
                                             <button
                                                 onClick={() => setIsBookmarksModalOpen(true)}
-                                                className="relative p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+                                                    className="desktop-icon-button"
                                                 title="Bookmarked Items"
                                             >
-                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                                 </svg>
                                                 {getBookmarkCount() > 0 && (
-                                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                         {getBookmarkCount() > 9 ? '9+' : getBookmarkCount()}
                                                     </span>
                                                 )}
                                             </button>
                                         )}
 
+                                            {/* Cart Icon - Only for non-admin users */}
+                                            {!isAdmin && (
+                                                <button
+                                                    onClick={() => setIsCartModalOpen(true)}
+                                                    className="desktop-icon-button"
+                                                    title="Shopping Cart"
+                                                >
+                                                    <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                                                    </svg>
+                                                    {getCartItemCount() > 0 && (
+                                                        <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                            {getCartItemCount() > 9 ? '9+' : getCartItemCount()}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            )}
 
+                                            {/* Alerts/Notifications Icon */}
+                                            <div ref={alertsMenuRef} className="relative">
+                                                <button
+                                                    onClick={() => setAlertsMenuOpen(!alertsMenuOpen)}
+                                                    className="desktop-icon-button"
+                                                >
+                                                    <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                                    </svg>
+                                                    {recentItems.length > 0 && (
+                                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                            {recentItems.length > 9 ? '9+' : recentItems.length}
+                                                        </span>
+                                                    )}
+                                                </button>
+
+                                                {/* Alerts Dropdown */}
+                                                {alertsMenuOpen && (
+                                                    <div className="absolute right-0 top-full mt-2 w-80 sm:w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[80vh] overflow-hidden">
+                                                        <div className="p-4 border-b border-gray-100">
+                                                            <h3 className="font-semibold text-gray-900">
+                                                                {isAdmin ? 'Platform Activity' : 'My Item Updates'}
+                                                            </h3>
+                                                            <p className="text-xs text-gray-500">
+                                                                {isAdmin 
+                                                                    ? 'All item activity in the last 24 hours' 
+                                                                    : 'Your items with recent activity'
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                        
+                                                        <div className="max-h-72 overflow-y-auto">
+                                                            {recentItems.length === 0 ? (
+                                                                <div className="p-4 text-center text-gray-500">
+                                                                    <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                                                                    </svg>
+                                                                    <p className="text-sm">
+                                                                        {isAdmin 
+                                                                            ? 'No platform activity in the last 24 hours' 
+                                                                            : 'No updates on your items recently'
+                                                                        }
+                                                                    </p>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="divide-y divide-gray-100">
+                                                                    {recentItems.map((item) => {
+                                                                        const recentActivity = getRecentActivity(item);
+                                                                        return (
+                                                                            <button
+                                                                                key={item.id}
+                                                                                onClick={() => handleItemClick(item)}
+                                                                                className="w-full p-4 text-left hover:bg-gray-50 transition-colors focus:outline-none focus:bg-gray-50"
+                                                                            >
+                                                                                <div className="flex items-start gap-3">
+                                                                                    {item.images && item.images.length > 0 ? (
+                                                                                        <img 
+                                                                                            src={item.images[0]} 
+                                                                                            alt={item.title}
+                                                                                            className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                                                                        />
+                                                                                    ) : (
+                                                                                        <div className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                                                                            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                                                            </svg>
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <div className="flex items-start justify-between">
+                                                                                            <div className="flex-1 min-w-0">
+                                                                                                <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                                                                                                <p className="text-sm text-orange-600 font-semibold">${item.price}</p>
+                                                                                            </div>
+                                                                                            <span className={`ml-2 px-2 py-1 text-xs rounded-full flex-shrink-0 ${
+                                                                                                item.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                                                                                item.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                                                                                                item.status === 'live' ? 'bg-green-100 text-green-800' :
+                                                                                                'bg-gray-100 text-gray-800'
+                                                                                            }`}>
+                                                                                                {item.status === 'pending' ? 'Pending' :
+                                                                                                 item.status === 'approved' ? 'Approved' :
+                                                                                                 item.status === 'live' ? 'Live' :
+                                                                                                 item.status}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                        <div className="flex items-center justify-between mt-1">
+                                                                                            <p className="text-xs text-gray-500">
+                                                                                                by {item.sellerName}
+                                                                                            </p>
+                                                                                            {recentActivity && (
+                                                                                                <div className={`flex items-center gap-1 text-xs ${recentActivity.color} font-medium`}>
+                                                                                                    <span>{recentActivity.icon}</span>
+                                                                                                    <span>{recentActivity.message}</span>
+                                                                                                    <span className="text-gray-400">
+                                                                                                        {recentActivity.time.toLocaleTimeString([], { 
+                                                                                                            hour: '2-digit', 
+                                                                                                            minute: '2-digit' 
+                                                                                                        })}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                        
+                                                        {recentItems.length > 0 && (
+                                                            <div className="p-3 border-t border-gray-100 bg-gray-50">
+                                                                <p className="text-xs text-gray-500 text-center">
+                                                                    {isAdmin 
+                                                                        ? 'Click on any item to view details and manage' 
+                                                                        : 'Click on your items to view status updates'
+                                                                    }
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
 
                                         {/* User Menu */}
-                                        <div ref={userMenuRef} className="relative flex items-center gap-3 pl-4 border-l border-gray-200">
+                                            <div ref={userMenuRef} className="relative flex items-center gap-2 sm:gap-3 pl-2 sm:pl-4 border-l border-gray-200 flex-shrink-0">
                                             <button
                                                 onClick={() => setUserMenuOpen(!userMenuOpen)}
-                                                className="flex items-center gap-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
+                                                    className="flex items-center gap-2 sm:gap-3 hover:bg-gray-50 active:bg-gray-100 rounded-lg p-2 sm:p-2 transition-colors touch-manipulation
+                                                    /* Ensure minimum touch target size on mobile */
+                                                    min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
                                             >
                                                 {user?.photoURL && user.photoURL.startsWith('http') ? (
                                                     <img 
                                                         src={user.photoURL} 
                                                         alt={user?.displayName || 'User'} 
-                                                        className="w-8 h-8 rounded-full object-cover"
+                                                            className="w-6 h-6 sm:w-8 sm:h-8 rounded-full object-cover"
                                                     />
                                                 ) : (
-                                                    <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center">
-                                                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-full bg-orange-500 flex items-center justify-center">
+                                                            <svg className="w-3 h-3 sm:w-5 sm:h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                         </svg>
                                                     </div>
                                                 )}
-                                                <div className="text-sm">
+                                                    <div className="text-xs sm:text-sm hidden sm:block">
                                                     <div className="font-medium text-gray-700">{user?.displayName}</div>
                                                     {isAdmin && <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded">Admin</span>}
                                                 </div>
-                                                <svg className={`w-4 h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <svg className={`w-3 h-3 sm:w-4 sm:h-4 text-gray-500 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                                 </svg>
                                             </button>
 
+                                                {/* Mobile Backdrop */}
+                                                {userMenuOpen && (
+                                                    <div className="fixed inset-0 z-40 bg-black bg-opacity-25 sm:hidden" 
+                                                         onClick={() => setUserMenuOpen(false)}
+                                                         aria-hidden="true" />
+                                                )}
+
                                             {/* User Dropdown Menu */}
                                             {userMenuOpen && (
-                                                <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                                                    <div className="p-4 border-b border-gray-100">
-                                                        <div className="text-sm font-medium text-gray-900">{user?.displayName}</div>
-                                                        <div className="text-xs text-gray-500">
+                                                    <div className="absolute right-0 top-full mt-2 w-80 sm:w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-[80vh] overflow-y-auto max-w-[calc(100vw-2rem)] overflow-x-hidden shadow-xl sm:shadow-lg transform transition-all duration-200 ease-out opacity-100 scale-100 translate-y-0">
+                                                        <div className="p-4 sm:p-4 border-b border-gray-100">
+                                                            <div className="flex items-center gap-3">
+                                                                {user?.photoURL && user.photoURL.startsWith('http') ? (
+                                                                    <img 
+                                                                        src={user.photoURL} 
+                                                                        alt={user?.displayName || 'User'} 
+                                                                        className="w-10 h-10 sm:w-8 sm:h-8 rounded-full object-cover flex-shrink-0"
+                                                                    />
+                                                                ) : (
+                                                                    <div className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
+                                                                        <svg className="w-5 h-5 sm:w-4 sm:h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                                        </svg>
+                                                                    </div>
+                                                                )}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-sm font-medium text-gray-900 truncate">{user?.displayName}</div>
+                                                                    <div className="text-xs text-gray-500 truncate">
                                                             {user?.email || (user && 'phoneNumber' in user ? (user as any).phoneNumber : 'No contact info')}
+                                                                    </div>
+                                                                    {isAdmin && (
+                                                                        <span className="inline-block mt-1 text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full">Admin</span>
+                                                                    )}
+                                                                </div>
                                                         </div>
                                                     </div>
                                                     <div className="p-2 space-y-1">
@@ -1613,7 +1825,7 @@ const Home: React.FC = () => {
                                                                 setShowActionsPage(false);
                                                                 setUserMenuOpen(false);
                                                             }}
-                                                            className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${showAnalyticsPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                                                                className={`w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation ${showAnalyticsPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}`}
                                                         >
                                                             📊 {isAdmin ? 'Analytics Dashboard' : 'My User History'}
                                                         </button>
@@ -1627,7 +1839,7 @@ const Home: React.FC = () => {
                                                                         setShowActionsPage(false);
                                                                         setUserMenuOpen(false);
                                                                     }}
-                                                                    className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${showInventoryPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                                                                        className={`w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation ${showInventoryPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}`}
                                                                 >
                                                                     📦 Inventory Dashboard
                                                                 </button>
@@ -1638,27 +1850,39 @@ const Home: React.FC = () => {
                                                                         setShowInventoryPage(false);
                                                                         setUserMenuOpen(false);
                                                                     }}
-                                                                    className={`w-full text-left px-3 py-2 text-sm rounded-lg transition-colors ${showActionsPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                                                                        className={`w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation ${showActionsPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}`}
                                                                 >
                                                                     🎯 Actions Dashboard
                                                                 </button>
                                                             </>
                                                         )}
                                                         
-                                                        <div className="border-t border-gray-200 my-2"></div>
+                                                            <div className="border-t border-gray-200 my-3 sm:my-2"></div>
+                                                        
+                                                        {/* Swap Admin Button */}
+                                                        <button
+                                                            onClick={() => {
+                                                                toggleAdmin();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                                                        >
+                                                            🔄 {isAdmin ? 'Exit Admin Mode' : 'Enter Admin Mode'}
+                                                        </button>
                                                         
                                                         <button
                                                             onClick={() => {
                                                                 logout();
                                                                 setUserMenuOpen(false);
                                                             }}
-                                                            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                className="w-full text-left px-3 py-3 sm:py-2 text-sm text-red-600 hover:bg-red-50 active:bg-red-100 rounded-lg transition-colors touch-manipulation"
                                                         >
                                                             Sign Out
                                                         </button>
                                                     </div>
                                                 </div>
                                             )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

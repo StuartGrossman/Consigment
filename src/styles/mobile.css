@@ -1,0 +1,167 @@
+/* Mobile-specific styles for Summit Gear Exchange */
+
+/* Mobile Navigation Improvements */
+.mobile-nav-button {
+  @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors flex-shrink-0;
+  @apply sm:px-6 sm:text-base;
+}
+
+.mobile-nav-button-primary {
+  @apply bg-orange-500 text-white hover:bg-orange-600;
+}
+
+.mobile-nav-button-secondary {
+  @apply bg-white text-gray-700 border border-gray-300 hover:bg-gray-50;
+}
+
+/* Mobile User Menu */
+.mobile-user-menu {
+  @apply w-80 sm:w-72 bg-white rounded-lg shadow-xl border border-gray-200 z-50;
+  @apply max-h-[80vh] overflow-y-auto max-w-[calc(100vw-2rem)] overflow-x-hidden;
+  @apply dropdown-enter-active;
+}
+
+.mobile-user-menu-item {
+  @apply w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation;
+}
+
+.mobile-user-menu-item-active {
+  @apply bg-orange-50 text-orange-700;
+}
+
+.mobile-user-menu-item-default {
+  @apply text-gray-700 hover:bg-gray-50 active:bg-gray-100;
+}
+
+.mobile-user-menu-item-danger {
+  @apply text-red-600 hover:bg-red-50 active:bg-red-100;
+}
+
+/* Mobile Touch Targets */
+.mobile-touch-target {
+  @apply min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 touch-manipulation;
+}
+
+/* Mobile Backdrop */
+.mobile-backdrop {
+  @apply fixed inset-0 z-40 bg-black bg-opacity-25 sm:hidden;
+}
+
+/* Mobile Icon Scaling */
+.mobile-icon-sm {
+  @apply w-5 h-5 sm:w-6 sm:h-6;
+}
+
+.mobile-icon-md {
+  @apply w-6 h-6 sm:w-7 sm:h-7;
+}
+
+/* Mobile Badge Scaling */
+.mobile-badge {
+  @apply h-4 w-4 sm:h-5 sm:w-5 text-xs;
+}
+
+/* Mobile Filter Panel */
+.mobile-filter-toggle {
+  @apply w-full lg:hidden mb-4 bg-white rounded-lg shadow-sm border p-4;
+  @apply flex items-center justify-between text-left;
+}
+
+.mobile-filter-panel {
+  @apply bg-white rounded-lg shadow-sm border p-4 sm:p-6 lg:sticky lg:top-8;
+}
+
+/* Mobile Grid Improvements */
+.mobile-item-grid {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6;
+}
+
+/* Scrollbar Hide Utility */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile Admin Modal Improvements */
+.mobile-admin-modal {
+  @apply fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[70] backdrop-blur-sm;
+  @apply p-2 sm:p-4 pt-4 sm:pt-8;
+}
+
+.mobile-admin-modal-content {
+  @apply bg-white rounded-lg sm:rounded-xl shadow-2xl w-full;
+  @apply max-w-full sm:max-w-6xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden;
+}
+
+.mobile-admin-modal-header {
+  @apply sticky top-0 bg-white p-4 sm:p-6 border-b border-gray-200;
+  @apply rounded-t-lg sm:rounded-t-xl flex-shrink-0;
+}
+
+.mobile-admin-modal-body {
+  @apply p-3 sm:p-6 overflow-y-auto;
+  @apply max-h-[calc(95vh-80px)] sm:max-h-[calc(90vh-120px)];
+}
+
+.mobile-admin-item-card {
+  @apply border border-gray-200 rounded-lg p-3 sm:p-6 bg-gray-50;
+  @apply space-y-4 sm:space-y-0;
+}
+
+.mobile-admin-item-layout {
+  @apply flex flex-col sm:flex-row gap-4 sm:gap-6;
+}
+
+.mobile-admin-item-image {
+  @apply flex-shrink-0 self-center sm:self-start;
+}
+
+.mobile-admin-item-image img {
+  @apply w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg;
+}
+
+.mobile-admin-item-content {
+  @apply flex-1 min-w-0 space-y-3 sm:space-y-4;
+}
+
+.mobile-admin-item-title {
+  @apply text-lg sm:text-xl font-bold text-gray-900 leading-tight;
+}
+
+.mobile-admin-item-description {
+  @apply text-sm sm:text-base text-gray-600 line-clamp-3;
+}
+
+.mobile-admin-item-details {
+  @apply grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4 text-sm;
+}
+
+.mobile-admin-item-actions {
+  @apply flex flex-col sm:flex-row gap-2 sm:gap-3 mt-4;
+  @apply pt-4 border-t border-gray-200 sm:border-t-0 sm:pt-0;
+}
+
+.mobile-admin-button {
+  @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors;
+  @apply flex-1 sm:flex-none min-h-[44px] flex items-center justify-center;
+}
+
+.mobile-admin-button-approve {
+  @apply bg-green-500 text-white hover:bg-green-600;
+}
+
+.mobile-admin-button-reject {
+  @apply bg-red-500 text-white hover:bg-red-600;
+}
+
+.mobile-admin-button-edit {
+  @apply bg-blue-500 text-white hover:bg-blue-600;
+}
+
+.mobile-admin-button-secondary {
+  @apply bg-gray-500 text-white hover:bg-gray-600;
+} 

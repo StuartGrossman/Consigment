@@ -4,6 +4,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import { AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
+import { useFormSubmitThrottle } from '../hooks/useButtonThrottle';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -19,6 +20,9 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const [uploading, setUploading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Button throttling hook
+  const { throttledAction, isActionDisabled, isActionProcessing } = useFormSubmitThrottle();
   
   // New fields for filtering
   const [category, setCategory] = useState('');
@@ -78,62 +82,64 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const handleSubmit = async () => {
     if (!user) return;
 
-    setUploading(true);
+    await throttledAction('submit-item', async () => {
+      setUploading(true);
 
-    try {
-      // Upload images to Firebase Storage
-      const imageUrls = await uploadImages(images);
+      try {
+        // Upload images to Firebase Storage
+        const imageUrls = await uploadImages(images);
 
-      // Prepare item data, only including fields that have values
-      const itemData: any = {
-        title: title.trim(),
-        description: description.trim(),
-        price: parseFloat(price),
-        images: imageUrls,
-        sellerId: user.uid,
-        sellerName: user.displayName || 'Anonymous',
-        sellerEmail: user.email || ('phoneNumber' in user ? user.phoneNumber : ''),
-        status: 'pending',
-        createdAt: serverTimestamp(),
-      };
+        // Prepare item data, only including fields that have values
+        const itemData: any = {
+          title: title.trim(),
+          description: description.trim(),
+          price: parseFloat(price),
+          images: imageUrls,
+          sellerId: user.uid,
+          sellerName: user.displayName || 'Anonymous',
+          sellerEmail: user.email || ('phoneNumber' in user ? user.phoneNumber : ''),
+          status: 'pending',
+          createdAt: serverTimestamp(),
+        };
 
-      // Only add optional fields if they have values
-      if (category && category.trim()) {
-        itemData.category = category.trim();
-      }
-      if (gender && gender.trim()) {
-        itemData.gender = gender;
-      }
-      if (size && size.trim()) {
-        itemData.size = size.trim();
-      }
-      if (brand && brand.trim()) {
-        itemData.brand = brand.trim();
-      }
-      if (condition && condition.trim()) {
-        itemData.condition = condition;
-      }
-      if (material && material.trim()) {
-        itemData.material = material.trim();
-      }
-      if (color && color.trim()) {
-        itemData.color = color.trim();
-      }
+        // Only add optional fields if they have values
+        if (category && category.trim()) {
+          itemData.category = category.trim();
+        }
+        if (gender && gender.trim()) {
+          itemData.gender = gender;
+        }
+        if (size && size.trim()) {
+          itemData.size = size.trim();
+        }
+        if (brand && brand.trim()) {
+          itemData.brand = brand.trim();
+        }
+        if (condition && condition.trim()) {
+          itemData.condition = condition;
+        }
+        if (material && material.trim()) {
+          itemData.material = material.trim();
+        }
+        if (color && color.trim()) {
+          itemData.color = color.trim();
+        }
 
-      // Add item to Firestore
-      const docRef = await addDoc(collection(db, 'items'), itemData);
+        // Add item to Firestore
+        const docRef = await addDoc(collection(db, 'items'), itemData);
 
-      // Log the action
-      await logUserAction(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
+        // Log the action
+        await logUserAction(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
 
-      // Show success message
-      setShowSuccess(true);
-      setShowPreview(false);
-    } catch (error) {
-      console.error('Error adding item:', error);
-      alert('Error adding item. Please try again.');
-      setUploading(false);
-    }
+        // Show success message
+        setShowSuccess(true);
+        setShowPreview(false);
+      } catch (error) {
+        console.error('Error adding item:', error);
+        alert('Error adding item. Please try again.');
+        setUploading(false);
+      }
+    });
   };
 
   const resetForm = () => {

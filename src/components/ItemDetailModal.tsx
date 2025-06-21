@@ -7,6 +7,7 @@ import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logUserAction } from '../services/firebaseService';
 import JsBarcode from 'jsbarcode';
+import { useFormSubmitThrottle } from '../hooks/useButtonThrottle';
 
 interface ItemDetailModalProps {
   isOpen: boolean;
@@ -47,11 +48,16 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
     toggleBookmark, 
     isBookmarked,
     cartItems,
-    bookmarkedItems 
+    bookmarkedItems,
+    isCartActionDisabled,
+    isCartActionProcessing
   } = useCart();
   
   const { isAdmin, user } = useAuth();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Button throttling hook
+  const { throttledAction, isActionDisabled, isActionProcessing } = useFormSubmitThrottle();
   
   // Mark as Sold state
   const [showSoldModal, setShowSoldModal] = useState(false);
@@ -120,22 +126,24 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   };
 
   const handleBookmarkToggle = async () => {
-    const wasBookmarked = isBookmarked(item.id);
-    console.log('Before bookmark toggle - Item ID:', item.id, 'Was bookmarked:', wasBookmarked);
-    console.log('Current bookmarked items count:', bookmarkedItems.length);
-    
-    await toggleBookmark(item.id, user);
-    
-    // Show a brief success message
-    const toast = document.createElement('div');
-    toast.className = 'fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg';
-    toast.textContent = wasBookmarked ? `Removed ${item.title} from bookmarks` : `${item.title} bookmarked!`;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      if (document.body.contains(toast)) {
-        document.body.removeChild(toast);
-      }
-    }, 2000);
+    await throttledAction(`bookmark-${item.id}`, async () => {
+      const wasBookmarked = isBookmarked(item.id);
+      console.log('Before bookmark toggle - Item ID:', item.id, 'Was bookmarked:', wasBookmarked);
+      console.log('Current bookmarked items count:', bookmarkedItems.length);
+      
+      await toggleBookmark(item.id, user);
+      
+      // Show a brief success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = wasBookmarked ? `Removed ${item.title} from bookmarks` : `${item.title} bookmarked!`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 2000);
+    });
   };
 
   const canPurchase = item.status === 'live';
@@ -676,12 +684,13 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
               {/* Bookmark Button */}
               <button
                 onClick={handleBookmarkToggle}
+                disabled={isActionDisabled(`bookmark-${item.id}`)}
                 className={`flex-shrink-0 p-3 rounded-lg border-2 transition-all duration-200 ${
                   isBookmarked(item.id)
                     ? 'border-red-500 bg-red-50 text-red-600'
                     : 'border-gray-300 text-gray-600 hover:border-red-300 hover:text-red-500'
-                }`}
-                title={isBookmarked(item.id) ? 'Remove from bookmarks' : 'Add to bookmarks'}
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={isActionProcessing(`bookmark-${item.id}`) ? 'Processing...' : isBookmarked(item.id) ? 'Remove from bookmarks' : 'Add to bookmarks'}
               >
                 <svg className="w-6 h-6" fill={isBookmarked(item.id) ? 'currentColor' : 'none'} stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
@@ -691,16 +700,19 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
               {/* Add to Cart Button */}
               <button
                 onClick={handleAddToCart}
+                disabled={isCartActionDisabled(`add-to-cart-${item.id}`)}
                 className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
                   isInCart(item.id)
                     ? 'bg-green-500 text-white hover:bg-green-600'
                     : 'bg-orange-500 text-white hover:bg-orange-600'
-                } flex items-center justify-center gap-2`}
+                } flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.8 7.2M7 13l-1.8 7.2M7 13h10m0 0v8a2 2 0 01-2 2H9a2 2 0 01-2-2v-8m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
                 </svg>
-                {isInCart(item.id) ? (
+                {isCartActionProcessing(`add-to-cart-${item.id}`) ? (
+                  <span>Adding...</span>
+                ) : isInCart(item.id) ? (
                   <span>In Cart ({getCartItemQuantity(item.id)})</span>
                 ) : (
                   <span>Add to Cart - ${item.price}</span>

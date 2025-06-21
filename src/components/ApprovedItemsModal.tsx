@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
+import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 
 interface ApprovedItemsModalProps {
   isOpen: boolean;
@@ -13,6 +14,9 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   const [approvedItems, setApprovedItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
+  
+  // Button throttling hook
+  const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   
   // Modal states
   const [showMakeLiveModal, setShowMakeLiveModal] = useState(false);
@@ -79,84 +83,92 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
     };
   };
 
-  const handleMakeLiveClick = (item: ConsignmentItem) => {
-    setSelectedItem(item);
-    setShowMakeLiveModal(true);
+  const handleMakeLiveClick = async (item: ConsignmentItem) => {
+    await throttledAction(`make-live-${item.id}`, async () => {
+      setSelectedItem(item);
+      setShowMakeLiveModal(true);
+    });
   };
 
   const confirmMakeLive = async () => {
     if (!selectedItem) return;
     
-    setShowMakeLiveModal(false);
-    setProcessingItemId(selectedItem.id);
-    
-    try {
-      await updateDoc(doc(db, 'items', selectedItem.id), {
-        status: 'live',
-        liveAt: serverTimestamp()
-      });
+    await throttledAction(`confirm-make-live-${selectedItem.id}`, async () => {
+      setShowMakeLiveModal(false);
+      setProcessingItemId(selectedItem.id);
       
-      // Remove from approved list since it's now live
-      setApprovedItems(prev => prev.filter(i => i.id !== selectedItem.id));
-      
-      // Close the main modal immediately without showing success modal
-      onClose();
-    } catch (error) {
-      console.error('Error making item live:', error);
-      setModalMessage('Error making item live. Please try again.');
-      setShowErrorModal(true);
-    } finally {
-      setProcessingItemId(null);
-      setSelectedItem(null);
-    }
+      try {
+        await updateDoc(doc(db, 'items', selectedItem.id), {
+          status: 'live',
+          liveAt: serverTimestamp()
+        });
+        
+        // Remove from approved list since it's now live
+        setApprovedItems(prev => prev.filter(i => i.id !== selectedItem.id));
+        
+        // Close the main modal immediately without showing success modal
+        onClose();
+      } catch (error) {
+        console.error('Error making item live:', error);
+        setModalMessage('Error making item live. Please try again.');
+        setShowErrorModal(true);
+      } finally {
+        setProcessingItemId(null);
+        setSelectedItem(null);
+      }
+    });
   };
 
   const handleSendBackToPending = async (item: ConsignmentItem) => {
-    setProcessingItemId(item.id);
-    
-    try {
-      await updateDoc(doc(db, 'items', item.id), {
-        status: 'pending',
-        liveAt: null,
-        // Keep barcode data but remove live status
-      });
+    await throttledAction(`send-back-${item.id}`, async () => {
+      setProcessingItemId(item.id);
       
-      // Remove from approved list since it's now pending
-      setApprovedItems(prev => prev.filter(i => i.id !== item.id));
-      setModalMessage('Item sent back to pending queue.');
-      setShowSuccessModal(true);
-    } catch (error) {
-      console.error('Error sending item back to pending:', error);
-      setModalMessage('Error sending item back to pending. Please try again.');
-      setShowErrorModal(true);
-    } finally {
-      setProcessingItemId(null);
-    }
+      try {
+        await updateDoc(doc(db, 'items', item.id), {
+          status: 'pending',
+          liveAt: null,
+          // Keep barcode data but remove live status
+        });
+        
+        // Remove from approved list since it's now pending
+        setApprovedItems(prev => prev.filter(i => i.id !== item.id));
+        setModalMessage('Item sent back to pending queue.');
+        setShowSuccessModal(true);
+      } catch (error) {
+        console.error('Error sending item back to pending:', error);
+        setModalMessage('Error sending item back to pending. Please try again.');
+        setShowErrorModal(true);
+      } finally {
+        setProcessingItemId(null);
+      }
+    });
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-        <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
+    <div className="mobile-admin-modal">
+      <div className="mobile-admin-modal-content">
+        <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-800">Approved Items (Employee Preview)</h2>
+            <div>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Approved Items</h2>
+              <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                Employee preview before going live
+              </p>
+            </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
-          <p className="text-sm text-gray-600 mt-2">
-            Items approved for 3-day employee preview before going live to all customers
-          </p>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+        <div className="mobile-admin-modal-body">
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
@@ -172,20 +184,20 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
               <p className="text-gray-400 text-sm mt-2">Items will appear here after approval</p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {approvedItems.map((item) => {
                 const timeInfo = calculateTimeRemaining(item.approvedAt!);
                 return (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-6 bg-gradient-to-r from-orange-50 to-yellow-50">
-                    <div className="flex gap-6">
+                  <div key={item.id} className="mobile-admin-item-card bg-gradient-to-r from-orange-50 to-yellow-50">
+                    <div className="mobile-admin-item-layout">
                       {/* Images */}
-                      <div className="flex-shrink-0">
+                      <div className="mobile-admin-item-image">
                         {item.images.length > 0 ? (
                           <div className="relative">
                             <img
                               src={item.images[0]}
                               alt={item.title}
-                              className="w-32 h-32 object-cover rounded-lg"
+                              className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg"
                             />
                             {item.images.length > 1 && (
                               <div className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
@@ -203,23 +215,23 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                       </div>
 
                       {/* Content */}
-                      <div className="flex-grow">
-                        <div className="flex justify-between items-start mb-2">
-                          <h3 className="text-xl font-semibold text-gray-900">{item.title}</h3>
-                          <div className="text-2xl font-bold text-green-600">
+                      <div className="mobile-admin-item-content">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-4">
+                          <h3 className="mobile-admin-item-title">{item.title}</h3>
+                          <div className="text-xl sm:text-2xl font-bold text-green-600 text-center sm:text-right">
                             ${item.price.toFixed(2)}
                           </div>
                         </div>
                         
-                        <p className="text-gray-600 mb-4">{item.description}</p>
+                        <p className="mobile-admin-item-description">{item.description}</p>
                         
                         {/* Timer and Status */}
-                        <div className="bg-white rounded-lg p-3 mb-4 border border-orange-200">
-                          <div className="flex items-center gap-2 mb-2">
-                            <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <div className="bg-white rounded-lg p-2 sm:p-3 border border-orange-200">
+                          <div className="flex items-center gap-2 mb-1 sm:mb-2">
+                            <svg className="w-4 h-4 sm:w-5 sm:h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            <span className={`font-medium ${timeInfo.expired ? 'text-green-600' : 'text-orange-600'}`}>
+                            <span className={`text-sm sm:text-base font-medium ${timeInfo.expired ? 'text-green-600' : 'text-orange-600'}`}>
                               {timeInfo.text}
                             </span>
                           </div>
@@ -228,7 +240,7 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 text-sm text-gray-500 mb-4">
+                        <div className="mobile-admin-item-details">
                           <div>
                             <strong>Seller:</strong> {item.sellerName}
                           </div>
@@ -254,20 +266,22 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex gap-3">
+                        <div className="mobile-admin-item-actions">
                           <button
                             onClick={() => handleSendBackToPending(item)}
-                            disabled={processingItemId === item.id}
-                            className="flex-1 bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled={processingItemId === item.id || isActionDisabled(`send-back-${item.id}`)}
+                            className="mobile-admin-button mobile-admin-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {processingItemId === item.id ? 'Processing...' : 'Send Back to Pending'}
+                            {processingItemId === item.id ? 'Processing...' : 
+                             isActionProcessing(`send-back-${item.id}`) ? 'Sending...' : 'Send Back to Pending'}
                           </button>
                           <button
                             onClick={() => handleMakeLiveClick(item)}
-                            disabled={processingItemId === item.id}
-                            className="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            disabled={processingItemId === item.id || isActionDisabled(`make-live-${item.id}`)}
+                            className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {processingItemId === item.id ? 'Processing...' : 'Mark as Live'}
+                            {processingItemId === item.id ? 'Processing...' : 
+                             isActionProcessing(`make-live-${item.id}`) ? 'Opening...' : 'Mark as Live'}
                           </button>
                         </div>
                       </div>
@@ -310,9 +324,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
               </button>
               <button
                 onClick={confirmMakeLive}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+                disabled={selectedItem ? isActionDisabled(`confirm-make-live-${selectedItem.id}`) : false}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Make Live Now
+                {selectedItem && isActionProcessing(`confirm-make-live-${selectedItem.id}`) ? 'Processing...' : 'Make Live Now'}
               </button>
             </div>
           </div>

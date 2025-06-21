@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } fr
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import BarcodeGenerationModal from './BarcodeGenerationModal';
+import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -14,6 +15,9 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
+  
+  // Button throttling hook
+  const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   
   // Modal states
   const [showApproveModal, setShowApproveModal] = useState(false);
@@ -61,22 +65,28 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     }
   };
 
-  const handleApproveClick = (item: ConsignmentItem) => {
-    setSelectedItem(item);
-    setShowApproveModal(true);
+  const handleApproveClick = async (item: ConsignmentItem) => {
+    await throttledAction(`approve-${item.id}`, async () => {
+      setSelectedItem(item);
+      setShowApproveModal(true);
+    });
   };
 
-  const handleRejectClick = (item: ConsignmentItem) => {
-    setSelectedItem(item);
-    setRejectionReason('');
-    setShowRejectModal(true);
+  const handleRejectClick = async (item: ConsignmentItem) => {
+    await throttledAction(`reject-${item.id}`, async () => {
+      setSelectedItem(item);
+      setRejectionReason('');
+      setShowRejectModal(true);
+    });
   };
 
-  const confirmApprove = () => {
+  const confirmApprove = async () => {
     if (!selectedItem) return;
     
-    setShowApproveModal(false);
-    setShowBarcodeModal(true);
+    await throttledAction(`confirm-approve-${selectedItem.id}`, async () => {
+      setShowApproveModal(false);
+      setShowBarcodeModal(true);
+    });
   };
 
   const handleBarcodeConfirmed = async (item: ConsignmentItem, barcodeData: string) => {
@@ -93,85 +103,91 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const confirmReject = async () => {
     if (!selectedItem) return;
     
-    setProcessingItemId(selectedItem.id);
-    setShowRejectModal(false);
-    
-    try {
-      await updateDoc(doc(db, 'items', selectedItem.id), {
-        status: 'rejected',
-        rejectedAt: serverTimestamp(),
-        rejectionReason: rejectionReason || 'No reason provided'
-      });
+    await throttledAction(`confirm-reject-${selectedItem.id}`, async () => {
+      setProcessingItemId(selectedItem.id);
+      setShowRejectModal(false);
       
-      // Remove from pending list
-      setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
-      setModalMessage('Item rejected.');
-      setShowSuccessModal(true);
-    } catch (error) {
-      console.error('Error rejecting item:', error);
-      setModalMessage('Error rejecting item. Please try again.');
-      setShowErrorModal(true);
-    } finally {
-      setProcessingItemId(null);
-      setSelectedItem(null);
-    }
+      try {
+        await updateDoc(doc(db, 'items', selectedItem.id), {
+          status: 'rejected',
+          rejectedAt: serverTimestamp(),
+          rejectionReason: rejectionReason || 'No reason provided'
+        });
+        
+        // Remove from pending list
+        setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
+        setModalMessage('Item rejected.');
+        setShowSuccessModal(true);
+      } catch (error) {
+        console.error('Error rejecting item:', error);
+        setModalMessage('Error rejecting item. Please try again.');
+        setShowErrorModal(true);
+      } finally {
+        setProcessingItemId(null);
+        setSelectedItem(null);
+      }
+    });
   };
 
-  const handleEdit = (item: ConsignmentItem) => {
-    setEditingItem(item);
+  const handleEdit = async (item: ConsignmentItem) => {
+    await throttledAction(`edit-${item.id}`, async () => {
+      setEditingItem(item);
+    });
   };
 
   const handleSaveEdit = async (updatedItem: ConsignmentItem) => {
-    setProcessingItemId(updatedItem.id);
-    try {
-      await updateDoc(doc(db, 'items', updatedItem.id), {
-        title: updatedItem.title,
-        description: updatedItem.description,
-        price: updatedItem.price,
-        category: updatedItem.category || null,
-        gender: updatedItem.gender || null,
-        size: updatedItem.size || null,
-        brand: updatedItem.brand || null,
-        condition: updatedItem.condition || null,
-        material: updatedItem.material || null
-      });
-      
-      // Update local state
-      setPendingItems(prev => prev.map(item => 
-        item.id === updatedItem.id ? updatedItem : item
-      ));
-      setEditingItem(null);
-      setModalMessage('Item updated successfully!');
-      setShowSuccessModal(true);
-    } catch (error) {
-      console.error('Error updating item:', error);
-      setModalMessage('Error updating item. Please try again.');
-      setShowErrorModal(true);
-    } finally {
-      setProcessingItemId(null);
-    }
+    await throttledAction(`save-edit-${updatedItem.id}`, async () => {
+      setProcessingItemId(updatedItem.id);
+      try {
+        await updateDoc(doc(db, 'items', updatedItem.id), {
+          title: updatedItem.title,
+          description: updatedItem.description,
+          price: updatedItem.price,
+          category: updatedItem.category || null,
+          gender: updatedItem.gender || null,
+          size: updatedItem.size || null,
+          brand: updatedItem.brand || null,
+          condition: updatedItem.condition || null,
+          material: updatedItem.material || null
+        });
+        
+        // Update local state
+        setPendingItems(prev => prev.map(item => 
+          item.id === updatedItem.id ? updatedItem : item
+        ));
+        setEditingItem(null);
+        setModalMessage('Item updated successfully!');
+        setShowSuccessModal(true);
+      } catch (error) {
+        console.error('Error updating item:', error);
+        setModalMessage('Error updating item. Please try again.');
+        setShowErrorModal(true);
+      } finally {
+        setProcessingItemId(null);
+      }
+    });
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
-        <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
+    <div className="mobile-admin-modal">
+      <div className="mobile-admin-modal-content">
+        <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-800">Manage Pending Items</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Manage Pending Items</h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+        <div className="mobile-admin-modal-body">
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
@@ -187,18 +203,18 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               <p className="text-gray-400 text-sm mt-2">All items have been processed!</p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {pendingItems.map((item) => (
-                <div key={item.id} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
-                  <div className="flex gap-6">
+                <div key={item.id} className="mobile-admin-item-card">
+                  <div className="mobile-admin-item-layout">
                     {/* Images */}
-                    <div className="flex-shrink-0">
+                    <div className="mobile-admin-item-image">
                       {item.images.length > 0 ? (
                         <div className="relative">
                           <img
                             src={item.images[0]}
                             alt={item.title}
-                            className="w-32 h-32 object-cover rounded-lg"
+                            className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg"
                           />
                           {item.images.length > 1 && (
                             <div className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
@@ -216,17 +232,17 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
                     </div>
 
                     {/* Content */}
-                    <div className="flex-grow">
-                      <div className="flex justify-between items-start mb-2">
-                        <h3 className="text-xl font-semibold text-gray-900">{item.title}</h3>
-                        <div className="text-2xl font-bold text-green-600">
+                    <div className="mobile-admin-item-content">
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-4">
+                        <h3 className="mobile-admin-item-title">{item.title}</h3>
+                        <div className="text-xl sm:text-2xl font-bold text-green-600 text-center sm:text-right">
                           ${item.price.toFixed(2)}
                         </div>
                       </div>
                       
-                      <p className="text-gray-600 mb-4">{item.description}</p>
+                      <p className="mobile-admin-item-description">{item.description}</p>
                       
-                      <div className="grid grid-cols-2 gap-4 text-sm text-gray-500 mb-4">
+                      <div className="mobile-admin-item-details">
                         <div>
                           <strong>Seller:</strong> {item.sellerName}
                         </div>
@@ -242,27 +258,29 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
                       </div>
 
                       {/* Action Buttons */}
-                      <div className="flex gap-3">
+                      <div className="mobile-admin-item-actions">
                         <button
                           onClick={() => handleEdit(item)}
-                          disabled={processingItemId === item.id}
-                          className="flex-1 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          disabled={processingItemId === item.id || isActionDisabled(`edit-${item.id}`)}
+                          className="mobile-admin-button mobile-admin-button-edit disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          Edit Details
+                          {isActionProcessing(`edit-${item.id}`) ? 'Opening...' : 'Edit Details'}
                         </button>
                         <button
                           onClick={() => handleApproveClick(item)}
-                          disabled={processingItemId === item.id}
-                          className="flex-1 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          disabled={processingItemId === item.id || isActionDisabled(`approve-${item.id}`)}
+                          className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {processingItemId === item.id ? 'Processing...' : 'Approve Item'}
+                          {processingItemId === item.id ? 'Processing...' : 
+                           isActionProcessing(`approve-${item.id}`) ? 'Opening...' : 'Approve Item'}
                         </button>
                         <button
                           onClick={() => handleRejectClick(item)}
-                          disabled={processingItemId === item.id}
-                          className="flex-1 bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          disabled={processingItemId === item.id || isActionDisabled(`reject-${item.id}`)}
+                          className="mobile-admin-button mobile-admin-button-reject disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {processingItemId === item.id ? 'Processing...' : 'Reject Item'}
+                          {processingItemId === item.id ? 'Processing...' : 
+                           isActionProcessing(`reject-${item.id}`) ? 'Opening...' : 'Reject Item'}
                         </button>
                       </div>
                     </div>
@@ -295,12 +313,13 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               >
                 Cancel
               </button>
-                              <button
-                  onClick={confirmApprove}
-                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                >
-                  Generate Label & Approve
-                </button>
+                                            <button
+                onClick={confirmApprove}
+                disabled={selectedItem ? isActionDisabled(`confirm-approve-${selectedItem.id}`) : false}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {selectedItem && isActionProcessing(`confirm-approve-${selectedItem.id}`) ? 'Processing...' : 'Generate Label & Approve'}
+              </button>
             </div>
           </div>
         </div>
@@ -340,9 +359,10 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               </button>
               <button
                 onClick={confirmReject}
-                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                disabled={selectedItem ? isActionDisabled(`confirm-reject-${selectedItem.id}`) : false}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Reject Item
+                {selectedItem && isActionProcessing(`confirm-reject-${selectedItem.id}`) ? 'Processing...' : 'Reject Item'}
               </button>
             </div>
           </div>

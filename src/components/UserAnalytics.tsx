@@ -639,7 +639,7 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
       {/* Navigation Tabs */}
       <div className="bg-white rounded-lg shadow-sm">
         <div className="border-b border-gray-200">
-          <nav className="flex space-x-8 px-6">
+          <nav className="flex space-x-4 md:space-x-8 px-4 md:px-6 overflow-x-auto scrollbar-hide">
             {[
               { key: 'overview', label: 'Overview', icon: '📈' },
               { key: 'listings', label: 'My Listings', icon: '📋' },
@@ -651,14 +651,15 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
                   activeTab === tab.key
                     ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
                 <span className="mr-2">{tab.icon}</span>
-                {tab.label}
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
               </button>
             ))}
           </nav>
@@ -669,7 +670,7 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 <div className="bg-blue-50 rounded-lg p-4">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
@@ -818,7 +819,7 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                   <p className="text-gray-500">Start by listing your first item for consignment</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {myListings.map((item) => (
                     <div
                       key={item.id}

@@ -1,0 +1,107 @@
+/* Desktop-specific styles for Summit Gear Exchange */
+
+/* Desktop Navigation */
+.desktop-nav-header {
+  @apply bg-white shadow-sm border-b;
+}
+
+.desktop-nav-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4;
+}
+
+.desktop-nav-content {
+  @apply flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-6;
+}
+
+.desktop-nav-actions {
+  @apply flex items-center gap-3 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end;
+}
+
+.desktop-nav-buttons {
+  @apply flex items-center gap-2 sm:gap-3;
+}
+
+.desktop-nav-icons {
+  @apply flex items-center gap-2 sm:gap-3;
+}
+
+.desktop-nav-user-section {
+  @apply relative flex items-center gap-2 sm:gap-3 pl-3 sm:pl-4 border-l border-gray-200 flex-shrink-0;
+}
+
+.desktop-nav-user-button {
+  @apply flex items-center gap-2 sm:gap-3 hover:bg-gray-50 active:bg-gray-100 rounded-lg p-2 sm:p-3 transition-colors;
+}
+
+/* Desktop User Menu */
+.desktop-user-menu {
+  @apply w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50;
+  @apply max-h-[80vh] overflow-y-auto;
+}
+
+.desktop-user-menu-item {
+  @apply w-full text-left px-3 py-2 text-sm rounded-lg transition-colors;
+}
+
+/* Desktop Icon Sizes */
+.desktop-icon-sm {
+  @apply w-7 h-7;
+}
+
+.desktop-icon-md {
+  @apply w-8 h-8;
+}
+
+.desktop-icon-lg {
+  @apply w-9 h-9;
+}
+
+/* Desktop Badge Sizes */
+.desktop-badge {
+  @apply h-5 w-5 text-xs;
+}
+
+/* Desktop Grid Layout */
+.desktop-item-grid {
+  @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6;
+}
+
+/* Desktop Sidebar */
+.desktop-sidebar {
+  @apply w-64 flex-shrink-0 sticky top-8;
+}
+
+/* Desktop Item Cards */
+.desktop-item-card {
+  @apply bg-white rounded-lg shadow-sm border hover:shadow-md transition-shadow;
+}
+
+.desktop-item-card-image {
+  @apply w-full h-48 object-cover rounded-t-lg;
+}
+
+/* Desktop Filter Panel */
+.desktop-filter-panel {
+  @apply bg-white rounded-lg shadow-sm border p-6 sticky top-8;
+}
+
+/* Desktop Button Styles */
+.desktop-button-primary {
+  @apply bg-orange-500 text-white px-4 sm:px-6 py-2 rounded-lg hover:bg-orange-600 transition-colors font-medium text-sm sm:text-base flex-shrink-0;
+}
+
+.desktop-button-secondary {
+  @apply bg-white text-gray-700 border border-gray-300 px-4 sm:px-6 py-2 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm sm:text-base flex-shrink-0;
+}
+
+.desktop-button-ghost {
+  @apply text-gray-600 hover:text-gray-800 hover:bg-gray-100 p-2 sm:p-3 rounded-lg transition-colors flex-shrink-0;
+}
+
+.desktop-icon-button {
+  @apply relative p-2 sm:p-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0;
+}
+
+.desktop-badge {
+  @apply h-4 w-4 sm:h-5 sm:w-5 min-w-[16px] min-h-[16px] sm:min-w-[20px] sm:min-h-[20px] text-xs font-medium;
+} 

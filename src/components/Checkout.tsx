@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { doc, updateDoc, deleteDoc, addDoc, collection } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { logUserAction } from '../services/firebaseService';
+import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 
 // Initialize Stripe with the provided publishable key
 const stripePromise = loadStripe('pk_test_51Rbnai4cE043YuFEryAiYmPIDw6WPTfMk0JFoJyi3eSpEZZBDpTY0tIusq95YjDXqttmcrbAePTHNot0kf3J85Q100Gz9jtjn3');
@@ -23,6 +24,9 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
   const { user } = useAuth();
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  
+  // Button throttling hook for checkout
+  const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   const [customerInfo, setCustomerInfo] = useState({
     name: user?.displayName || '',
     email: user?.email || '',
@@ -131,8 +135,9 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
       return;
     }
 
-    setIsProcessing(true);
-    setPaymentError(null);
+    await throttledAction('checkout-purchase', async () => {
+      setIsProcessing(true);
+      setPaymentError(null);
 
     try {
       // For demo purposes, simulate successful payment after delay
@@ -214,12 +219,13 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
       // Show success message
       onSuccess();
       
-    } catch (error) {
-      console.error('Payment error:', error);
-      setPaymentError('Payment processing failed. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
+      } catch (error) {
+        console.error('Payment error:', error);
+        setPaymentError('Payment processing failed. Please try again.');
+      } finally {
+        setIsProcessing(false);
+      }
+    });
   };
 
   return (
@@ -415,10 +421,10 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
         </button>
         <button
           type="submit"
-          disabled={!stripe || isProcessing}
+          disabled={!stripe || isProcessing || isActionDisabled('checkout-purchase')}
           className="flex-1 py-3 px-6 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {isProcessing ? (
+          {isProcessing || isActionProcessing('checkout-purchase') ? (
             <>
               <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
               Processing...
@@ -441,7 +447,7 @@ const Checkout: React.FC<CheckoutProps> = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
