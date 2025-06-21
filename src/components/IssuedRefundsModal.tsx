@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { RefundRecord } from '../types';
+import { useButtonThrottle } from '../hooks/useButtonThrottle';
 
 interface IssuedRefundsModalProps {
   isOpen: boolean;
@@ -11,6 +12,7 @@ interface IssuedRefundsModalProps {
 const IssuedRefundsModal: React.FC<IssuedRefundsModalProps> = ({ isOpen, onClose }) => {
   const [refunds, setRefunds] = useState<RefundRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const { throttledAction, isActionDisabled } = useButtonThrottle();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,8 +57,9 @@ const IssuedRefundsModal: React.FC<IssuedRefundsModalProps> = ({ isOpen, onClose
               <p className="text-gray-600 mt-1">All refund transactions and records</p>
             </div>
             <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none"
+              onClick={() => throttledAction('close_modal', () => onClose())}
+              disabled={isActionDisabled('close_modal')}
+              className="text-gray-400 hover:text-gray-600 focus:outline-none disabled:opacity-50"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

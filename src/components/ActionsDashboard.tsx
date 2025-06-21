@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { AuthUser } from '../types';
 import { subscribeToActionLogs, ActionLog } from '../services/firebaseService';
+import UserAnalyticsModal from './UserAnalyticsModal';
 
 interface ActionsDashboardProps {
   user: AuthUser | null;
   isAdmin: boolean;
 }
 
-const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
+const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) => {
   const [actions, setActions] = useState<ActionLog[]>([]);
   const [filteredActions, setFilteredActions] = useState<ActionLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +16,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
   const [actionFilter, setActionFilter] = useState('all');
   const [userTypeFilter, setUserTypeFilter] = useState('all'); // New filter for admin/user
   const [timeFilter, setTimeFilter] = useState('24h');
+  const [showUserAnalytics, setShowUserAnalytics] = useState(false);
 
   useEffect(() => {
     // Subscribe to real-time action logs
@@ -165,10 +167,23 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
           <h1 className="text-3xl font-bold text-gray-900">Actions Dashboard</h1>
           <p className="text-gray-600">Track all user and admin activities</p>
         </div>
-        <div className="text-sm text-gray-500">
-          Total: {actions.length} actions | Filtered: {filteredActions.length} actions
-          {userTypeFilter === 'admin' && ` | Admin Actions Only`}
-          {userTypeFilter === 'user' && ` | User Actions Only`}
+        <div className="flex items-center gap-4">
+          {isAdmin && (
+            <button
+              onClick={() => setShowUserAnalytics(true)}
+              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              User Analytics
+            </button>
+          )}
+          <div className="text-sm text-gray-500">
+            Total: {actions.length} actions | Filtered: {filteredActions.length} actions
+            {userTypeFilter === 'admin' && ` | Admin Actions Only`}
+            {userTypeFilter === 'user' && ` | User Actions Only`}
+          </div>
         </div>
       </div>
 
@@ -356,6 +371,14 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = () => {
           <div className="text-sm text-gray-600">Active Users</div>
         </div>
       </div>
+
+      {/* User Analytics Modal */}
+      <UserAnalyticsModal
+        isOpen={showUserAnalytics}
+        onClose={() => setShowUserAnalytics(false)}
+        user={user}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 };

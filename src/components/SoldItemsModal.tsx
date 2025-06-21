@@ -257,7 +257,7 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                                 <button
                                                                     onClick={() => handleViewDetails(item)}
-                                                                    className="text-blue-600 hover:text-blue-900 font-medium"
+                                                                    className="text-blue-600 hover:text-blue-900 font-medium px-3 py-1 rounded bg-blue-50 hover:bg-blue-100 transition-colors min-w-[100px]"
                                                                 >
                                                                     View Details
                                                                 </button>
