@@ -7,6 +7,7 @@ import { doc, updateDoc, deleteDoc, addDoc, collection } from 'firebase/firestor
 import { db } from '../config/firebase';
 import { logUserAction } from '../services/firebaseService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
+import { useRateLimiter } from '../hooks/useRateLimiter';
 
 // Initialize Stripe with the provided publishable key
 const stripePromise = loadStripe('pk_test_51Rbnai4cE043YuFEryAiYmPIDw6WPTfMk0JFoJyi3eSpEZZBDpTY0tIusq95YjDXqttmcrbAePTHNot0kf3J85Q100Gz9jtjn3');
@@ -27,6 +28,9 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
   
   // Button throttling hook for checkout
   const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
+  
+  // Rate limiting hook
+  const { executeWithRateLimit } = useRateLimiter();
   const [customerInfo, setCustomerInfo] = useState({
     name: user?.displayName || '',
     email: user?.email || '',
@@ -135,11 +139,11 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
       return;
     }
 
-    await throttledAction('checkout-purchase', async () => {
+    const result = await executeWithRateLimit('purchase', async () => {
       setIsProcessing(true);
       setPaymentError(null);
 
-    try {
+      try {
       // For demo purposes, simulate successful payment after delay
       await new Promise(resolve => setTimeout(resolve, 2000));
       
@@ -218,14 +222,18 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
       
       // Show success message
       onSuccess();
+      return true;
       
       } catch (error) {
         console.error('Payment error:', error);
-        setPaymentError('Payment processing failed. Please try again.');
-      } finally {
-        setIsProcessing(false);
+        throw error;
       }
     });
+
+    if (!result.success) {
+      setPaymentError(result.error || 'Payment processing failed. Please try again.');
+    }
+    setIsProcessing(false);
   };
 
   return (

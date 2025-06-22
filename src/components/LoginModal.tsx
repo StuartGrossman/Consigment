@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useRateLimiter } from '../hooks/useRateLimiter';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -17,20 +18,25 @@ const LoginModal: React.FC<LoginModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [loginMethod, setLoginMethod] = useState<'selection' | 'phone'>('selection');
   const [error, setError] = useState<string | null>(null);
+  
+  // Rate limiting hook
+  const { executeWithRateLimit } = useRateLimiter();
 
   if (!isOpen) return null;
 
   const handleGoogleLogin = async () => {
-    setLoading(true);
-    try {
+    const result = await executeWithRateLimit('login', async () => {
+      setLoading(true);
       await onGoogleLogin();
+      return true;
+    });
+
+    if (result.success) {
       onClose();
-    } catch (error) {
-      console.error('Google login failed:', error);
-      alert('Google login failed. Please try again.');
-    } finally {
-      setLoading(false);
+    } else {
+      setError(result.error || 'Login failed. Please try again.');
     }
+    setLoading(false);
   };
 
   const handlePhoneLogin = async () => {
@@ -46,22 +52,23 @@ const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
     
-    setLoading(true);
     setError(null);
     
-    try {
+    const result = await executeWithRateLimit('login', async () => {
+      setLoading(true);
       console.log('Starting phone login with:', phoneNumber);
       await onPhoneLogin(phoneNumber);
       console.log('Phone login successful');
+      return true;
+    });
+
+    if (result.success) {
       onClose();
       resetForm();
-    } catch (error) {
-      console.error('Phone login failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Phone login failed. Please try again.';
-      setError(errorMessage);
-    } finally {
-      setLoading(false);
+    } else {
+      setError(result.error || 'Phone login failed. Please try again.');
     }
+    setLoading(false);
   };
 
   const resetForm = () => {

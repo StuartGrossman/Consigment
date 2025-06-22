@@ -4,7 +4,7 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import { AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
-import { useFormSubmitThrottle } from '../hooks/useButtonThrottle';
+import { useRateLimiter } from '../hooks/useRateLimiter';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -21,8 +21,8 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const [showPreview, setShowPreview] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   
-  // Button throttling hook
-  const { throttledAction, isActionDisabled, isActionProcessing } = useFormSubmitThrottle();
+  // Rate limiting hook
+  const { executeWithRateLimit } = useRateLimiter();
   
   // New fields for filtering
   const [category, setCategory] = useState('');
@@ -82,7 +82,8 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const handleSubmit = async () => {
     if (!user) return;
 
-    await throttledAction('submit-item', async () => {
+    // Use rate limiter for item creation
+    const result = await executeWithRateLimit('item_create', async () => {
       setUploading(true);
 
       try {
@@ -131,15 +132,23 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
         // Log the action
         await logUserAction(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
 
-        // Show success message
-        setShowSuccess(true);
-        setShowPreview(false);
+        return docRef;
       } catch (error) {
         console.error('Error adding item:', error);
-        alert('Error adding item. Please try again.');
-        setUploading(false);
+        throw error;
       }
     });
+
+    if (result.success) {
+      // Show success message
+      setShowSuccess(true);
+      setShowPreview(false);
+    } else {
+      // Show rate limit or error message
+      alert(result.error || 'Error adding item. Please try again.');
+    }
+    
+    setUploading(false);
   };
 
   const resetForm = () => {

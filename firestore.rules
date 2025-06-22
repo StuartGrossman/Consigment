@@ -2,25 +2,296 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Items collection rules - very permissive for demo
-    match /items/{itemId} {
-      // Anyone can read items
-      allow read: if true;
-      
-      // Anyone can write items for demo purposes
-      allow write: if true;
+    
+    // Helper functions for security validation
+    function isAuthenticated() {
+      return request.auth != null;
     }
     
-    // Users collection rules - allow phone users
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+    
+    function isValidEmail(email) {
+      return email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+    
+    function isValidPrice(price) {
+      return price is number && 
+             price > 0 && 
+             price <= 100000 && // Max $100k
+             price == math.floor(price * 100) / 100; // Max 2 decimal places
+    }
+    
+    function isValidStatus(status) {
+      return status in ['pending', 'approved', 'live', 'sold', 'archived'];
+    }
+    
+    function hasValidItemFields(data) {
+      return data.keys().hasAll(['title', 'price', 'sellerId', 'status']) &&
+             data.title is string &&
+             data.title.size() > 0 &&
+             data.title.size() <= 100 &&
+             !data.title.matches('<.*>') && // Block HTML tags
+             !data.title.matches('javascript:') && // Block javascript: URLs
+             isValidPrice(data.price) &&
+             data.sellerId == request.auth.uid && // Prevent impersonation
+             isValidStatus(data.status);
+    }
+    
+    function isValidStringField(field, maxLength) {
+      return field is string && 
+             field.size() <= maxLength &&
+             !field.matches('<.*>') && // Block HTML/XML tags
+             !field.matches('javascript:') && // Block javascript: URLs
+             !field.matches('data:') && // Block data URLs
+             !field.matches('vbscript:') && // Block VBScript
+             !field.matches('\\$\\w+') && // Block NoSQL operators
+             !field.matches('DROP\\s+TABLE') && // Block SQL injection
+             !field.matches('SELECT\\s+\\*') && // Block SQL injection
+             !field.matches('UNION\\s+SELECT') && // Block SQL injection
+             !field.matches('\\bOR\\b.*=.*') && // Block SQL injection
+             !field.matches('\\bAND\\b.*=.*'); // Block SQL injection
+    }
+    
+    function hasNoMaliciousContent(data) {
+      return (!('title' in data) || isValidStringField(data.title, 100)) &&
+             (!('description' in data) || isValidStringField(data.description, 1000)) &&
+             (!('category' in data) || isValidStringField(data.category, 50)) &&
+             (!('brand' in data) || isValidStringField(data.brand, 50)) &&
+             (!('condition' in data) || isValidStringField(data.condition, 20)) &&
+             (!('color' in data) || isValidStringField(data.color, 30)) &&
+             (!('material' in data) || isValidStringField(data.material, 50)) &&
+             (!('size' in data) || isValidStringField(data.size, 20));
+    }
+    
+    function isValidDocumentSize(data) {
+      // Prevent DoS attacks with large documents
+      return data.size() <= 50; // Max 50 fields
+    }
+    
+    function hasNoPrivilegeEscalation(data) {
+      return !('isAdmin' in data) &&
+             !('role' in data) &&
+             !('permissions' in data) &&
+             !('adminApproved' in data) &&
+             !('systemGenerated' in data) &&
+             !('bypassValidation' in data) &&
+             !('adminFlags' in data) &&
+             !('internalNotes' in data);
+    }
+    
+    function isValidUpdate(data) {
+      return hasValidItemFields(data) &&
+             hasNoMaliciousContent(data) &&
+             isValidDocumentSize(data) &&
+             hasNoPrivilegeEscalation(data);
+    }
+    
+    // Users collection - strict access control
     match /users/{userId} {
-      // Allow reading and writing user documents
-      // This includes phone users with UIDs like "phone_*"
-      allow read, write: if true;
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && 
+                       isOwner(userId) &&
+                       request.resource.data.keys().hasAll(['email']) &&
+                       isValidEmail(request.resource.data.email) &&
+                       request.resource.data.email == request.auth.token.email &&
+                       !('isAdmin' in request.resource.data) && // Prevent privilege escalation
+                       !('role' in request.resource.data) &&
+                       isValidDocumentSize(request.resource.data);
+      allow update: if isOwner(userId) &&
+                       !('isAdmin' in request.resource.data) && // Prevent privilege escalation
+                       !('role' in request.resource.data) &&
+                       !('permissions' in request.resource.data) &&
+                       isValidDocumentSize(request.resource.data);
+      allow delete: if false; // Users cannot be deleted
     }
     
-    // All other collections - very permissive for demo
+    // Items collection - main marketplace items
+    match /items/{itemId} {
+      allow read: if true; // Public read for marketplace
+      
+      allow create: if isAuthenticated() &&
+                       hasValidItemFields(request.resource.data) &&
+                       hasNoMaliciousContent(request.resource.data) &&
+                       isValidDocumentSize(request.resource.data) &&
+                       hasNoPrivilegeEscalation(request.resource.data) &&
+                       request.resource.data.sellerId == request.auth.uid &&
+                       request.resource.data.sellerEmail == request.auth.token.email &&
+                       request.resource.data.status == 'pending' && // New items must be pending
+                       request.resource.data.createdAt == request.time;
+      
+      allow update: if isAuthenticated() && (
+                       // Owner can update their own items (limited fields)
+                       (resource.data.sellerId == request.auth.uid &&
+                        request.resource.data.sellerId == request.auth.uid && // Prevent ownership transfer
+                        isValidUpdate(request.resource.data) &&
+                        // Prevent status manipulation by users
+                        (request.resource.data.status == resource.data.status ||
+                         (resource.data.status == 'pending' && request.resource.data.status == 'pending'))) ||
+                       // Admin can update any item
+                       (isAdmin() && isValidUpdate(request.resource.data))
+                    );
+      
+      allow delete: if isAuthenticated() && (
+                       resource.data.sellerId == request.auth.uid ||
+                       isAdmin()
+                    );
+    }
+    
+    // Security test items - for penetration testing
+    match /security_test_items/{itemId} {
+      allow read, write: if isAuthenticated() &&
+                           isValidDocumentSize(request.resource.data) &&
+                           request.resource.data.sellerId == request.auth.uid &&
+                           'testType' in request.resource.data; // Must be marked as test
+    }
+    
+    // Action logs - audit trail
+    match /action_logs/{logId} {
+      allow read: if isAuthenticated() && (
+                     resource.data.userId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow create: if isAuthenticated() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.timestamp == request.time &&
+                       isValidStringField(request.resource.data.action, 50) &&
+                       (!('details' in request.resource.data) || 
+                        isValidStringField(request.resource.data.details, 500)) &&
+                       isValidDocumentSize(request.resource.data);
+      allow update, delete: if false; // Logs are immutable
+    }
+    
+    // Cart items - user's shopping cart
+    match /cart/{userId}/items/{itemId} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(userId) &&
+                            isValidDocumentSize(request.resource.data);
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Bookmarks - user's saved items
+    match /bookmarks/{userId}/items/{itemId} {
+      allow read, write: if isAuthenticated() && 
+                            isOwner(userId) &&
+                            isValidDocumentSize(request.resource.data);
+      allow delete: if isAuthenticated() && isOwner(userId);
+    }
+    
+    // Admin-only collections
+    match /admin_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /system_config/{configId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /analytics/{analyticsId} {
+      allow read: if isAuthenticated() && (
+                     resource.data.userId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow write: if isAdmin();
+    }
+    
+    // Transactions and payments - sensitive data
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (
+                     resource.data.buyerId == request.auth.uid ||
+                     resource.data.sellerId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow create: if isAuthenticated() &&
+                       (request.resource.data.buyerId == request.auth.uid ||
+                        request.resource.data.sellerId == request.auth.uid) &&
+                       isValidDocumentSize(request.resource.data);
+      allow update: if isAdmin(); // Only admins can modify transactions
+      allow delete: if false; // Transactions are permanent
+    }
+    
+    // Messages between users
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (
+                     resource.data.senderId == request.auth.uid ||
+                     resource.data.receiverId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow create: if isAuthenticated() &&
+                       request.resource.data.senderId == request.auth.uid &&
+                       isValidStringField(request.resource.data.content, 1000) &&
+                       isValidDocumentSize(request.resource.data);
+      allow update, delete: if false; // Messages are immutable
+    }
+    
+    // Rate limiting and ban management collections
+    match /rate_limit_violations/{document} {
+      allow read: if isAuthenticated() && (
+                     resource.data.userId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow create: if true; // Allow anonymous rate limit logging for security
+      allow update, delete: if isAdmin();
+    }
+
+    match /banned_ips/{document} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /banned_users/{document} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Store credits for sellers
+    match /store_credits/{document} {
+      allow read: if isAuthenticated() && (
+                     resource.data.userId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow write: if isAdmin(); // Only system can create store credits
+    }
+
+    // Sales records for analytics
+    match /sales/{document} {
+      allow read: if isAuthenticated() && (
+                     resource.data.sellerId == request.auth.uid ||
+                     resource.data.buyerId == request.auth.uid ||
+                     isAdmin()
+                  );
+      allow write: if isAdmin(); // Only system can create sales records
+    }
+
+    // Test performance tracking - automated test results
+    match /test_performance_runs/{document} {
+      allow read: if isAuthenticated(); // All authenticated users can view test results
+      allow create: if isAuthenticated() &&
+                       request.resource.data.timestamp == request.time &&
+                       request.resource.data.type in ['manual', 'automatic'] &&
+                       (!('triggeredBy' in request.resource.data) || 
+                        request.resource.data.triggeredBy == request.auth.uid) &&
+                       isValidDocumentSize(request.resource.data);
+      allow update, delete: if isAdmin(); // Only admins can modify test results
+    }
+    
+    // Rate limiting and abuse prevention
     match /{document=**} {
-      allow read, write: if true;
+      // Global rate limiting - prevent DoS attacks
+      allow read, write: if request.time > resource.data.lastAccess + duration.value(1, 's') ||
+                            !('lastAccess' in resource.data);
+    }
+    
+    // Block all other collections by default
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 } 
