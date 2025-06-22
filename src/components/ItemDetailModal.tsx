@@ -68,12 +68,9 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   const [refundPassword, setRefundPassword] = useState('');
   const [isProcessingRefund, setIsProcessingRefund] = useState(false);
 
-  // Debug bookmark state changes
+  // Track bookmark state changes
   useEffect(() => {
-    if (item) {
-      console.log('Bookmark state check for', item.title, '- Bookmarked:', isBookmarked(item.id));
-      console.log('Total bookmarked items:', bookmarkedItems.length);
-    }
+    // Component updated with bookmark changes
   }, [bookmarkedItems, item, isBookmarked]);
 
   // Initialize sold price when modal opens
@@ -106,11 +103,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   };
 
   const handleAddToCart = async () => {
-    console.log('Before adding to cart - Cart items count:', cartItems.length);
-    console.log('Item being added:', item.title, 'ID:', item.id);
-    console.log('Is item already in cart?', isInCart(item.id));
-    console.log('Current cart quantity for this item:', getCartItemQuantity(item.id));
-    
     await addToCart(item, user);
     
     // Show a brief success message
@@ -128,8 +120,6 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   const handleBookmarkToggle = async () => {
     await throttledAction(`bookmark-${item.id}`, async () => {
       const wasBookmarked = isBookmarked(item.id);
-      console.log('Before bookmark toggle - Item ID:', item.id, 'Was bookmarked:', wasBookmarked);
-      console.log('Current bookmarked items count:', bookmarkedItems.length);
       
       await toggleBookmark(item.id, user);
       

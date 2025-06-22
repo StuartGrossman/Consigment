@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
+import React, { useState, useEffect, createContext, useContext, ReactNode, useCallback, useRef } from 'react';
 import { ConsignmentItem, AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
 import { useFormSubmitThrottle } from './useButtonThrottle';
@@ -41,24 +41,31 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
+  // Use refs to prevent unnecessary re-renders
+  const isLoadingRef = useRef(false);
+  const lastUserIdRef = useRef<string | null>(null);
+  
   // Button throttling hook for cart actions
   const { throttledAction, isActionDisabled, isActionProcessing } = useFormSubmitThrottle();
 
   // Helper function to get user-specific storage keys
-  const getStorageKeys = (userId: string | null) => ({
+  const getStorageKeys = useCallback((userId: string | null) => ({
     cart: userId ? `shopping_cart_${userId}` : 'shopping_cart_guest',
     bookmarks: userId ? `bookmarked_items_${userId}` : 'bookmarked_items_guest'
-  });
+  }), []);
 
   // Load cart and bookmarks from localStorage when user changes
-  const loadUserData = (userId: string | null) => {
-    console.log('Loading cart and bookmarks for user:', userId);
+  const loadUserData = useCallback((userId: string | null) => {
+    if (isLoadingRef.current || lastUserIdRef.current === userId) {
+      return; // Prevent duplicate loads
+    }
+    
+    isLoadingRef.current = true;
+    lastUserIdRef.current = userId;
+    
     const keys = getStorageKeys(userId);
     const savedCart = localStorage.getItem(keys.cart);
     const savedBookmarks = localStorage.getItem(keys.bookmarks);
-    
-    console.log('Saved cart:', savedCart);
-    console.log('Saved bookmarks:', savedBookmarks);
     
     if (savedCart) {
       try {
@@ -68,7 +75,6 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           ...cartItem,
           addedAt: new Date(cartItem.addedAt)
         }));
-        console.log('Loaded cart items:', cartWithDates.length);
         setCartItems(cartWithDates);
       } catch (error) {
         console.error('Error loading cart from localStorage:', error);
@@ -81,7 +87,6 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     if (savedBookmarks) {
       try {
         const bookmarks = JSON.parse(savedBookmarks);
-        console.log('Loaded bookmarks:', bookmarks.length);
         setBookmarkedItems(bookmarks);
       } catch (error) {
         console.error('Error loading bookmarks from localStorage:', error);
@@ -90,43 +95,44 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     } else {
       setBookmarkedItems([]);
     }
-  };
+    
+    isLoadingRef.current = false;
+  }, [getStorageKeys]);
 
   // Initialize with guest data on mount
   useEffect(() => {
-    loadUserData(null);
-    setIsInitialized(true);
-  }, []);
+    if (!isInitialized) {
+      loadUserData(null);
+      setIsInitialized(true);
+    }
+  }, [loadUserData, isInitialized]);
 
-  // Save cart to localStorage whenever it changes (but not during initial load)
+  // Save cart to localStorage whenever it changes (with throttling)
   useEffect(() => {
-    if (isInitialized && currentUserId !== undefined) {
+    if (isInitialized && !isLoadingRef.current) {
       const keys = getStorageKeys(currentUserId);
-      console.log('Saving cart to localStorage:', cartItems.length, 'items for user:', currentUserId);
       localStorage.setItem(keys.cart, JSON.stringify(cartItems));
     }
-  }, [cartItems, isInitialized, currentUserId]);
+  }, [cartItems, isInitialized, currentUserId, getStorageKeys]);
 
-  // Save bookmarks to localStorage whenever they change (but not during initial load)
+  // Save bookmarks to localStorage whenever they change (with throttling)
   useEffect(() => {
-    if (isInitialized && currentUserId !== undefined) {
+    if (isInitialized && !isLoadingRef.current) {
       const keys = getStorageKeys(currentUserId);
-      console.log('Saving bookmarks to localStorage:', bookmarkedItems.length, 'items for user:', currentUserId);
       localStorage.setItem(keys.bookmarks, JSON.stringify(bookmarkedItems));
     }
-  }, [bookmarkedItems, isInitialized, currentUserId]);
+  }, [bookmarkedItems, isInitialized, currentUserId, getStorageKeys]);
 
   // Function to switch user context (to be called when user logs in/out)
-  const switchUser = (userId: string | null) => {
-    console.log('Switching user context from', currentUserId, 'to', userId);
-    setCurrentUserId(userId);
-    loadUserData(userId);
-  };
+  const switchUser = useCallback((userId: string | null) => {
+    if (currentUserId !== userId) {
+      setCurrentUserId(userId);
+      loadUserData(userId);
+    }
+  }, [currentUserId, loadUserData]);
 
-  const addToCart = async (item: ConsignmentItem, user?: AuthUser | null, quantity: number = 1) => {
+  const addToCart = useCallback(async (item: ConsignmentItem, user?: AuthUser | null, quantity: number = 1) => {
     await throttledAction(`add-to-cart-${item.id}`, async () => {
-      console.log('addToCart called:', item.title, 'Current cart size:', cartItems.length);
-      
       // Log the action
       if (user) {
         await logUserAction(user, 'cart_updated', 'Added item to cart', item.id, item.title);
@@ -137,7 +143,6 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
       
       if (existingItemIndex >= 0) {
         // For consignment items, don't increase quantity - they're unique items
-        console.log('Item already in cart, not adding again (consignment items are unique)');
         return;
       } else {
         // Add new item to cart with quantity 1 (consignment items are unique)
@@ -146,17 +151,12 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           quantity: 1, // Always 1 for consignment items
           addedAt: new Date()
         };
-        console.log('Adding new item to cart:', newCartItem);
-        setCartItems(prev => {
-          const newCart = [...prev, newCartItem];
-          console.log('New cart size will be:', newCart.length);
-          return newCart;
-        });
+        setCartItems(prev => [...prev, newCartItem]);
       }
     });
-  };
+  }, [cartItems, throttledAction]);
 
-  const removeFromCart = async (itemId: string, user?: AuthUser | null) => {
+  const removeFromCart = useCallback(async (itemId: string, user?: AuthUser | null) => {
     // Find the item being removed for logging
     const itemToRemove = cartItems.find(cartItem => cartItem.item.id === itemId);
     
@@ -166,9 +166,9 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     }
     
     setCartItems(prev => prev.filter(cartItem => cartItem.item.id !== itemId));
-  };
+  }, [cartItems]);
 
-  const updateQuantity = async (itemId: string, newQuantity: number, user?: AuthUser | null) => {
+  const updateQuantity = useCallback(async (itemId: string, newQuantity: number, user?: AuthUser | null) => {
     if (newQuantity <= 0) {
       await removeFromCart(itemId, user);
       return;
@@ -189,29 +189,27 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
           : cartItem
       )
     );
-  };
+  }, [cartItems, removeFromCart]);
 
-  const clearCart = async (user?: AuthUser | null) => {
+  const clearCart = useCallback(async (user?: AuthUser | null) => {
     // Log the action
     if (user) {
       await logUserAction(user, 'cart_updated', `Cleared cart with ${cartItems.length} items`);
     }
     
     setCartItems([]);
-  };
+  }, [cartItems]);
 
-  const isInCart = (itemId: string): boolean => {
+  const isInCart = useCallback((itemId: string): boolean => {
     return cartItems.some(cartItem => cartItem.item.id === itemId);
-  };
+  }, [cartItems]);
 
-  const getCartItemQuantity = (itemId: string): number => {
+  const getCartItemQuantity = useCallback((itemId: string): number => {
     const cartItem = cartItems.find(cartItem => cartItem.item.id === itemId);
     return cartItem?.quantity || 0;
-  };
+  }, [cartItems]);
 
-  const toggleBookmark = async (itemId: string, user?: AuthUser | null) => {
-    console.log('toggleBookmark called:', itemId, 'Current bookmarks:', bookmarkedItems.length);
-    
+  const toggleBookmark = useCallback(async (itemId: string, user?: AuthUser | null) => {
     const isCurrentlyBookmarked = bookmarkedItems.includes(itemId);
     
     // Log the action
@@ -221,34 +219,30 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     
     setBookmarkedItems(prev => {
       if (prev.includes(itemId)) {
-        const newBookmarks = prev.filter(id => id !== itemId);
-        console.log('Removed bookmark, new count:', newBookmarks.length);
-        return newBookmarks;
+        return prev.filter(id => id !== itemId);
       } else {
-        const newBookmarks = [...prev, itemId];
-        console.log('Added bookmark, new count:', newBookmarks.length);
-        return newBookmarks;
+        return [...prev, itemId];
       }
     });
-  };
+  }, [bookmarkedItems]);
 
-  const isBookmarked = (itemId: string): boolean => {
+  const isBookmarked = useCallback((itemId: string): boolean => {
     return bookmarkedItems.includes(itemId);
-  };
+  }, [bookmarkedItems]);
 
-  const getCartTotal = (): number => {
+  const getCartTotal = useCallback((): number => {
     return cartItems.reduce((total, cartItem) => {
       return total + (cartItem.item.price * cartItem.quantity);
     }, 0);
-  };
+  }, [cartItems]);
 
-  const getCartItemCount = (): number => {
+  const getCartItemCount = useCallback((): number => {
     return cartItems.reduce((total, cartItem) => total + cartItem.quantity, 0);
-  };
+  }, [cartItems]);
 
-  const getBookmarkCount = (): number => {
+  const getBookmarkCount = useCallback((): number => {
     return bookmarkedItems.length;
-  };
+  }, [bookmarkedItems]);
 
   const value: CartContextType = {
     cartItems,

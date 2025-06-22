@@ -38,7 +38,7 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
   const [fulfillmentMethod, setFulfillmentMethod] = useState<'pickup' | 'shipping'>('shipping');
 
   const processPurchaseCompletion = async (purchaseRecord: any) => {
-    console.log('Processing purchase completion for items:', cartItems.length);
+    // Processing purchase completion
     
     // Process each item in the cart
     for (const cartItem of cartItems) {

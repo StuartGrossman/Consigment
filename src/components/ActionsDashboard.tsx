@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AuthUser } from '../types';
-import { subscribeToActionLogs, ActionLog } from '../services/firebaseService';
+import { subscribeToActionLogs, ActionLog, logUserAction, getActionLogs } from '../services/firebaseService';
 import UserAnalyticsModal from './UserAnalyticsModal';
 
 interface ActionsDashboardProps {
@@ -18,26 +18,72 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
   const [timeFilter, setTimeFilter] = useState('24h');
   const [showUserAnalytics, setShowUserAnalytics] = useState(false);
 
+
+
   useEffect(() => {
+    console.log('ActionsDashboard useEffect triggered, timeFilter:', timeFilter);
+    setLoading(true);
+    
+    // Log that the dashboard was accessed
+    if (user) {
+      console.log('Logging dashboard access for user:', user.displayName);
+      logUserAction(user, 'dashboard_viewed', 'Accessed Actions Dashboard');
+    }
+    
     // Subscribe to real-time action logs
+    console.log('Setting up subscription to action logs...');
     const unsubscribe = subscribeToActionLogs((logs) => {
-      // Convert Firebase timestamps to Date objects
-      const processedLogs = logs.map(log => ({
-        ...log,
-        timestamp: log.timestamp?.toDate ? log.timestamp.toDate() : new Date()
-      }));
-      
-      // Filter by time
-      const timeThreshold = getTimeThreshold();
-      const filteredByTime = processedLogs.filter(action => 
-        action.timestamp.getTime() >= timeThreshold
-      );
-      
-      setActions(filteredByTime);
-      setLoading(false);
+      try {
+        console.log('ActionsDashboard received action logs from Firebase:', logs.length);
+        
+        // If no logs from Firebase, just show empty state
+        if (logs.length === 0) {
+          console.log('No action logs found in Firebase database');
+          setActions([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Convert Firebase timestamps to Date objects
+        const processedLogs = logs.map(log => {
+          const timestamp = log.timestamp?.toDate ? log.timestamp.toDate() : new Date();
+          console.log('Processing log:', log.id, log.action, 'timestamp:', timestamp);
+          return {
+            ...log,
+            timestamp
+          };
+        });
+        
+        // Filter by time
+        const timeThreshold = getTimeThreshold();
+        console.log('Time threshold for filtering:', new Date(timeThreshold));
+        const filteredByTime = processedLogs.filter(action => 
+          action.timestamp.getTime() >= timeThreshold
+        );
+        
+        console.log('Filtered actions by time:', filteredByTime.length, 'out of', processedLogs.length);
+        setActions(filteredByTime);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error processing action logs:', error);
+        setActions([]);
+        setLoading(false);
+      }
     });
 
-    return () => unsubscribe();
+    // Handle potential connection errors
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('Action logs taking longer than expected to load');
+        setActions([]);
+        setLoading(false);
+      }
+    }, 10000); // 10 second timeout
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, [timeFilter]);
 
   useEffect(() => {
@@ -169,16 +215,46 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         </div>
         <div className="flex items-center gap-4">
           {isAdmin && (
-            <button
-              onClick={() => setShowUserAnalytics(true)}
-              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              User Analytics
-            </button>
-          )}
+            <>
+              <button
+                onClick={() => setShowUserAnalytics(true)}
+                className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                                User Analytics
+              </button>
+              <button
+                onClick={async () => {
+                  console.log('Manual fetch of action logs...');
+                  try {
+                    const logs = await getActionLogs();
+                    console.log('Manual fetch successful:', logs.length, 'logs');
+                    // Process the logs the same way as the subscription
+                    const processedLogs = logs.map(log => ({
+                      ...log,
+                      timestamp: log.timestamp?.toDate ? log.timestamp.toDate() : new Date()
+                    }));
+                    const timeThreshold = getTimeThreshold();
+                    const filteredByTime = processedLogs.filter(action => 
+                      action.timestamp.getTime() >= timeThreshold
+                    );
+                    setActions(filteredByTime);
+                    setLoading(false);
+                  } catch (error) {
+                    console.error('Manual fetch failed:', error);
+                  }
+                }}
+                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh Data
+              </button>
+              </>
+            )}
           <div className="text-sm text-gray-500">
             Total: {actions.length} actions | Filtered: {filteredActions.length} actions
             {userTypeFilter === 'admin' && ` | Admin Actions Only`}

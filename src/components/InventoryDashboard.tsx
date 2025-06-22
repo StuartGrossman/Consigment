@@ -42,6 +42,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   const [selectedItemForDiscount, setSelectedItemForDiscount] = useState<ConsignmentItem | null>(null);
   const [showBulkDiscountModal, setShowBulkDiscountModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const { user } = useAuth();
 
   // Get unique values for filters
@@ -405,6 +406,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
             </svg>
             Import Data
+          </button>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l3-3m0 0l-3-3m3 3H9" />
+            </svg>
+            Export Data
           </button>
           <button
             onClick={() => setShowBulkDiscountModal(true)}
@@ -861,6 +871,16 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
             setShowImportModal(false);
             fetchAllItems(); // Refresh the items list
           }}
+        />
+      )}
+
+      {/* Export Data Modal */}
+      {showExportModal && (
+        <ExportDataModal
+          items={items}
+          filteredItems={filteredItems}
+          onClose={() => setShowExportModal(false)}
+          user={user}
         />
       )}
     </div>
@@ -1417,6 +1437,582 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Export Data Modal Component
+interface ExportDataModalProps {
+  items: ConsignmentItem[];
+  filteredItems: ConsignmentItem[];
+  onClose: () => void;
+  user: AuthUser | null;
+}
+
+const ExportDataModal: React.FC<ExportDataModalProps> = ({ items, filteredItems, onClose, user }) => {
+  const [exportType, setExportType] = useState<'csv' | 'json' | 'excel'>('csv');
+  const [dataScope, setDataScope] = useState<'all' | 'filtered' | 'custom'>('filtered');
+  const [selectedFields, setSelectedFields] = useState<string[]>([
+    'title', 'price', 'category', 'brand', 'condition', 'status', 'createdAt'
+  ]);
+  const [customFilters, setCustomFilters] = useState({
+    status: [] as string[],
+    category: [] as string[],
+    brand: [] as string[],
+    dateRange: { start: '', end: '' }
+  });
+  const [includeImages, setIncludeImages] = useState(false);
+  const [includeSalesData, setIncludeSalesData] = useState(false);
+  const [includeAnalytics, setIncludeAnalytics] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Available fields for export
+  const availableFields = [
+    { key: 'id', label: 'Item ID', category: 'Basic' },
+    { key: 'title', label: 'Title', category: 'Basic' },
+    { key: 'description', label: 'Description', category: 'Basic' },
+    { key: 'price', label: 'Price', category: 'Basic' },
+    { key: 'originalPrice', label: 'Original Price', category: 'Basic' },
+    { key: 'soldPrice', label: 'Sold Price', category: 'Sales' },
+    { key: 'category', label: 'Category', category: 'Details' },
+    { key: 'brand', label: 'Brand', category: 'Details' },
+    { key: 'condition', label: 'Condition', category: 'Details' },
+    { key: 'size', label: 'Size', category: 'Details' },
+    { key: 'color', label: 'Color', category: 'Details' },
+    { key: 'material', label: 'Material', category: 'Details' },
+    { key: 'gender', label: 'Gender', category: 'Details' },
+    { key: 'status', label: 'Status', category: 'Status' },
+    { key: 'sellerName', label: 'Seller Name', category: 'Seller' },
+    { key: 'sellerEmail', label: 'Seller Email', category: 'Seller' },
+    { key: 'sellerId', label: 'Seller ID', category: 'Seller' },
+    { key: 'createdAt', label: 'Date Listed', category: 'Dates' },
+    { key: 'approvedAt', label: 'Date Approved', category: 'Dates' },
+    { key: 'liveAt', label: 'Date Live', category: 'Dates' },
+    { key: 'soldAt', label: 'Date Sold', category: 'Dates' },
+    { key: 'discountPercentage', label: 'Discount %', category: 'Pricing' },
+    { key: 'discountReason', label: 'Discount Reason', category: 'Pricing' },
+    { key: 'barcodeData', label: 'Barcode', category: 'Inventory' },
+    { key: 'trackingNumber', label: 'Tracking Number', category: 'Shipping' },
+    { key: 'buyerInfo', label: 'Buyer Information', category: 'Sales' }
+  ];
+
+  const fieldCategories = [...new Set(availableFields.map(f => f.category))];
+
+  const getDataToExport = () => {
+    let data = items;
+    
+    if (dataScope === 'filtered') {
+      data = filteredItems;
+    } else if (dataScope === 'custom') {
+      data = items.filter(item => {
+        // Apply custom filters
+        if (customFilters.status.length > 0 && !customFilters.status.includes(item.status)) {
+          return false;
+        }
+        if (customFilters.category.length > 0 && !customFilters.category.includes(item.category || '')) {
+          return false;
+        }
+        if (customFilters.brand.length > 0 && !customFilters.brand.includes(item.brand || '')) {
+          return false;
+        }
+        if (customFilters.dateRange.start && new Date(item.createdAt) < new Date(customFilters.dateRange.start)) {
+          return false;
+        }
+        if (customFilters.dateRange.end && new Date(item.createdAt) > new Date(customFilters.dateRange.end)) {
+          return false;
+        }
+        return true;
+      });
+    }
+
+    // Process the data based on selected fields
+    return data.map(item => {
+      const exportItem: any = {};
+      
+      selectedFields.forEach(field => {
+        if (field === 'createdAt' || field === 'approvedAt' || field === 'liveAt' || field === 'soldAt') {
+          exportItem[field] = item[field as keyof ConsignmentItem] ? 
+            (item[field as keyof ConsignmentItem] as Date).toISOString() : '';
+        } else if (field === 'buyerInfo') {
+          exportItem[field] = item.buyerInfo ? JSON.stringify(item.buyerInfo) : '';
+        } else if (field === 'images' && includeImages) {
+          exportItem[field] = item.images ? item.images.join('; ') : '';
+        } else {
+          exportItem[field] = item[field as keyof ConsignmentItem] || '';
+        }
+      });
+
+      // Add sales analytics if requested
+      if (includeSalesData && item.status === 'sold') {
+        exportItem.adminEarnings = (item.soldPrice || item.price) * 0.25;
+        exportItem.userEarnings = (item.soldPrice || item.price) * 0.75;
+        exportItem.saleType = item.saleType || 'unknown';
+      }
+
+      // Add analytics data if requested
+      if (includeAnalytics) {
+        const shelfDays = Math.floor((new Date().getTime() - item.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        exportItem.daysOnShelf = shelfDays;
+        exportItem.hasDiscount = !!item.discountPercentage;
+        exportItem.priceChange = item.originalPrice ? item.originalPrice - item.price : 0;
+      }
+
+      return exportItem;
+    });
+  };
+
+  const exportToCSV = (data: any[]) => {
+    if (data.length === 0) return;
+    
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+      headers.join(','),
+      ...data.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          // Escape commas and quotes in CSV
+          if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+            return `"${value.replace(/"/g, '""')}"`;
+          }
+          return value;
+        }).join(',')
+      )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `inventory_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToJSON = (data: any[]) => {
+    const jsonContent = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `inventory_export_${new Date().toISOString().split('T')[0]}.json`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportToExcel = (data: any[]) => {
+    // For Excel export, we'll create a more detailed CSV that Excel can open
+    if (data.length === 0) return;
+    
+    const headers = Object.keys(data[0]);
+    const csvContent = [
+      headers.join('\t'), // Use tabs for better Excel compatibility
+      ...data.map(row => 
+        headers.map(header => {
+          const value = row[header];
+          return value || '';
+        }).join('\t')
+      )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/tab-separated-values;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `inventory_export_${new Date().toISOString().split('T')[0]}.xlsx`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    
+    try {
+      const data = getDataToExport();
+      
+      if (data.length === 0) {
+        alert('No data to export with current filters');
+        setIsExporting(false);
+        return;
+      }
+
+      // Add delay to show loading state
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      switch (exportType) {
+        case 'csv':
+          exportToCSV(data);
+          break;
+        case 'json':
+          exportToJSON(data);
+          break;
+        case 'excel':
+          exportToExcel(data);
+          break;
+      }
+
+      // Log the export action
+      if (user) {
+        await logUserAction(
+          user,
+          'data_export',
+          `Exported ${data.length} items as ${exportType.toUpperCase()}`,
+          undefined,
+          `${data.length} items`
+        );
+      }
+
+      onClose();
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleFieldToggle = (fieldKey: string) => {
+    setSelectedFields(prev => 
+      prev.includes(fieldKey)
+        ? prev.filter(f => f !== fieldKey)
+        : [...prev, fieldKey]
+    );
+  };
+
+  const handleSelectAllFields = () => {
+    if (selectedFields.length === availableFields.length) {
+      setSelectedFields(['title', 'price', 'category', 'status']);
+    } else {
+      setSelectedFields(availableFields.map(f => f.key));
+    }
+  };
+
+  const handleCategoryToggle = (category: string) => {
+    const categoryFields = availableFields.filter(f => f.category === category).map(f => f.key);
+    const allCategorySelected = categoryFields.every(field => selectedFields.includes(field));
+    
+    if (allCategorySelected) {
+      setSelectedFields(prev => prev.filter(f => !categoryFields.includes(f)));
+    } else {
+      setSelectedFields(prev => [...new Set([...prev, ...categoryFields])]);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-800">Export Inventory Data</h2>
+              <p className="text-gray-600 mt-1">Download comprehensive inventory data in your preferred format</p>
+            </div>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Left Column - Export Options */}
+            <div className="space-y-6">
+              {/* Export Format */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Export Format</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => setExportType('csv')}
+                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                      exportType === 'csv'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-semibold">CSV</div>
+                    <div className="text-xs text-gray-500">Comma Separated</div>
+                  </button>
+                  <button
+                    onClick={() => setExportType('json')}
+                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                      exportType === 'json'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-semibold">JSON</div>
+                    <div className="text-xs text-gray-500">Structured Data</div>
+                  </button>
+                  <button
+                    onClick={() => setExportType('excel')}
+                    className={`p-4 border-2 rounded-lg text-center transition-colors ${
+                      exportType === 'excel'
+                        ? 'border-green-500 bg-green-50 text-green-700'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="font-semibold">Excel</div>
+                    <div className="text-xs text-gray-500">Spreadsheet</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Data Scope */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Data Scope</h3>
+                <div className="space-y-3">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="dataScope"
+                      value="all"
+                      checked={dataScope === 'all'}
+                      onChange={(e) => setDataScope(e.target.value as any)}
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-medium">All Items ({items.length})</div>
+                      <div className="text-sm text-gray-500">Export entire inventory database</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="dataScope"
+                      value="filtered"
+                      checked={dataScope === 'filtered'}
+                      onChange={(e) => setDataScope(e.target.value as any)}
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-medium">Current Filtered Items ({filteredItems.length})</div>
+                      <div className="text-sm text-gray-500">Export items matching current dashboard filters</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="dataScope"
+                      value="custom"
+                      checked={dataScope === 'custom'}
+                      onChange={(e) => setDataScope(e.target.value as any)}
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-medium">Custom Selection</div>
+                      <div className="text-sm text-gray-500">Define custom filters below</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Custom Filters */}
+              {dataScope === 'custom' && (
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-gray-800 mb-3">Custom Filters</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                      <div className="flex flex-wrap gap-2">
+                        {['pending', 'approved', 'live', 'sold', 'archived'].map(status => (
+                          <label key={status} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={customFilters.status.includes(status)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setCustomFilters(prev => ({
+                                    ...prev,
+                                    status: [...prev.status, status]
+                                  }));
+                                } else {
+                                  setCustomFilters(prev => ({
+                                    ...prev,
+                                    status: prev.status.filter(s => s !== status)
+                                  }));
+                                }
+                              }}
+                              className="mr-1"
+                            />
+                            <span className="text-sm capitalize">{status}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                        <input
+                          type="date"
+                          value={customFilters.dateRange.start}
+                          onChange={(e) => setCustomFilters(prev => ({
+                            ...prev,
+                            dateRange: { ...prev.dateRange, start: e.target.value }
+                          }))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                        <input
+                          type="date"
+                          value={customFilters.dateRange.end}
+                          onChange={(e) => setCustomFilters(prev => ({
+                            ...prev,
+                            dateRange: { ...prev.dateRange, end: e.target.value }
+                          }))}
+                          className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Additional Options */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Additional Data</h3>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={includeImages}
+                      onChange={(e) => setIncludeImages(e.target.checked)}
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-medium">Include Image URLs</div>
+                      <div className="text-sm text-gray-500">Export image URLs for each item</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={includeSalesData}
+                      onChange={(e) => setIncludeSalesData(e.target.checked)}
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-medium">Include Sales Analytics</div>
+                      <div className="text-sm text-gray-500">Add earnings breakdown for sold items</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={includeAnalytics}
+                      onChange={(e) => setIncludeAnalytics(e.target.checked)}
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-medium">Include Performance Metrics</div>
+                      <div className="text-sm text-gray-500">Add shelf time, discounts, and price changes</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column - Field Selection */}
+            <div>
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-lg font-semibold text-gray-800">Select Fields to Export</h3>
+                <button
+                  onClick={handleSelectAllFields}
+                  className="text-sm text-green-600 hover:text-green-700 font-medium"
+                >
+                  {selectedFields.length === availableFields.length ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                {fieldCategories.map(category => (
+                  <div key={category} className="border border-gray-200 rounded-lg p-3">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-medium text-gray-700">{category}</h4>
+                      <button
+                        onClick={() => handleCategoryToggle(category)}
+                        className="text-xs text-green-600 hover:text-green-700"
+                      >
+                        Toggle All
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-1">
+                      {availableFields
+                        .filter(field => field.category === category)
+                        .map(field => (
+                          <label key={field.key} className="flex items-center text-sm">
+                            <input
+                              type="checkbox"
+                              checked={selectedFields.includes(field.key)}
+                              onChange={() => handleFieldToggle(field.key)}
+                              className="mr-2"
+                            />
+                            <span className={selectedFields.includes(field.key) ? 'text-gray-900' : 'text-gray-500'}>
+                              {field.label}
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                <div className="text-sm text-blue-700">
+                  <strong>Selected:</strong> {selectedFields.length} fields
+                  <br />
+                  <strong>Estimated rows:</strong> {getDataToExport().length} items
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Actions */}
+        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-600">
+              Ready to export {getDataToExport().length} items with {selectedFields.length} fields
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={selectedFields.length === 0 || isExporting}
+                className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                {isExporting ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Exporting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
+                    </svg>
+                    Export {exportType.toUpperCase()}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

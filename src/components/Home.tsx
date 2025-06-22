@@ -114,11 +114,6 @@ const Home: React.FC = () => {
         if (!user) return;
         
         // Admin status is now purely controlled by the test admin toggle
-        console.log('Admin status check:', { 
-            userId: user.uid, 
-            userIsAdmin,
-            adminStatus: userIsAdmin 
-        });
         setIsAdmin(userIsAdmin);
     };
 
@@ -157,7 +152,6 @@ const Home: React.FC = () => {
                 sold: recentSoldCount
             };
             
-            console.log('Updating notification counts:', newCounts);
             setNotificationCounts(newCounts);
         } catch (error) {
             console.error('Error fetching notification counts:', error);
@@ -303,7 +297,6 @@ const Home: React.FC = () => {
             
             // Limit to 15 most recent items for better coverage
             const limitedItems = fetchedItems.slice(0, 15);
-            console.log('Updating recent items:', limitedItems.length, 'items for', isAdmin ? 'admin' : 'user');
             setRecentItems(limitedItems);
         } catch (error) {
             console.error('Error fetching recent items:', error);

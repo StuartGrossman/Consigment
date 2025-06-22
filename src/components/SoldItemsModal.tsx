@@ -20,7 +20,6 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
     const [isMarkingShipped, setIsMarkingShipped] = useState(false);
 
     useEffect(() => {
-        console.log('SoldItemsModal useEffect triggered:', { isOpen, refreshTrigger });
         if (isOpen) {
             fetchSoldItems();
         }
@@ -29,7 +28,6 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
     const fetchSoldItems = async () => {
         setLoading(true);
         try {
-            console.log('Fetching sold items...');
             const itemsRef = collection(db, 'items');
             let q = query(itemsRef, where('status', '==', 'sold'));
 
@@ -38,7 +36,6 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                 // Try with orderBy first
                 const orderedQuery = query(q, orderBy('soldAt', 'desc'));
                 querySnapshot = await getDocs(orderedQuery);
-                console.log('Successfully fetched with orderBy');
             } catch (orderError) {
                 console.warn('Could not order by soldAt, using unordered query:', orderError);
                 // Fall back to unordered query
@@ -49,7 +46,6 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                console.log('Found sold item:', doc.id, data.title, data.status);
                 items.push({
                     id: doc.id,
                     ...data,
@@ -69,7 +65,6 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                 return bTime.getTime() - aTime.getTime();
             });
 
-            console.log('Total sold items found:', items.length);
             setSoldItems(items);
         } catch (error) {
             console.error('Error fetching sold items:', error);

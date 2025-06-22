@@ -55,15 +55,40 @@ export const logUserAction = async (
 
 export const getActionLogs = async (): Promise<ActionLog[]> => {
     try {
-        const logsQuery = query(
-            collection(db, 'actionLogs'), 
-            orderBy('timestamp', 'desc')
-        );
+        console.log('Attempting to fetch action logs...');
+        let logsQuery;
+        
+        try {
+            // Try with orderBy first
+            logsQuery = query(
+                collection(db, 'actionLogs'), 
+                orderBy('timestamp', 'desc')
+            );
+        } catch (indexError) {
+            console.warn('Could not create ordered query, using simple query:', indexError);
+            logsQuery = query(collection(db, 'actionLogs'));
+        }
+        
         const querySnapshot = await getDocs(logsQuery);
-        return querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as ActionLog[];
+        console.log('Retrieved', querySnapshot.docs.length, 'action log documents');
+        
+        const logs = querySnapshot.docs.map(doc => {
+            const data = doc.data();
+            console.log('Retrieved log:', doc.id, data.action, data.timestamp);
+            return {
+                id: doc.id,
+                ...data
+            };
+        }) as ActionLog[];
+        
+        // Sort manually if we couldn't use orderBy
+        logs.sort((a, b) => {
+            const aTime = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
+            const bTime = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
+            return bTime - aTime;
+        });
+        
+        return logs;
     } catch (error) {
         console.error('Error getting action logs:', error);
         throw new Error('Failed to get action logs');
@@ -71,20 +96,69 @@ export const getActionLogs = async (): Promise<ActionLog[]> => {
 };
 
 export const subscribeToActionLogs = (callback: (logs: ActionLog[]) => void): (() => void) => {
-    const logsQuery = query(
-        collection(db, 'actionLogs'), 
-        orderBy('timestamp', 'desc')
-    );
-    
-    return onSnapshot(logsQuery, (snapshot) => {
-        const logs = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as ActionLog[];
-        callback(logs);
-    }, (error) => {
-        console.error('Error subscribing to action logs:', error);
-    });
+    try {
+        console.log('Setting up action logs subscription...');
+        
+        // First try without orderBy in case there's an index issue
+        let logsQuery;
+        try {
+            logsQuery = query(
+                collection(db, 'actionLogs'), 
+                orderBy('timestamp', 'desc')
+            );
+        } catch (indexError) {
+            console.warn('Could not create ordered query, falling back to unordered:', indexError);
+            logsQuery = query(collection(db, 'actionLogs'));
+        }
+        
+        return onSnapshot(logsQuery, (snapshot) => {
+            try {
+                console.log('Received snapshot with', snapshot.docs.length, 'documents');
+                const logs = snapshot.docs.map(doc => {
+                    const data = doc.data();
+                    console.log('Processing log:', doc.id, data.action, data.timestamp);
+                    return {
+                        id: doc.id,
+                        ...data
+                    };
+                }) as ActionLog[];
+                
+                // Sort manually if we couldn't use orderBy
+                logs.sort((a, b) => {
+                    const aTime = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
+                    const bTime = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
+                    return bTime - aTime;
+                });
+                
+                console.log('Calling callback with', logs.length, 'processed logs');
+                callback(logs);
+            } catch (error) {
+                console.error('Error processing action logs snapshot:', error);
+                callback([]); // Return empty array on error
+            }
+        }, (error) => {
+            console.error('Error subscribing to action logs:', error);
+            // Try a simple query without orderBy as fallback
+            console.log('Attempting fallback query...');
+            const fallbackQuery = query(collection(db, 'actionLogs'));
+            return onSnapshot(fallbackQuery, (snapshot) => {
+                try {
+                    const logs = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    })) as ActionLog[];
+                    callback(logs);
+                } catch (fallbackError) {
+                    console.error('Fallback query also failed:', fallbackError);
+                    callback([]);
+                }
+            });
+        });
+    } catch (error) {
+        console.error('Error setting up action logs subscription:', error);
+        // Return a no-op unsubscribe function
+        return () => {};
+    }
 };
 
 export const saveMessage = async (message: Message): Promise<void> => {

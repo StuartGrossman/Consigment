@@ -80,7 +80,7 @@ const BookmarksModal: React.FC<BookmarksModalProps> = ({
                     <button
                       onClick={() => {
                         toggleBookmark(item.id);
-                        console.log('Removed bookmark from bookmarks modal:', item.title);
+                        // Bookmark removed
                         // Show a brief success message
                         const toast = document.createElement('div');
                         toast.className = 'fixed top-4 right-4 z-50 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg';
@@ -124,7 +124,7 @@ const BookmarksModal: React.FC<BookmarksModalProps> = ({
                       <button
                         onClick={() => {
                           addToCart(item);
-                          console.log('Added to cart from bookmarks:', item.title);
+                          // Item added to cart
                           // Show a brief success message
                           const toast = document.createElement('div');
                           toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';

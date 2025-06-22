@@ -42,18 +42,10 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const [selectedUserAnalytics, setSelectedUserAnalytics] = useState<UserAnalytics | null>(null);
 
     useEffect(() => {
-        console.log('UserAnalyticsModal useEffect triggered:', { 
-            isOpen, 
-            isAdmin, 
-            refreshTrigger, 
-            userId: user?.uid 
-        });
         if (isOpen) {
             if (isAdmin) {
-                console.log('Fetching ALL user analytics (admin mode)');
                 fetchAllUserAnalytics();
             } else if (user) {
-                console.log('Fetching single user analytics (user mode):', user.uid);
                 fetchUserAnalytics(user.uid);
             }
         }
@@ -69,15 +61,12 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const fetchAllUserAnalytics = async () => {
         setLoading(true);
         try {
-            console.log('Fetching all user analytics...');
-            
             const allUsers: User[] = [];
             const userMap = new Map<string, UserAnalytics>();
 
             // First, get all items to find users who have listed items
             const itemsRef = collection(db, 'items');
             const itemsSnapshot = await getDocs(itemsRef);
-            console.log('Found', itemsSnapshot.size, 'items');
 
             itemsSnapshot.forEach((doc) => {
                 const item = { 
@@ -152,7 +141,6 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             try {
                 const usersRef = collection(db, 'users');
                 const usersSnapshot = await getDocs(usersRef);
-                console.log('Found', usersSnapshot.size, 'users in users collection');
                 
                 usersSnapshot.forEach((doc) => {
                     const userData = doc.data();
@@ -211,7 +199,6 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             });
 
             const analyticsArray = Array.from(userMap.values());
-            console.log('Final user analytics:', analyticsArray);
             
             setUserAnalytics(analyticsArray);
             setAllUsers(allUsers);
@@ -225,7 +212,6 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const fetchUserAnalytics = async (userId: string) => {
         setLoading(true);
         try {
-            console.log('Fetching analytics for user:', userId);
             
             // Get all items for this user
             const itemsRef = collection(db, 'items');
@@ -296,7 +282,6 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
 
             userAnalytics.outstandingBalance = Math.max(0, userAnalytics.totalEarnings - userAnalytics.totalPaid);
             
-            console.log('User analytics calculated:', userAnalytics);
             setCurrentUserAnalytics(userAnalytics);
         } catch (error) {
             console.error('Error fetching user analytics:', error);

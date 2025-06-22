@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
@@ -79,39 +79,12 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
   const [showSoldItemModal, setShowSoldItemModal] = useState(false);
   const [selectedSoldItem, setSelectedSoldItem] = useState<ConsignmentItem | null>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchUserData();
-    }
-  }, [user]);
+  // Use refs to prevent excessive re-renders
+  const lastFetchRef = useRef<number>(0);
+  const isInitialLoadRef = useRef<boolean>(true);
 
-  // Listen for window focus to refresh purchase history
-  useEffect(() => {
-    const handleWindowFocus = () => {
-      if (user) {
-        console.log('Window focused, refreshing purchase history...');
-        refreshPurchaseHistory();
-      }
-    };
-
-    window.addEventListener('focus', handleWindowFocus);
-    return () => window.removeEventListener('focus', handleWindowFocus);
-  }, [user]);
-
-  // Listen for storage events to refresh when localStorage changes
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === `purchase_history_${user?.uid}` && user) {
-        console.log('Purchase history changed in localStorage, refreshing...');
-        refreshPurchaseHistory();
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [user]);
-
-  const getPurchaseHistory = (): PurchaseHistory[] => {
+  // Memoize the purchase history getter to prevent excessive calls
+  const getPurchaseHistory = useCallback((): PurchaseHistory[] => {
     if (!user) return [];
     
     try {
@@ -121,7 +94,6 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
         return parsed.map((item: any) => ({
           ...item,
           purchaseDate: new Date(item.purchaseDate),
-          // Ensure backward compatibility with existing data
           orderNumber: item.orderNumber || `ORD-${item.id.slice(-6)}`,
           customerInfo: item.customerInfo || {
             name: 'N/A',
@@ -153,25 +125,27 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
       console.error('Error loading purchase history:', error);
     }
     return [];
-  };
+  }, [user]);
 
-  const fetchUserData = async () => {
+  // Throttled refresh function to prevent excessive calls
+  const refreshPurchaseHistory = useCallback(() => {
     if (!user) return;
     
-    setLoading(true);
-    try {
-      await fetchMyListings();
-      // Refresh purchase history when component loads
-      const updatedPurchaseHistory = getPurchaseHistory();
-      setPurchaseHistory(updatedPurchaseHistory);
-    } catch (error) {
-      console.error('Error fetching user data:', error);
-    } finally {
-      setLoading(false);
+    const now = Date.now();
+    if (now - lastFetchRef.current < 5000) { // Throttle to max once per 5 seconds
+      return;
     }
-  };
+    lastFetchRef.current = now;
+    
+    const updatedPurchaseHistory = getPurchaseHistory();
+    setPurchaseHistory(updatedPurchaseHistory);
+    
+    // Recalculate user stats with updated purchase data
+    const totalSpent = updatedPurchaseHistory.reduce((sum: number, purchase: PurchaseHistory) => sum + purchase.total, 0);
+    setUserStats(prev => prev ? { ...prev, totalPurchases: updatedPurchaseHistory.length, totalSpent } : null);
+  }, [user, getPurchaseHistory]);
 
-  const fetchMyListings = async () => {
+  const fetchMyListings = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -269,7 +243,70 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
         totalSpent: 0
       });
     }
-  };
+  }, [user, getPurchaseHistory]);
+
+  const fetchUserData = useCallback(async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      await fetchMyListings();
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, fetchMyListings]);
+
+  // Main effect for initial data loading
+  useEffect(() => {
+    if (user && isInitialLoadRef.current) {
+      isInitialLoadRef.current = false;
+      fetchUserData();
+    }
+  }, [user, fetchUserData]);
+
+  // Optimized window focus handler with throttling
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    const handleWindowFocus = () => {
+      if (user && !isInitialLoadRef.current) {
+        // Debounce the refresh to prevent excessive calls
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          refreshPurchaseHistory();
+        }, 1000); // Wait 1 second after focus before refreshing
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      clearTimeout(timeoutId);
+    };
+  }, [user, refreshPurchaseHistory]);
+
+  // Optimized storage change handler with throttling
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === `purchase_history_${user?.uid}` && user && !isInitialLoadRef.current) {
+        // Debounce the refresh to prevent excessive calls
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          refreshPurchaseHistory();
+        }, 500); // Wait 500ms after storage change before refreshing
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      clearTimeout(timeoutId);
+    };
+  }, [user, refreshPurchaseHistory]);
 
   const handleItemClick = (item: ConsignmentItem) => {
     setSelectedItem(item);
@@ -313,18 +350,6 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
     date: item.soldAt?.toLocaleDateString() || 'N/A'
   }));
 
-  const refreshPurchaseHistory = () => {
-    if (!user) return;
-    console.log('Refreshing purchase history...');
-    const updatedPurchaseHistory = getPurchaseHistory();
-    console.log('Updated purchase history:', updatedPurchaseHistory.length, 'orders');
-    setPurchaseHistory(updatedPurchaseHistory);
-    
-    // Recalculate user stats with updated purchase data
-    const totalSpent = updatedPurchaseHistory.reduce((sum: number, purchase: PurchaseHistory) => sum + purchase.total, 0);
-    setUserStats(prev => prev ? { ...prev, totalPurchases: updatedPurchaseHistory.length, totalSpent } : null);
-  };
-
   const handleTrackingClick = (trackingNumber: string, orderNumber: string, estimatedDelivery: string) => {
     setSelectedTracking({
       trackingNumber,
@@ -366,7 +391,6 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
       };
 
       // In a real app, this would update Firestore
-      console.log('Generated shipping label:', labelData);
       setShippingLabelGenerated(true);
       setIsGeneratingLabel(false);
 
