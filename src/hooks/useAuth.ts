@@ -46,11 +46,15 @@ export const useAuth = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load admin state from localStorage
+  // Load admin state - simplified approach
   useEffect(() => {
     if (user) {
-      const adminState = localStorage.getItem(`adminMode_${user.uid}`);
-      setIsAdmin(adminState === 'true');
+      // Check localStorage for admin status
+      const localAdminState = localStorage.getItem(`adminMode_${user.uid}`) === 'true';
+      setIsAdmin(localAdminState);
+      console.log(`Loaded admin status: ${localAdminState}`);
+    } else {
+      setIsAdmin(false);
     }
   }, [user]);
 
@@ -83,15 +87,30 @@ export const useAuth = () => {
     }
   };
 
-  const toggleAdmin = () => {
+  const toggleAdmin = async () => {
     if (user) {
       const newAdminState = !isAdmin;
       setIsAdmin(newAdminState);
       localStorage.setItem(`adminMode_${user.uid}`, newAdminState.toString());
       
-      console.log(`Toggling admin mode: ${isAdmin} → ${newAdminState}. Refreshing page...`);
+      // Update the user document in Firestore with admin status
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(userRef, {
+          isAdmin: newAdminState,
+          email: user.email,
+          displayName: user.displayName,
+          lastSignIn: new Date()
+        }, { merge: true });
+        console.log(`✅ Admin status updated in Firestore: ${newAdminState}`);
+      } catch (error) {
+        console.error('❌ Error updating admin status in Firestore:', error);
+        // Still proceed with the toggle even if Firestore update fails
+      }
       
-      // Refresh the page to ensure all components re-initialize with new admin state
+      console.log(`🔄 Admin mode toggled: ${isAdmin} → ${newAdminState}`);
+      
+      // Refresh the page to ensure all components re-initialize
       setTimeout(() => {
         window.location.reload();
       }, 100);

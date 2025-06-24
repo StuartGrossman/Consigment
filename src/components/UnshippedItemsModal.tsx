@@ -23,9 +23,42 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
         }
     }, [isOpen, refreshTrigger]);
 
+    // Listen for unshipped items refresh events
+    useEffect(() => {
+        const handleUnshippedItemsRefresh = (event: CustomEvent) => {
+            console.log('📦 Unshipped items refresh event received:', event.detail);
+            if (isOpen && event.detail?.action === 'new_shipping_order') {
+                console.log('🚚 New shipping order detected - refreshing unshipped items...');
+                fetchUnshippedItems();
+            }
+        };
+
+        const handleItemsUpdated = (event: CustomEvent) => {
+            console.log('📦 Items updated event received:', event.detail);
+            if (isOpen && event.detail?.action === 'purchase_completed') {
+                console.log('🛒 Purchase completed - checking for new shipping orders...');
+                // Delay refresh to ensure Firebase write is complete
+                setTimeout(() => {
+                    fetchUnshippedItems();
+                }, 2000);
+            }
+        };
+
+        // Add event listeners
+        window.addEventListener('unshippedItemsRefresh', handleUnshippedItemsRefresh as EventListener);
+        window.addEventListener('itemsUpdated', handleItemsUpdated as EventListener);
+        
+        return () => {
+            window.removeEventListener('unshippedItemsRefresh', handleUnshippedItemsRefresh as EventListener);
+            window.removeEventListener('itemsUpdated', handleItemsUpdated as EventListener);
+        };
+    }, [isOpen]);
+
     const fetchUnshippedItems = async () => {
         setLoading(true);
         try {
+            console.log('🔍 Fetching unshipped items...');
+            
             const itemsRef = collection(db, 'items');
             let q = query(
                 itemsRef, 
@@ -34,11 +67,30 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
                 where('fulfillmentMethod', '==', 'shipping')
             );
 
+            console.log('📋 Query parameters:');
+            console.log('  - status: "sold"');
+            console.log('  - saleType: "online"');
+            console.log('  - fulfillmentMethod: "shipping"');
+
             const querySnapshot = await getDocs(q);
             const items: ConsignmentItem[] = [];
+            const allSoldItems: any[] = [];
+
+            console.log(`📊 Found ${querySnapshot.size} items matching query`);
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
+                allSoldItems.push({ id: doc.id, ...data });
+                
+                console.log(`📦 Checking item ${doc.id}:`, {
+                    title: data.title,
+                    status: data.status,
+                    saleType: data.saleType,
+                    fulfillmentMethod: data.fulfillmentMethod,
+                    shippedAt: data.shippedAt,
+                    soldAt: data.soldAt
+                });
+                
                 // Only include items that haven't been shipped yet
                 if (!data.shippedAt) {
                     items.push({
@@ -51,8 +103,14 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
                         shippedAt: data.shippedAt?.toDate(),
                         deliveredAt: data.deliveredAt?.toDate()
                     } as ConsignmentItem);
+                    console.log(`✅ Added item ${doc.id} to unshipped list`);
+                } else {
+                    console.log(`⏭️ Skipped item ${doc.id} - already shipped at ${data.shippedAt}`);
                 }
             });
+
+            console.log(`📈 Total unshipped items found: ${items.length}`);
+            console.log('📋 All sold items for debugging:', allSoldItems);
 
             items.sort((a, b) => {
                 const aTime = a.soldAt || a.createdAt;
@@ -61,8 +119,9 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
             });
 
             setUnshippedItems(items);
+            console.log('✅ Unshipped items state updated');
         } catch (error) {
-            console.error('Error fetching unshipped items:', error);
+            console.error('❌ Error fetching unshipped items:', error);
         } finally {
             setLoading(false);
         }

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthUser } from '../types';
 import { subscribeToActionLogs, ActionLog, logUserAction, getActionLogs } from '../services/firebaseService';
 import UserAnalyticsModal from './UserAnalyticsModal';
+import AdminBanModal from './AdminBanModal';
 
 interface ActionsDashboardProps {
   user: AuthUser | null;
@@ -17,6 +18,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
   const [userTypeFilter, setUserTypeFilter] = useState('all'); // New filter for admin/user
   const [timeFilter, setTimeFilter] = useState('24h');
   const [showUserAnalytics, setShowUserAnalytics] = useState(false);
+  const [showBanModal, setShowBanModal] = useState(false);
 
 
 
@@ -27,7 +29,10 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
     // Log that the dashboard was accessed
     if (user) {
       console.log('Logging dashboard access for user:', user.displayName);
-      logUserAction(user, 'dashboard_viewed', 'Accessed Actions Dashboard');
+      logUserAction(user, 'dashboard_viewed', 'Accessed Actions Dashboard').catch(error => {
+        console.warn('Failed to log dashboard access:', error);
+        // Don't fail the dashboard load if logging fails
+      });
     }
     
     // Subscribe to real-time action logs
@@ -158,6 +163,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
       case 'barcode_generated': return '📊';
       case 'shipping_label_generated': return '📦';
       case 'item_shipped': return '🚚';
+      case 'admin_action': return '🚫';
       default: return '📊';
     }
   };
@@ -180,6 +186,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
       case 'barcode_generated': return 'bg-emerald-100 text-emerald-800';
       case 'shipping_label_generated': return 'bg-blue-100 text-blue-800';
       case 'item_shipped': return 'bg-green-100 text-green-800';
+      case 'admin_action': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -216,6 +223,15 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         <div className="flex items-center gap-4">
           {isAdmin && (
             <>
+              <button
+                onClick={() => setShowBanModal(true)}
+                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+                </svg>
+                🚫 Ban Management
+              </button>
               <button
                 onClick={() => setShowUserAnalytics(true)}
                 className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
@@ -302,6 +318,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
               <option value="bulk_action">Bulk Actions</option>
               <option value="item_bookmarked">Item Bookmarked</option>
               <option value="cart_updated">Cart Updated</option>
+              <option value="admin_action">Admin Actions</option>
             </select>
           </div>
 
@@ -455,6 +472,13 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         user={user}
         isAdmin={isAdmin}
       />
+
+      {/* Ban Management Modal */}
+      {showBanModal && (
+        <AdminBanModal
+          onClose={() => setShowBanModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -685,7 +685,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
               let actionLogsCount = 0;
               if (isAdmin) {
                 try {
-                  const logsQuery = query(collection(db, 'action_logs'), limit(1));
+                  const logsQuery = query(collection(db, 'actionLogs'), limit(1));
                   const logsSnapshot = await getDocs(logsQuery);
                   actionLogsCount = logsSnapshot.size;
                 } catch (logError) {
@@ -1154,6 +1154,212 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
   };
 
   // Create a test performance run from feature test results
+  // Generate fake outdoor gear data
+  const generateFakeData = async () => {
+    if (!user) return;
+    
+    try {
+      addTestLog('🎯 Starting fake data generation...');
+      
+      const fakeItems = [
+        {
+          title: "Patagonia Down Sweater Jacket",
+          description: "Lightweight, compressible down insulation perfect for alpine adventures. 800-fill European goose down provides exceptional warmth-to-weight ratio. Features a windproof shell and DWR finish.",
+          price: 229.99,
+          brand: "Patagonia",
+          category: "Apparel",
+          condition: "Excellent",
+          size: "M",
+          gender: "Men",
+          color: "Navy Blue",
+          material: "100% Recycled Polyester Shell, 800-fill Down",
+          images: ['/src/assets/outlet images/s-l500.webp'],
+          sellerUid: "mygrossman.stewart.gmail.com",
+          sellerName: "Stuart Grossman",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "Black Diamond Half Dome Climbing Helmet",
+          description: "Versatile climbing helmet designed for multi-pitch routes and alpine climbing. Lightweight construction with excellent ventilation. Meets CE and UIAA safety standards.",
+          price: 65.99,
+          brand: "Black Diamond",
+          category: "Climbing",
+          condition: "Very Good",
+          size: "M/L",
+          gender: "Unisex",
+          color: "Orange",
+          material: "Polycarbonate Shell, EPS Foam",
+          images: ['/src/assets/outlet images/s-l500 (1).webp'],
+          sellerUid: "mygrossman.stewart.gmail.com",
+          sellerName: "Stuart Grossman",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "Osprey Atmos AG 65L Backpack",
+          description: "Award-winning backpack with Anti-Gravity suspension system. Perfect for multi-day hiking and backpacking trips. Features advanced ventilation and load distribution.",
+          price: 189.99,
+          brand: "Osprey",
+          category: "Hiking",
+          condition: "Good",
+          size: "M",
+          gender: "Men",
+          color: "Graphite Grey",
+          material: "210D Nylon, Aluminum Frame",
+          images: ['/src/assets/outlet images/s-l500 (2).webp'],
+          sellerUid: user.uid,
+          sellerName: user.displayName || "Store Admin",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "Salomon Speedcross 5 Trail Running Shoes",
+          description: "Aggressive grip and precise foothold for technical trail running. Updated outsole pattern and SensiFit technology for secure foot wrap. Perfect for muddy conditions.",
+          price: 119.99,
+          brand: "Salomon",
+          category: "Footwear",
+          condition: "Very Good",
+          size: "10.5",
+          gender: "Men",
+          color: "Black/Red",
+          material: "Synthetic/Textile Upper, Contagrip Outsole",
+          images: ['/src/assets/outlet images/s-l500 (3).webp'],
+          sellerUid: user.uid,
+          sellerName: user.displayName || "Store Admin",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "Arc'teryx Beta AR Jacket",
+          description: "Premium GORE-TEX Pro hardshell for extreme alpine conditions. Durable, waterproof, and breathable protection. Helmet-compatible hood and pit zip ventilation.",
+          price: 399.99,
+          brand: "Arc'teryx",
+          category: "Apparel",
+          condition: "Excellent",
+          size: "L",
+          gender: "Men",
+          color: "Dynasty",
+          material: "GORE-TEX Pro, N80p-X face fabric",
+          images: ['/src/assets/outlet images/s-l500 (4).webp'],
+          sellerUid: user.uid,
+          sellerName: user.displayName || "Store Admin",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "Mammut Zephir Alpine Climbing Harness",
+          description: "Lightweight alpine harness designed for mountaineering and multi-pitch climbing. Minimalist design with four gear loops and adjustable leg loops.",
+          price: 79.99,
+          brand: "Mammut",
+          category: "Climbing",
+          condition: "Good",
+          size: "L",
+          gender: "Unisex",
+          color: "Black/Orange",
+          material: "Polyamide, Polyester",
+          images: ['/src/assets/outlet images/s-l500 (5).webp'],
+          sellerUid: user.uid,
+          sellerName: user.displayName || "Store Admin",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "The North Face Base Layer Top",
+          description: "Merino wool base layer for temperature regulation and odor resistance. Perfect for multi-day adventures. Flatlock seams prevent chafing during high-output activities.",
+          price: 45.99,
+          brand: "The North Face",
+          category: "Apparel",
+          condition: "Very Good",
+          size: "M",
+          gender: "Women",
+          color: "Heather Grey",
+          material: "87% Merino Wool, 13% Nylon",
+          images: ['/src/assets/outlet images/s-l500 (6).webp'],
+          sellerUid: user.uid,
+          sellerName: user.displayName || "Store Admin",
+          status: "live",
+          isTestData: true
+        },
+        {
+          title: "Smartwool PhD Outdoor Hiking Socks",
+          description: "Premium merino wool hiking socks with targeted cushioning and moisture management. Virtually odor-free and naturally temperature regulating.",
+          price: 18.99,
+          brand: "Smartwool",
+          category: "Apparel",
+          condition: "Good",
+          size: "L",
+          gender: "Unisex",
+          color: "Charcoal",
+          material: "56% Merino Wool, 39% Nylon, 5% Elastane",
+          images: ['/src/assets/outlet images/s-l500 (7).webp'],
+          sellerUid: user.uid,
+          sellerName: user.displayName || "Store Admin",
+          status: "live",
+          isTestData: true
+        }
+      ];
+
+      // Add items to Firebase
+      for (const item of fakeItems) {
+        const itemData = {
+          ...item,
+          createdAt: new Date(),
+          liveAt: new Date(),
+          approvedAt: new Date(),
+          sku: `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          weight: Math.random() * 5 + 0.5, // Random weight between 0.5-5.5 lbs
+          dimensions: `${Math.floor(Math.random() * 20 + 10)}" x ${Math.floor(Math.random() * 15 + 8)}" x ${Math.floor(Math.random() * 8 + 3)}"`,
+          tags: ['test-data', 'outdoor-gear', item.category.toLowerCase()],
+          isTestData: true
+        };
+
+        await addDoc(collection(db, 'items'), itemData);
+        addTestLog(`✅ Created: ${item.title} (${item.brand})`);
+      }
+
+      addTestLog(`🎉 Successfully generated ${fakeItems.length} test items!`);
+      addTestLog(`📧 2 items assigned to: mygrossman.stewart.gmail.com`);
+      addTestLog(`🏪 6 items assigned to: Store Admin (${user.displayName})`);
+      
+    } catch (error) {
+      console.error('Error generating fake data:', error);
+      addTestLog(`❌ Error generating fake data: ${error}`);
+    }
+  };
+
+  // Remove all test data
+  const removeTestData = async () => {
+    if (!user) return;
+    
+    try {
+      addTestLog('🗑️ Starting test data removal...');
+      
+      const itemsRef = collection(db, 'items');
+      const testDataQuery = query(itemsRef, where('isTestData', '==', true));
+      const snapshot = await getDocs(testDataQuery);
+      
+      let deletedCount = 0;
+      const deletePromises = snapshot.docs.map(async (document) => {
+        const itemData = document.data();
+        await deleteDoc(doc(db, 'items', document.id));
+        addTestLog(`🗑️ Deleted: ${itemData.title} (${itemData.brand || 'Unknown Brand'})`);
+        deletedCount++;
+      });
+      
+      await Promise.all(deletePromises);
+      addTestLog(`✅ Successfully removed ${deletedCount} test items from database`);
+      
+      if (deletedCount === 0) {
+        addTestLog('ℹ️ No test data found to remove');
+      }
+      
+    } catch (error) {
+      console.error('Error removing test data:', error);
+      addTestLog(`❌ Error removing test data: ${error}`);
+    }
+  };
+
   const createTestPerformanceRun = (
     results: Map<string, TestResult>, 
     duration: number, 
@@ -1322,7 +1528,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] p-2">
+    <div className="modal-backdrop flex items-center justify-center p-2">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-[95vw] max-h-[95vh] overflow-hidden">
         <div className="sticky top-0 bg-white border-b border-gray-200">
           <div className="flex justify-between items-center p-6 pb-0">
@@ -1812,6 +2018,117 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           {/* Firebase Rules Tab */}
           {activeTab === 'firebase' && (
             <div className="p-6">
+              {/* Test Data Management Section */}
+              <div className="mb-8 bg-gradient-to-r from-blue-50 to-green-50 rounded-xl border border-blue-200 p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-green-500 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">🧪 Test Data Management</h3>
+                    <p className="text-gray-600">Generate realistic outdoor gear listings for testing and development</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Generate Test Data */}
+                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <h4 className="font-semibold text-gray-900">Generate Test Items</h4>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Creates 8 realistic outdoor gear items based on product images. 
+                      2 items assigned to <strong>mygrossman.stewart.gmail.com</strong>, 
+                      6 items assigned to store admin.
+                    </p>
+                    <button
+                      onClick={() => throttledAction('generate_fake_data', generateFakeData)}
+                      disabled={isActionDisabled('generate_fake_data') || !user}
+                      className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-lg hover:from-green-600 hover:to-blue-600 disabled:bg-gray-400 transition-all font-medium flex items-center justify-center gap-2"
+                    >
+                      {isActionDisabled('generate_fake_data') ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                          </svg>
+                          Generate 8 Test Items
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Remove Test Data */}
+                  <div className="bg-white rounded-lg p-4 border border-gray-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      <h4 className="font-semibold text-gray-900">Remove Test Data</h4>
+                    </div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Removes all items tagged as test data from the database. 
+                      This action is irreversible and only affects items marked with 
+                      <code className="bg-gray-100 px-1 py-0.5 rounded text-xs">isTestData: true</code>.
+                    </p>
+                    <button
+                      onClick={() => throttledAction('remove_test_data', removeTestData)}
+                      disabled={isActionDisabled('remove_test_data') || !user}
+                      className="w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg hover:from-red-600 hover:to-red-700 disabled:bg-gray-400 transition-all font-medium flex items-center justify-center gap-2"
+                    >
+                      {isActionDisabled('remove_test_data') ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Removing...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          Remove All Test Data
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Test Data Info */}
+                <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <h5 className="font-medium text-blue-900 mb-1">Generated Test Items Include:</h5>
+                      <ul className="text-sm text-blue-800 space-y-1">
+                        <li>• <strong>Patagonia Down Jacket</strong> - Premium insulation for mountain adventures</li>
+                        <li>• <strong>Black Diamond Climbing Helmet</strong> - Safety gear for rock climbing</li>
+                        <li>• <strong>Osprey Hiking Backpack</strong> - Multi-day trekking pack</li>
+                        <li>• <strong>Salomon Trail Running Shoes</strong> - High-performance footwear</li>
+                        <li>• <strong>Arc'teryx Softshell Jacket</strong> - Weather-resistant outer layer</li>
+                        <li>• <strong>Mammut Climbing Harness</strong> - Professional climbing equipment</li>
+                        <li>• <strong>The North Face Base Layer</strong> - Moisture-wicking undergarment</li>
+                        <li>• <strong>Smartwool Merino Socks</strong> - Natural fiber hiking socks</li>
+                      </ul>
+                      <p className="text-xs text-blue-700 mt-2">
+                        All test items are tagged with <code className="bg-blue-100 px-1 py-0.5 rounded">isTestData: true</code> 
+                        and include realistic pricing, descriptions, and metadata.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Firebase Security Rules</h3>
                 <p className="text-gray-600">Current security rules configuration for Firestore database</p>

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { ConsignmentItem } from '../types';
+import { useCart } from '../hooks/useCart';
+import { useAuth } from '../hooks/useAuth';
 
 interface ItemCardProps {
   item: ConsignmentItem;
@@ -9,6 +11,8 @@ interface ItemCardProps {
 
 const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const { addToCart, removeFromCart, isInCart, getCartItemQuantity, isCartActionDisabled, isCartActionProcessing, toggleBookmark, isBookmarked } = useCart();
+  const { user } = useAuth();
 
   const nextImage = () => {
     setCurrentImageIndex((prev) => (prev + 1) % item.images.length);
@@ -26,6 +30,20 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
 
   const stopPropagation = (e: React.MouseEvent) => {
     e.stopPropagation();
+  };
+
+  const handleCartAction = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isInCart(item.id)) {
+      await removeFromCart(item.id, user);
+    } else {
+      await addToCart(item, user);
+    }
+  };
+
+  const handleBookmarkAction = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    await toggleBookmark(item.id, user);
   };
 
   return (
@@ -117,17 +135,12 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
           </div>
         )}
         
-        <div className="flex justify-between items-center">
-          <div className="text-2xl font-bold text-green-600">
-            ${item.price.toFixed(2)}
-          </div>
-          <div className="text-xs text-gray-500">
-            by {item.sellerName}
-          </div>
+        <div className="text-2xl font-bold text-green-600">
+          ${item.price.toFixed(2)}
         </div>
 
         <div className="mt-3 pt-3 border-t border-gray-100">
-          <div className="flex justify-between items-center text-xs text-gray-400">
+          <div className="flex justify-between items-center text-xs text-gray-400 mb-3">
             <span>Listed {new Date(item.createdAt).toLocaleDateString()}</span>
             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
               item.status === 'live' ? 'bg-green-100 text-green-800' :
@@ -138,6 +151,49 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
               {item.status}
             </span>
           </div>
+          
+          {/* Action Buttons - Only show for live items and non-admin users */}
+          {!isAdmin && item.status === 'live' && (
+            <div className="flex gap-2">
+              {/* Bookmark Button */}
+              <button
+                onClick={handleBookmarkAction}
+                disabled={isCartActionDisabled(`bookmark-action-${item.id}`)}
+                className={`flex-shrink-0 py-2 px-3 rounded-lg font-medium transition-all duration-200 flex items-center justify-center ${
+                  isBookmarked(item.id)
+                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={isBookmarked(item.id) ? 'Remove from Bookmarks' : 'Add to Bookmarks'}
+              >
+                <svg className="w-4 h-4" fill={isBookmarked(item.id) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                </svg>
+              </button>
+              
+              {/* Cart Button */}
+              <button
+                onClick={handleCartAction}
+                disabled={isCartActionDisabled(`cart-action-${item.id}`)}
+                className={`flex-1 py-2 px-4 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+                  isInCart(item.id)
+                    ? 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-orange-500 text-white hover:bg-orange-600'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                </svg>
+                {isCartActionProcessing(`cart-action-${item.id}`) ? (
+                  <span>Processing...</span>
+                ) : isInCart(item.id) ? (
+                  <span>Remove from Cart</span>
+                ) : (
+                  <span>Add to Cart</span>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

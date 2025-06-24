@@ -567,22 +567,86 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         });
 
     const getSortIcon = (field: SortField) => {
-        if (sortField !== field) return '↕️';
-        return sortDirection === 'asc' ? '↑' : '↓';
+        if (sortField !== field) {
+            return (
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+            );
+        }
+        return sortDirection === 'asc' ? (
+            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+        ) : (
+            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+        );
     };
 
     const getActionIcon = (action: string) => {
         switch (action) {
-            case 'item_listed': return '📝';
-            case 'item_approved': return '✅';
-            case 'item_purchased': return '🛒';
-            case 'item_sold': return '💰';
-            case 'item_archived': return '📦';
-            case 'user_login': return '🔐';
-            case 'user_logout': return '🚪';
-            case 'item_bookmarked': return '❤️';
-            case 'cart_updated': return '🛍️';
-            default: return '📊';
+            case 'item_listed': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                );
+            case 'item_approved': 
+                return (
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                );
+            case 'item_purchased': 
+                return (
+                    <svg className="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                    </svg>
+                );
+            case 'item_sold': 
+                return (
+                    <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                );
+            case 'item_archived': 
+                return (
+                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                );
+            case 'user_login': 
+                return (
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                    </svg>
+                );
+            case 'user_logout': 
+                return (
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                );
+            case 'item_bookmarked': 
+                return (
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                );
+            case 'cart_updated': 
+                return (
+                    <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                    </svg>
+                );
+            default: 
+                return (
+                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                );
         }
     };
 
@@ -711,25 +775,33 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                                                     onClick={() => handleSort('totalItemsSold')}
                                                 >
-                                                    Items Sold {getSortIcon('totalItemsSold')}
+                                                    <div className="flex items-center gap-1">
+                                                        Items Sold {getSortIcon('totalItemsSold')}
+                                                    </div>
                                                 </th>
                                                 <th 
                                                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                                                     onClick={() => handleSort('totalEarnings')}
                                                 >
-                                                    Total Earned {getSortIcon('totalEarnings')}
+                                                    <div className="flex items-center gap-1">
+                                                        Total Earned {getSortIcon('totalEarnings')}
+                                                    </div>
                                                 </th>
                                                 <th 
                                                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                                                     onClick={() => handleSort('outstandingBalance')}
                                                 >
-                                                    Outstanding Balance {getSortIcon('outstandingBalance')}
+                                                    <div className="flex items-center gap-1">
+                                                        Outstanding Balance {getSortIcon('outstandingBalance')}
+                                                    </div>
                                                 </th>
                                                 <th 
                                                     className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                                                     onClick={() => handleSort('storeCredit')}
                                                 >
-                                                    Store Credit {getSortIcon('storeCredit')}
+                                                    <div className="flex items-center gap-1">
+                                                        Store Credit {getSortIcon('storeCredit')}
+                                                    </div>
                                                 </th>
                                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                                     Success Rate
@@ -866,7 +938,11 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                 <div className="max-h-96 overflow-y-auto">
                                     {userActions.length === 0 ? (
                                         <div className="p-8 text-center text-gray-500">
-                                            <div className="text-4xl mb-2">📊</div>
+                                            <div className="mb-4">
+                                                <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                                </svg>
+                                            </div>
                                             <p>No activity found for this user</p>
                                         </div>
                                     ) : (
@@ -874,7 +950,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                             {userActions.map((action, index) => (
                                                 <div key={index} className="p-4 hover:bg-gray-50">
                                                     <div className="flex items-start space-x-3">
-                                                        <div className="text-2xl">{getActionIcon(action.action)}</div>
+                                                        <div className="flex-shrink-0 mt-0.5">{getActionIcon(action.action)}</div>
                                                         <div className="flex-1 min-w-0">
                                                             <div className="flex items-center justify-between">
                                                                 <p className="text-sm font-medium text-gray-900 capitalize">

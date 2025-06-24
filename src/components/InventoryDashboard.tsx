@@ -34,6 +34,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   const [brandFilter, setBrandFilter] = useState('all');
   const [conditionFilter, setConditionFilter] = useState('all');
   const [genderFilter, setGenderFilter] = useState('all');
+  const [shippingFilter, setShippingFilter] = useState('all'); // New filter for shipping status
+  const [refundFilter, setRefundFilter] = useState('all'); // New filter for refunded items
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('newest');
   const [showBulkActions, setShowBulkActions] = useState(false);
@@ -58,7 +60,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   useEffect(() => {
     filterAndSortItems();
     updateFilterOptions();
-  }, [items, searchQuery, statusFilter, categoryFilter, brandFilter, conditionFilter, genderFilter, sortBy]);
+  }, [items, searchQuery, statusFilter, categoryFilter, brandFilter, conditionFilter, genderFilter, shippingFilter, refundFilter, sortBy]);
 
   useEffect(() => {
     if (viewMode === 'grouped') {
@@ -133,6 +135,36 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
       filtered = filtered.filter(item => item.gender === genderFilter);
     }
 
+    // Apply shipping filter
+    if (shippingFilter !== 'all') {
+      if (shippingFilter === 'shipped') {
+        filtered = filtered.filter(item => 
+          item.status === 'sold' && 
+          item.fulfillmentMethod === 'shipping' && 
+          item.trackingNumber && 
+          item.shippingLabelGenerated
+        );
+      } else if (shippingFilter === 'unshipped') {
+        filtered = filtered.filter(item => 
+          item.status === 'sold' && 
+          item.fulfillmentMethod === 'shipping' && 
+          (!item.trackingNumber || !item.shippingLabelGenerated)
+        );
+      } else if (shippingFilter === 'pickup') {
+        filtered = filtered.filter(item => 
+          item.status === 'sold' && 
+          item.fulfillmentMethod === 'pickup'
+        );
+      }
+    }
+
+    // Apply refund filter - TODO: Implement with RefundRecord lookup
+    if (refundFilter !== 'all') {
+      // This would require looking up refund records in a separate collection
+      // For now, we'll skip this filter until we implement proper refund tracking
+      console.log('Refund filter not yet implemented - requires RefundRecord lookup');
+    }
+
     // Apply search filter
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
@@ -144,7 +176,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         item.sellerName?.toLowerCase().includes(searchLower) ||
         item.material?.toLowerCase().includes(searchLower) ||
         item.color?.toLowerCase().includes(searchLower) ||
-        item.id.toLowerCase().includes(searchLower)
+        item.id.toLowerCase().includes(searchLower) ||
+        item.saleTransactionId?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -400,7 +433,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         <div className="flex items-center gap-4">
           <button
             onClick={() => setShowImportModal(true)}
-            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
@@ -409,7 +442,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </button>
           <button
             onClick={() => setShowExportModal(true)}
-            className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors text-sm font-medium flex items-center gap-2"
+            className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l3-3m0 0l-3-3m3 3H9" />
@@ -470,7 +503,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
 
       {/* Filters and Search */}
       <div className="bg-white rounded-lg border p-6">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
           {/* Search */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
@@ -560,6 +593,35 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
             </select>
           </div>
 
+          {/* Shipping Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Status</label>
+            <select
+              value={shippingFilter}
+              onChange={(e) => setShippingFilter(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="all">All Orders</option>
+              <option value="shipped">Shipped</option>
+              <option value="unshipped">Unshipped</option>
+              <option value="pickup">Store Pickup</option>
+            </select>
+          </div>
+
+          {/* Refund Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Refund Status</label>
+            <select
+              value={refundFilter}
+              onChange={(e) => setRefundFilter(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            >
+              <option value="all">All Items</option>
+              <option value="refunded">Refunded</option>
+              <option value="not_refunded">Not Refunded</option>
+            </select>
+          </div>
+
           {/* Sort By */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
@@ -596,13 +658,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleBulkStatusChange('approved')}
-                className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
+                className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
               >
                 Move to Approved
               </button>
               <button
                 onClick={() => handleBulkStatusChange('live')}
-                className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
+                className="bg-orange-500 text-white px-3 py-1 rounded text-sm hover:bg-orange-600"
               >
                 Make Live
               </button>
@@ -797,7 +859,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                       {group.items.length > 1 && ` - $${Math.max(...group.items.map(item => item.price))}`}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                         {group.quantity}
                       </span>
                     </td>

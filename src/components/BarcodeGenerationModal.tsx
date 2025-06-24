@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import JsBarcode from 'jsbarcode';
 import { ConsignmentItem } from '../types';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, getDoc, setDoc } from 'firebase/firestore';
 import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logUserAction } from '../services/firebaseService';
@@ -24,7 +24,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
 
   useEffect(() => {
     if (isOpen && item) {
@@ -159,12 +159,43 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
   const handleConfirmAndApprove = async () => {
     if (!item || !barcodeData || !canvasRef.current) return;
 
+    if (!user) {
+      console.error('No authenticated user found');
+      alert('Authentication error. Please log in again.');
+      return;
+    }
+
+    console.log('Starting barcode confirmation process...');
+    console.log('User details:', {
+      uid: user.uid,
+      email: user.email,
+      isAdmin: isAdmin
+    });
+
+    if (!isAdmin) {
+      console.error('User does not have admin privileges');
+      alert('Admin privileges required to approve items. Please contact an administrator.');
+      return;
+    }
+
     setIsConfirming(true);
     
     try {
+      // Ensure admin status is set in Firestore
+      console.log('Setting admin status in Firestore...');
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, {
+        isAdmin: true,
+        email: user.email,
+        displayName: user.displayName,
+        lastSignIn: new Date()
+      }, { merge: true });
+      console.log('✅ Admin status confirmed in Firestore');
+
       // Generate and upload barcode image to Firebase Storage
       let barcodeImageUrl = '';
       
+      console.log('Uploading barcode image...');
       await new Promise<void>((resolve) => {
         canvasRef.current!.toBlob(async (blob) => {
           if (blob) {
@@ -172,6 +203,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
               const storageRef = ref(storage, `barcodes/${item.id}_${barcodeData}.png`);
               await uploadBytes(storageRef, blob);
               barcodeImageUrl = await getDownloadURL(storageRef);
+              console.log('Barcode image uploaded successfully:', barcodeImageUrl);
             } catch (error) {
               console.error('Error uploading barcode image:', error);
             }
@@ -182,14 +214,23 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
       // Save barcode data and approve the item
       const itemRef = doc(db, 'items', item.id);
-      await updateDoc(itemRef, {
+      const updateData = {
         barcodeData: barcodeData,
-        barcodeGeneratedAt: new Date(),
+        barcodeGeneratedAt: serverTimestamp(),
         barcodeImageUrl: barcodeImageUrl,
-        printConfirmedAt: new Date(),
+        printConfirmedAt: serverTimestamp(),
         status: 'approved',
-        approvedAt: new Date()
-      });
+        approvedAt: serverTimestamp()
+      };
+      
+      console.log('Attempting to update item...');
+      console.log('Item ID:', item.id);
+      console.log('Update data:', updateData);
+      console.log('Current user admin status:', isAdmin);
+      
+      await updateDoc(itemRef, updateData);
+
+      console.log('Item updated successfully');
 
       // Log the action
       await logUserAction(user, 'item_approved', 'Generated barcode and approved item', item.id, item.title);
@@ -199,6 +240,16 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
       onClose();
     } catch (error) {
       console.error('Error updating item with barcode:', error);
+      console.error('Full error details:', {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        code: (error as any)?.code,
+        details: (error as any)?.details
+      });
+      
+      // Show user-friendly error message
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      alert(`Failed to confirm item approval: ${errorMessage}\n\nUser: ${user.email}\nAdmin Status: ${isAdmin}\nItem ID: ${item.id}\n\nPlease try again or contact support if the issue persists.`);
     } finally {
       setIsConfirming(false);
     }
@@ -264,26 +315,28 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
           {/* Print Section */}
           <div className="border-t border-gray-200 pt-6">
-                          <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="flex-1">
-                  <h4 className="text-lg font-semibold text-gray-800 mb-2">Print Label</h4>
-                  <p className="text-sm text-gray-600">
-                    Print this barcode label and attach it to the item before adding to inventory.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 items-center">
-                  <button
-                    onClick={handlePrint}
-                    disabled={isGenerating || !barcodeData}
-                    className="px-6 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white disabled:text-gray-500"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                    </svg>
-                    Print Label
-                  </button>
-                </div>
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+              <div className="flex-1">
+                <h4 className="text-lg font-semibold text-gray-800 mb-2">Print Label</h4>
+                <p className="text-sm text-gray-600">
+                  Print this barcode label and attach it to the item before adding to inventory.
+                </p>
               </div>
+              <div className="flex flex-col sm:flex-row gap-3 items-center">
+                <button
+                  onClick={handlePrint}
+                  disabled={isGenerating || !barcodeData}
+                  className="px-6 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white disabled:text-gray-500"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print
+                </button>
+              </div>
+            </div>
+
+
           </div>
         </div>
 
@@ -296,25 +349,37 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
             >
               Cancel
             </button>
-            <button
-              onClick={handleConfirmAndApprove}
-              disabled={isConfirming || isGenerating || !barcodeData}
-              className="px-6 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500"
-            >
-              {isConfirming ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  Confirming...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  Confirm Printed
-                </>
-              )}
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePrint}
+                disabled={isGenerating || !barcodeData}
+                className="px-6 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white disabled:text-gray-500"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                Print
+              </button>
+              <button
+                onClick={handleConfirmAndApprove}
+                disabled={isConfirming || isGenerating || !barcodeData}
+                className="px-6 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white disabled:bg-gray-300 disabled:cursor-not-allowed disabled:text-gray-500"
+              >
+                {isConfirming ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Confirming...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Confirm Printed
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

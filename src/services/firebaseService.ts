@@ -1,4 +1,4 @@
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import { collection, addDoc, getDocs, query, orderBy, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { AuthUser } from '../types';
 
@@ -40,11 +40,18 @@ export const logUserAction = async (
             action,
             details,
             timestamp: serverTimestamp(),
-            itemId,
-            itemTitle,
             userAgent: navigator.userAgent,
             isAdmin: user.email === 'stuartjamessmith@gmail.com'
         };
+
+        // Only add itemId and itemTitle if they are provided and not undefined
+        if (itemId !== undefined && itemId !== null) {
+            actionLog.itemId = itemId;
+        }
+        
+        if (itemTitle !== undefined && itemTitle !== null) {
+            actionLog.itemTitle = itemTitle;
+        }
 
         await addDoc(collection(db, 'actionLogs'), actionLog);
     } catch (error) {
@@ -98,18 +105,10 @@ export const getActionLogs = async (): Promise<ActionLog[]> => {
 export const subscribeToActionLogs = (callback: (logs: ActionLog[]) => void): (() => void) => {
     try {
         console.log('Setting up action logs subscription...');
+        console.log('Current user:', auth.currentUser?.uid, auth.currentUser?.email);
         
-        // First try without orderBy in case there's an index issue
-        let logsQuery;
-        try {
-            logsQuery = query(
-                collection(db, 'actionLogs'), 
-                orderBy('timestamp', 'desc')
-            );
-        } catch (indexError) {
-            console.warn('Could not create ordered query, falling back to unordered:', indexError);
-            logsQuery = query(collection(db, 'actionLogs'));
-        }
+        // Use a simple query without orderBy to avoid index issues
+        const logsQuery = query(collection(db, 'actionLogs'));
         
         return onSnapshot(logsQuery, (snapshot) => {
             try {
@@ -138,21 +137,11 @@ export const subscribeToActionLogs = (callback: (logs: ActionLog[]) => void): ((
             }
         }, (error) => {
             console.error('Error subscribing to action logs:', error);
-            // Try a simple query without orderBy as fallback
-            console.log('Attempting fallback query...');
-            const fallbackQuery = query(collection(db, 'actionLogs'));
-            return onSnapshot(fallbackQuery, (snapshot) => {
-                try {
-                    const logs = snapshot.docs.map(doc => ({
-                        id: doc.id,
-                        ...doc.data()
-                    })) as ActionLog[];
-                    callback(logs);
-                } catch (fallbackError) {
-                    console.error('Fallback query also failed:', fallbackError);
-                    callback([]);
-                }
-            });
+            console.error('Error details:', error.code, error.message);
+            console.log('User auth state:', auth.currentUser ? 'authenticated' : 'not authenticated');
+            
+            // Return empty array on error
+            callback([]);
         });
     } catch (error) {
         console.error('Error setting up action logs subscription:', error);

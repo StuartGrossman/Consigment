@@ -43,6 +43,7 @@ const formatDate = (timestamp: any): string => {
 const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item, onItemUpdated }) => {
   const { 
     addToCart, 
+    removeFromCart,
     isInCart, 
     getCartItemQuantity, 
     toggleBookmark, 
@@ -102,19 +103,34 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
     }
   };
 
-  const handleAddToCart = async () => {
-    await addToCart(item, user);
-    
-    // Show a brief success message
-    const toast = document.createElement('div');
-    toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
-    toast.textContent = `${item.title} added to cart!`;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      if (document.body.contains(toast)) {
-        document.body.removeChild(toast);
-      }
-    }, 2000);
+  const handleCartAction = async () => {
+    if (isInCart(item.id)) {
+      await removeFromCart(item.id, user);
+      
+      // Show a brief success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = `${item.title} removed from cart!`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 2000);
+    } else {
+      await addToCart(item, user);
+      
+      // Show a brief success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = `${item.title} added to cart!`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 2000);
+    }
   };
 
   const handleBookmarkToggle = async () => {
@@ -201,7 +217,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
     setIsProcessingRefund(true);
     try {
-      // Create refund record
+      // Create refund record with proper fallback values
       const refundRecord = {
         id: `refund_${item.id}_${Date.now()}`,
         itemId: item.id,
@@ -214,8 +230,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
         refundedByName: user?.displayName || user?.email || 'Admin',
         originalBuyerId: item.buyerId || '',
         originalBuyerName: item.buyerName || item.buyerInfo?.name || 'Unknown Buyer',
-        sellerName: item.sellerName,
-        sellerId: item.sellerId
+        sellerName: item.sellerName || 'Unknown Seller',
+        sellerId: item.sellerId || 'unknown_seller' // Add fallback for sellerId
       };
 
       // Add refund record to Firebase
@@ -423,7 +439,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[80] p-4">
+    <div className="modal-backdrop flex items-center justify-center p-4">
       <div className={`bg-white rounded-xl shadow-2xl ${item.status === 'sold' ? 'max-w-7xl' : 'max-w-4xl'} w-full max-h-[90vh] overflow-hidden`}>
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
@@ -608,30 +624,32 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
           {/* Additional Information Sections */}
           <div className={`${item.status === 'sold' ? 'grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6' : 'mt-6'}`}>
-            {/* Seller Information */}
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="font-medium text-gray-800 mb-2">Seller Information</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                <div>
-                  <span className="text-gray-600">Name:</span>
-                  <span className="ml-2 font-medium">{item.sellerName}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Email:</span>
-                  <span className="ml-2">{item.sellerEmail}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Listed:</span>
-                  <span className="ml-2">{formatDate(item.createdAt)}</span>
-                </div>
-                {item.approvedAt && (
+            {/* Seller Information - Admin Only */}
+            {isAdmin && (
+              <div className="p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-medium text-gray-800 mb-2">Seller Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-gray-600">Approved:</span>
-                    <span className="ml-2">{formatDate(item.approvedAt)}</span>
+                    <span className="text-gray-600">Name:</span>
+                    <span className="ml-2 font-medium">{item.sellerName}</span>
                   </div>
-                )}
+                  <div>
+                    <span className="text-gray-600">Email:</span>
+                    <span className="ml-2">{item.sellerEmail}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Listed:</span>
+                    <span className="ml-2">{formatDate(item.createdAt)}</span>
+                  </div>
+                  {item.approvedAt && (
+                    <div>
+                      <span className="text-gray-600">Approved:</span>
+                      <span className="ml-2">{formatDate(item.approvedAt)}</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Barcode Information (Admin Only) */}
             {isAdmin && item.barcodeData && (
@@ -687,23 +705,23 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                 </svg>
               </button>
 
-              {/* Add to Cart Button */}
+              {/* Cart Action Button */}
               <button
-                onClick={handleAddToCart}
-                disabled={isCartActionDisabled(`add-to-cart-${item.id}`)}
+                onClick={handleCartAction}
+                disabled={isCartActionDisabled(`cart-action-${item.id}`)}
                 className={`flex-1 py-3 px-6 rounded-lg font-semibold transition-all duration-200 ${
                   isInCart(item.id)
-                    ? 'bg-green-500 text-white hover:bg-green-600'
+                    ? 'bg-red-500 text-white hover:bg-red-600'
                     : 'bg-orange-500 text-white hover:bg-orange-600'
                 } flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-1.8 7.2M7 13l-1.8 7.2M7 13h10m0 0v8a2 2 0 01-2 2H9a2 2 0 01-2-2v-8m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
                 </svg>
-                {isCartActionProcessing(`add-to-cart-${item.id}`) ? (
-                  <span>Adding...</span>
+                {isCartActionProcessing(`cart-action-${item.id}`) ? (
+                  <span>Processing...</span>
                 ) : isInCart(item.id) ? (
-                  <span>In Cart ({getCartItemQuantity(item.id)})</span>
+                  <span>Remove from Cart</span>
                 ) : (
                   <span>Add to Cart - ${item.price}</span>
                 )}

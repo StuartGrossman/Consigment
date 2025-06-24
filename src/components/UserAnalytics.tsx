@@ -665,23 +665,71 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
         <div className="border-b border-gray-200">
           <nav className="flex space-x-4 md:space-x-8 px-4 md:px-6 overflow-x-auto scrollbar-hide">
             {[
-              { key: 'overview', label: 'Overview', icon: '📈' },
-              { key: 'listings', label: 'My Listings', icon: '📋' },
-              { key: 'sales', label: 'Sales History', icon: '💵' },
-              { key: 'purchases', label: 'Purchases', icon: '🛍️' },
-              { key: 'orders', label: 'My Orders', icon: '📦' },
-              { key: 'credit', label: 'Store Credit', icon: '💰' }
+              { 
+                key: 'overview', 
+                label: 'Overview', 
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                )
+              },
+              { 
+                key: 'listings', 
+                label: 'My Listings', 
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
+                )
+              },
+              { 
+                key: 'sales', 
+                label: 'Sales History', 
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                  </svg>
+                )
+              },
+              { 
+                key: 'purchases', 
+                label: 'Purchases', 
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                  </svg>
+                )
+              },
+              { 
+                key: 'orders', 
+                label: 'My Orders', 
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                )
+              },
+              { 
+                key: 'credit', 
+                label: 'Store Credit', 
+                icon: (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                )
+              }
             ].map((tab) => (
               <button
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key as any)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 ${
+                className={`py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex-shrink-0 flex items-center gap-2 ${
                   activeTab === tab.key
                     ? 'border-orange-500 text-orange-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <span className="mr-2">{tab.icon}</span>
+                {tab.icon}
                 <span className="hidden sm:inline">{tab.label}</span>
                 <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
               </button>
@@ -699,7 +747,9 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">📦</span>
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                        </svg>
                       </div>
                     </div>
                     <div className="ml-4">
@@ -713,7 +763,9 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">✅</span>
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
                       </div>
                     </div>
                     <div className="ml-4">
@@ -727,7 +779,9 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="w-8 h-8 bg-purple-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">💰</span>
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
                       </div>
                     </div>
                     <div className="ml-4">
@@ -741,7 +795,9 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">🛒</span>
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                        </svg>
                       </div>
                     </div>
                     <div className="ml-4">
@@ -755,7 +811,9 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-                        <span className="text-white text-sm font-bold">💳</span>
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
                       </div>
                     </div>
                     <div className="ml-4">
@@ -810,7 +868,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                     ) : (
                       <div className="flex items-center justify-center h-full text-gray-500">
                         <div className="text-center">
-                          <div className="text-4xl mb-2">📈</div>
+                          <div className="mb-4">
+                            <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                            </svg>
+                          </div>
                           <p>No sales data yet</p>
                           <p className="text-sm">Start listing items to see your earnings here</p>
                         </div>
@@ -838,7 +900,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
               
               {myListings.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <div className="text-4xl mb-4">📦</div>
+                  <div className="mb-4">
+                    <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                  </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No listings yet</h3>
                   <p className="text-gray-500">Start by listing your first item for consignment</p>
                 </div>
@@ -887,7 +953,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
               
               {mySales.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <div className="text-4xl mb-4">💰</div>
+                  <div className="mb-4">
+                    <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                  </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No sales yet</h3>
                   <p className="text-gray-500">Your earnings will appear here when items sell</p>
                 </div>
@@ -915,8 +985,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                             +${((item.soldPrice || item.price) * 0.75).toFixed(2)}
                           </div>
                           <div className="text-xs text-gray-500">your earnings</div>
-                          <div className="text-xs text-orange-600 mt-1">
-                            📦 Click to manage fulfillment
+                          <div className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                            Click to manage fulfillment
                           </div>
                         </div>
                       </div>
@@ -939,7 +1012,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
               
               {purchaseHistory.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <div className="text-4xl mb-4">🛒</div>
+                  <div className="mb-4">
+                    <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                    </svg>
+                  </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No purchases yet</h3>
                   <p className="text-gray-500">Your purchase history will appear here after you make your first purchase</p>
                   <button className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors">
@@ -997,7 +1074,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
               
               {purchaseHistory.length === 0 ? (
                 <div className="text-center py-12 bg-gray-50 rounded-lg">
-                  <div className="text-4xl mb-4">📋</div>
+                  <div className="mb-4">
+                    <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </div>
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No orders yet</h3>
                   <p className="text-gray-500">Your order history will appear here after you make your first purchase</p>
                   <button className="mt-4 bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors">
@@ -1047,9 +1128,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                                         alt={item.title}
                                         className="w-full h-full object-cover rounded-lg"
                                       />
-                                    ) : (
-                                      <span className="text-gray-400 text-2xl">📦</span>
-                                    )}
+                                                        ) : (
+                      <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                      </svg>
+                    )}
                                   </div>
                                   <div className="flex-1">
                                     <h6 className="font-medium text-gray-900">{item.title}</h6>
@@ -1147,7 +1230,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                     <div className="text-3xl font-bold mt-1">${userStats?.storeCredit.toFixed(2) || '0.00'}</div>
                     <p className="text-orange-100 text-sm mt-1">Available for purchases</p>
                   </div>
-                  <div className="text-6xl opacity-20">💳</div>
+                  <div className="opacity-20">
+                    <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
 

@@ -177,7 +177,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   // Success Modal
   if (showSuccess) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+      <div className="modal-backdrop flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
           <div className="p-8 text-center">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -212,7 +212,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   // Preview Modal
   if (showPreview) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+      <div className="modal-backdrop flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
           <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
             <div className="flex justify-between items-center">
@@ -331,7 +331,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
 
   // Main Form Modal
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+    <div className="modal-backdrop flex items-center justify-center p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
           <div className="flex justify-between items-center">

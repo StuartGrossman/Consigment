@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } fr
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import BarcodeGenerationModal from './BarcodeGenerationModal';
-import AdminBanModal from './AdminBanModal';
+
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 
 interface AdminModalProps {
@@ -26,7 +26,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [showBanModal, setShowBanModal] = useState(false);
+
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
   const [modalMessage, setModalMessage] = useState('');
@@ -95,6 +95,10 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     // Remove from pending list since it's now approved with barcode
     setPendingItems(prev => prev.filter(i => i.id !== item.id));
     setSelectedItem(null);
+    
+    // Show success message
+    setModalMessage(`"${item.title}" has been approved and moved to the approved items list. The barcode label has been generated and is ready for printing.`);
+    setShowSuccessModal(true);
   };
 
   const handleBarcodeModalClose = () => {
@@ -178,22 +182,14 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
         <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-center">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Manage Pending Items</h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowBanModal(true)}
-                className="bg-red-500 text-white px-3 py-1 rounded-md text-sm hover:bg-red-600 transition-colors"
-              >
-                🚫 Ban Management
-              </button>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
-              >
-                <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
+            >
+              <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -445,12 +441,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
         />
       )}
 
-      {/* Admin Ban Management Modal */}
-      {showBanModal && (
-        <AdminBanModal
-          onClose={() => setShowBanModal(false)}
-        />
-      )}
+
     </div>
   );
 };

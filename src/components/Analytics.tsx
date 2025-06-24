@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, where, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, PaymentRecord, AuthUser, UserAnalytics, User } from '../types';
 import {
@@ -17,10 +17,9 @@ interface AnalyticsProps {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'sold' | 'shipped' | 'unshipped' | 'refunds'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sold' | 'shipped' | 'unshipped' | 'refunds'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
-  const [userAnalytics, setUserAnalytics] = useState<UserAnalytics[]>([]);
   const [soldItems, setSoldItems] = useState<ConsignmentItem[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
@@ -35,8 +34,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
   useEffect(() => {
     if (activeTab === 'dashboard') {
       fetchDashboardData();
-    } else if (activeTab === 'users' && isAdmin) {
-      fetchUserAnalytics();
     } else if (activeTab === 'sold') {
       fetchSoldItems();
     } else if (activeTab === 'shipped' && isAdmin) {
@@ -48,9 +45,71 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     }
   }, [activeTab, user, isAdmin]);
 
+  // Auto-refresh data every 30 seconds to catch new sales
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTab === 'dashboard') {
+        fetchDashboardData();
+      } else if (activeTab === 'sold') {
+        fetchSoldItems();
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [activeTab, user, isAdmin]);
+
+  // Listen for real-time admin dashboard refresh events
+  useEffect(() => {
+    const handleAdminDashboardRefresh = (event: CustomEvent) => {
+      console.log('📊 Admin dashboard refresh event received:', event.detail);
+      
+      // Set a flag to trigger refresh on next render
+      window.location.reload();
+    };
+
+    const handleItemsUpdated = (event: CustomEvent) => {
+      console.log('📦 Items updated event received:', event.detail);
+      if (event.detail?.action === 'purchase_completed') {
+        console.log('🛒 Purchase completed - refreshing analytics...');
+        
+        // Trigger a page refresh to get latest data
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      }
+    };
+
+    // Add event listeners
+    window.addEventListener('adminDashboardRefresh', handleAdminDashboardRefresh as EventListener);
+    window.addEventListener('itemsUpdated', handleItemsUpdated as EventListener);
+    
+    return () => {
+      window.removeEventListener('adminDashboardRefresh', handleAdminDashboardRefresh as EventListener);
+      window.removeEventListener('itemsUpdated', handleItemsUpdated as EventListener);
+    };
+  }, []);
+
   const fetchDashboardData = async () => {
+    if (!user) {
+      console.log('User not authenticated, skipping analytics fetch');
+      return;
+    }
+
     setLoading(true);
     try {
+      // Ensure admin status is set in Firestore if user is in admin mode
+      if (isAdmin) {
+        console.log('Setting admin status for analytics access...');
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(userRef, {
+          isAdmin: true,
+          email: user.email,
+          displayName: user.displayName,
+          lastSignIn: new Date()
+        }, { merge: true });
+        console.log('✅ Admin status confirmed for analytics');
+      }
+
       const itemsRef = collection(db, 'items');
       const itemsSnapshot = await getDocs(itemsRef);
       const items: ConsignmentItem[] = [];
@@ -67,13 +126,21 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         } as ConsignmentItem);
       });
 
-      const usersRef = collection(db, 'users');
-      const usersSnapshot = await getDocs(usersRef);
-      const users: any[] = [];
-      
-      usersSnapshot.forEach((doc) => {
-        users.push({ id: doc.id, ...doc.data() });
-      });
+      // Only fetch users collection if admin (requires admin permissions)
+      let users: any[] = [];
+      if (isAdmin) {
+        try {
+          const usersRef = collection(db, 'users');
+          const usersSnapshot = await getDocs(usersRef);
+          
+          usersSnapshot.forEach((doc) => {
+            users.push({ id: doc.id, ...doc.data() });
+          });
+        } catch (error) {
+          console.error('Error fetching users (admin required):', error);
+          // Continue without users data if not admin
+        }
+      }
 
       const data = calculateDashboardData(items, users);
       setDashboardData(data);
@@ -84,87 +151,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     }
   };
 
-  const fetchUserAnalytics = async () => {
-    setLoading(true);
-    try {
-      const allUsers: User[] = [];
-      const userMap = new Map<string, UserAnalytics>();
 
-      const itemsRef = collection(db, 'items');
-      const itemsSnapshot = await getDocs(itemsRef);
-
-      itemsSnapshot.forEach((doc) => {
-        const item = { 
-          id: doc.id, 
-          ...doc.data(),
-          createdAt: doc.data().createdAt?.toDate() || new Date(),
-          approvedAt: doc.data().approvedAt?.toDate(),
-          liveAt: doc.data().liveAt?.toDate(),
-          soldAt: doc.data().soldAt?.toDate()
-        } as ConsignmentItem;
-        const userId = item.sellerId;
-        
-        if (!userMap.has(userId)) {
-          const user: User = {
-            uid: userId,
-            email: item.sellerEmail,
-            displayName: item.sellerName,
-            photoURL: ''
-          };
-          allUsers.push(user);
-
-          userMap.set(userId, {
-            userId,
-            userName: item.sellerName,
-            userEmail: item.sellerEmail,
-            totalItemsListed: 0,
-            totalItemsSold: 0,
-            totalEarnings: 0,
-            totalPaid: 0,
-            outstandingBalance: 0,
-            storeCredit: 0,
-            activeItems: [],
-            soldItems: [],
-            pendingItems: [],
-            approvedItems: []
-          });
-        }
-
-        const analytics = userMap.get(userId)!;
-        analytics.totalItemsListed++;
-
-        switch (item.status) {
-          case 'pending':
-            analytics.pendingItems.push(item);
-            break;
-          case 'approved':
-            analytics.approvedItems.push(item);
-            break;
-          case 'live':
-            analytics.activeItems.push(item);
-            break;
-          case 'sold':
-            analytics.soldItems.push(item);
-            analytics.totalItemsSold++;
-            const soldPrice = item.soldPrice || item.price;
-            const userEarnings = item.userEarnings || (soldPrice * 0.75);
-            analytics.totalEarnings += userEarnings;
-            break;
-        }
-      });
-
-      // Calculate outstanding balances
-      userMap.forEach((analytics) => {
-        analytics.outstandingBalance = analytics.totalEarnings - analytics.totalPaid;
-      });
-
-      setUserAnalytics(Array.from(userMap.values()));
-    } catch (error) {
-      console.error('Error fetching user analytics:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchSoldItems = async () => {
     setLoading(true);
@@ -303,8 +290,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         data = dashboardData;
       } else if (activeTab === 'sold') {
         data = { soldItems };
-      } else if (activeTab === 'users') {
-        data = { userAnalytics };
       }
       
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -393,35 +378,43 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                 >
                   Refunds
                 </button>
-                <button
-                  onClick={() => setActiveTab('users')}
-                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'users'
-                      ? 'border-slate-500 text-slate-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }`}
-                >
-                  User Analytics
-                </button>
               </>
             )}
           </nav>
         </div>
 
         {/* Export Controls */}
-        <div className="mb-6 flex justify-end space-x-3">
+        <div className="mb-6 flex justify-between items-center">
           <button
-            onClick={() => exportData('csv')}
-            className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            onClick={() => {
+              if (activeTab === 'dashboard') {
+                fetchDashboardData();
+              } else if (activeTab === 'sold') {
+                fetchSoldItems();
+              }
+            }}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
           >
-            Export CSV
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh Data
           </button>
-          <button
-            onClick={() => exportData('json')}
-            className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
-          >
-            Export JSON
-          </button>
+          
+          <div className="flex space-x-3">
+            <button
+              onClick={() => exportData('csv')}
+              className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            >
+              Export CSV
+            </button>
+            <button
+              onClick={() => exportData('json')}
+              className="px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+            >
+              Export JSON
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -667,57 +660,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
               </div>
             )}
 
-            {/* User Analytics Tab */}
-            {activeTab === 'users' && isAdmin && (
-              <div className="space-y-8">
-                <div className="bg-white border border-gray-200 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    User Performance ({userAnalytics.length} users)
-                  </h3>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items Listed</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items Sold</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Earnings</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outstanding Balance</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Success Rate</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {userAnalytics.map((analytics) => {
-                          const successRate = analytics.totalItemsListed > 0 
-                            ? (analytics.totalItemsSold / analytics.totalItemsListed) * 100 
-                            : 0;
-                          
-                          return (
-                            <tr key={analytics.userId} className="hover:bg-gray-50">
-                              <td className="px-6 py-4 whitespace-nowrap">
-                                <div className="text-sm font-medium text-gray-900">{analytics.userName}</div>
-                                <div className="text-sm text-gray-500">{analytics.userEmail}</div>
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{analytics.totalItemsListed}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{analytics.totalItemsSold}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-slate-600">
-                                {formatCurrency(analytics.totalEarnings)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-600">
-                                {formatCurrency(analytics.outstandingBalance)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {successRate.toFixed(1)}%
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
+
           </>
         )}
 
