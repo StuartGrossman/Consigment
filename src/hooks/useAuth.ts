@@ -217,7 +217,7 @@ export const useAuth = () => {
         uid: phoneUID,
         phoneNumber: formattedPhone,
         displayName: `📱 ${phoneNumber}`,
-        email: undefined,
+        email: `phone_${cleanPhone}@testuser.local`, // Assign fake email for testing
         photoURL: undefined,
         isPhoneUser: true
       };

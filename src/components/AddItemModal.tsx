@@ -3,7 +3,7 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../config/firebase';
 import { AuthUser } from '../types';
-import { logUserAction } from '../services/firebaseService';
+import { logUserActionSafe } from '../services/userService';
 import { useRateLimiter } from '../hooks/useRateLimiter';
 
 interface AddItemModalProps {
@@ -130,7 +130,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
         const docRef = await addDoc(collection(db, 'items'), itemData);
 
         // Log the action
-        await logUserAction(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
+        await logUserActionSafe(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
 
         return docRef;
       } catch (error) {

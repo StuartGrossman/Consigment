@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode, useCallback, useRef } from 'react';
 import { ConsignmentItem, AuthUser } from '../types';
-import { logUserAction } from '../services/firebaseService';
+import { logUserActionSafe } from '../services/userService';
 import { useFormSubmitThrottle } from './useButtonThrottle';
 
 export interface CartItem {
@@ -136,7 +136,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     await throttledAction(`add-to-cart-${item.id}`, async () => {
       // Log the action
       if (user) {
-        await logUserAction(user, 'cart_updated', 'Added item to cart', item.id, item.title);
+        await logUserActionSafe(user, 'cart_updated', 'Added item to cart', item.id, item.title);
       }
       
       // Check if item is already in cart
@@ -163,7 +163,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     
     // Log the action
     if (user && itemToRemove) {
-      await logUserAction(user, 'cart_updated', 'Removed item from cart', itemToRemove.item.id, itemToRemove.item.title);
+      await logUserActionSafe(user, 'cart_updated', 'Removed item from cart', itemToRemove.item.id, itemToRemove.item.title);
     }
     
     setCartItems(prev => prev.filter(cartItem => cartItem.item.id !== itemId));
@@ -180,7 +180,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     
     // Log the action
     if (user && item) {
-      await logUserAction(user, 'cart_updated', `Updated item quantity to ${newQuantity}`, item.item.id, item.item.title);
+      await logUserActionSafe(user, 'cart_updated', `Updated item quantity to ${newQuantity}`, item.item.id, item.item.title);
     }
     
     setCartItems(prev => 
@@ -195,7 +195,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
   const clearCart = useCallback(async (user?: AuthUser | null) => {
     // Log the action
     if (user) {
-      await logUserAction(user, 'cart_updated', `Cleared cart with ${cartItems.length} items`);
+      await logUserActionSafe(user, 'cart_updated', `Cleared cart with ${cartItems.length} items`);
     }
     
     setCartItems([]);
@@ -215,7 +215,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     
     // Log the action
     if (user) {
-      await logUserAction(user, 'item_bookmarked', isCurrentlyBookmarked ? 'Removed bookmark' : 'Added bookmark', itemId);
+      await logUserActionSafe(user, 'item_bookmarked', isCurrentlyBookmarked ? 'Removed bookmark' : 'Added bookmark', itemId);
     }
     
     setBookmarkedItems(prev => {

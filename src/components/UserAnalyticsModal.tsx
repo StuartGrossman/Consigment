@@ -951,7 +951,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                     ) : (
                                         <div className="divide-y divide-gray-200">
                                             {userActions.map((action, index) => (
-                                                <div key={index} className="p-4 hover:bg-gray-50">
+                                                <div key={`${action.userId}-${action.action}-${action.timestamp.getTime()}-${index}`} className="p-4 hover:bg-gray-50">
                                                     <div className="flex items-start space-x-3">
                                                         <div className="flex-shrink-0 mt-0.5">{getActionIcon(action.action)}</div>
                                                         <div className="flex-1 min-w-0">

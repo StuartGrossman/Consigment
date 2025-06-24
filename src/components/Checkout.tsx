@@ -3,9 +3,9 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useCart } from '../hooks/useCart';
 import { useAuth } from '../hooks/useAuth';
-import { logUserAction } from '../services/firebaseService';
+import { logUserActionSafe } from '../services/userService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
-import { useRateLimiter } from '../hooks/useRateLimiter';
+import { useUserRateLimiter } from '../hooks/useUserRateLimiter';
 import { apiService } from '../services/apiService';
 import type { PaymentRequest, CartItem as ApiCartItem, CustomerInfo as ApiCustomerInfo } from '../services/apiService';
 
@@ -32,7 +32,7 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
   const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   
   // Rate limiting hook
-  const { executeWithRateLimit } = useRateLimiter();
+  const { executeWithRateLimit } = useUserRateLimiter();
   const [customerInfo, setCustomerInfo] = useState({
     name: user?.displayName || '',
     email: user?.email || '',
@@ -265,7 +265,7 @@ const CheckoutForm: React.FC<{ onClose: () => void; onSuccess: () => void }> = (
             }));
 
             // Log the action
-            await logUserAction(user, paymentType === 'online' ? 'item_purchased' : 'item_reserved', 
+            await logUserActionSafe(user, paymentType === 'online' ? 'item_purchased' : 'item_reserved', 
               `${paymentType === 'online' ? 'Purchased' : 'Reserved'} ${cartItems.length} items for $${orderData.totalAmount.toFixed(2)} (${fulfillmentMethod}, ${paymentType})`);
             
             // Clear cart and show success
