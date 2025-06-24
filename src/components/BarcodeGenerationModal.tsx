@@ -28,6 +28,12 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
   useEffect(() => {
     if (isOpen && item) {
+      // Initialize canvas dimensions before generating barcode
+      if (canvasRef.current) {
+        canvasRef.current.width = 300;
+        canvasRef.current.height = 100;
+      }
+      
       generateBarcode();
       setIsConfirming(false);
     }
@@ -52,19 +58,36 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
     // Generate barcode using jsbarcode
     if (canvasRef.current) {
       try {
+        // Clear the canvas first
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
+        
+        // Generate the barcode
         JsBarcode(canvasRef.current, barcodeValue, {
           format: "CODE128",
           width: 2,
           height: 80,
           displayValue: true,
           fontSize: 12,
-          margin: 10
+          margin: 10,
+          background: "#ffffff",
+          lineColor: "#000000"
         });
+        
+        console.log('✅ Barcode generated successfully:', barcodeValue);
         setIsGenerating(false);
       } catch (error) {
-        console.error('Error generating barcode:', error);
+        console.error('❌ Error generating barcode:', error);
         setIsGenerating(false);
+        
+        // Show error message to user
+        alert('Error generating barcode. Please try again.');
       }
+    } else {
+      console.error('❌ Canvas reference not available');
+      setIsGenerating(false);
     }
   };
 
@@ -83,77 +106,218 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
         <head>
           <title>Item Barcode - ${item.title}</title>
           <style>
+            @media print {
+              body { margin: 0; }
+              .no-print { display: none !important; }
+            }
             body {
               font-family: Arial, sans-serif;
               margin: 20px;
               text-align: center;
+              background-color: white;
+              color: black;
+            }
+            .label-container {
+              max-width: 600px;
+              margin: 0 auto;
+              border: 2px solid #000;
+              padding: 20px;
+              background-color: white;
+            }
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #000;
+              padding-bottom: 15px;
+              margin-bottom: 20px;
+            }
+            .header h2 {
+              margin: 0;
+              font-size: 24px;
+              color: #000;
+              font-weight: bold;
+            }
+            .header p {
+              margin: 5px 0 0 0;
+              font-size: 14px;
+              color: #666;
             }
             .item-info {
               margin-bottom: 20px;
-              border: 1px solid #ccc;
-              padding: 15px;
               background-color: #f9f9f9;
+              padding: 15px;
+              border: 1px solid #ccc;
+              border-radius: 5px;
+              text-align: left;
             }
-            .barcode-container {
-              margin: 20px 0;
-            }
-            .print-info {
-              margin-top: 20px;
-              font-size: 12px;
-              color: #666;
-            }
-            h2 {
-              color: #333;
-              margin-bottom: 10px;
+            .item-info h3 {
+              margin: 0 0 15px 0;
+              font-size: 18px;
+              color: #000;
+              text-align: center;
+              font-weight: bold;
             }
             .detail-row {
               margin: 5px 0;
-              text-align: left;
+              display: flex;
+              justify-content: space-between;
+              border-bottom: 1px dotted #ccc;
+              padding: 5px 0;
             }
             .label {
               font-weight: bold;
+              color: #333;
+            }
+            .value {
+              color: #000;
+            }
+            .barcode-container {
+              text-align: center;
+              margin: 30px 0;
+              padding: 20px;
+              background-color: white;
+              border: 2px dashed #333;
+            }
+            .barcode-container img {
+              max-width: 100%;
+              height: auto;
+              background-color: white;
+              padding: 10px;
+            }
+            .barcode-info {
+              margin-top: 15px;
+              text-align: center;
+            }
+            .barcode-id {
+              font-family: 'Courier New', monospace;
+              font-size: 16px;
+              font-weight: bold;
+              background-color: #f0f0f0;
+              padding: 8px;
+              border: 1px solid #ccc;
               display: inline-block;
-              width: 100px;
+              margin: 10px 0;
+            }
+            .print-info {
+              margin-top: 30px;
+              border-top: 1px solid #ccc;
+              padding-top: 15px;
+              font-size: 12px;
+              color: #666;
+              text-align: center;
+            }
+            .instructions {
+              margin-top: 20px;
+              padding: 15px;
+              background-color: #fff3cd;
+              border: 1px solid #ffeaa7;
+              border-radius: 5px;
+              font-size: 12px;
+            }
+            .instructions h4 {
+              margin: 0 0 10px 0;
+              color: #856404;
+            }
+            .instructions ul {
+              margin: 0;
+              padding-left: 20px;
+            }
+            .instructions li {
+              margin: 5px 0;
+              color: #856404;
             }
           </style>
         </head>
         <body>
-          <h2>Summit Gear Exchange</h2>
-          <div class="item-info">
-            <h3>${item.title}</h3>
-            <div class="detail-row">
-              <span class="label">Price:</span> $${item.price}
+          <div class="label-container">
+            <div class="header">
+              <h2>🏔️ Summit Gear Exchange</h2>
+              <p>Mountain Consignment Store</p>
+              <p>Quality Outdoor Equipment</p>
             </div>
-            <div class="detail-row">
-              <span class="label">Category:</span> ${item.category}
+            
+            <div class="item-info">
+              <h3>${item.title}</h3>
+              <div class="detail-row">
+                <span class="label">Price:</span>
+                <span class="value">$${item.price}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Category:</span>
+                <span class="value">${item.category}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Brand:</span>
+                <span class="value">${item.brand || 'N/A'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Size:</span>
+                <span class="value">${item.size || 'N/A'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Color:</span>
+                <span class="value">${item.color || 'N/A'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Condition:</span>
+                <span class="value">${item.condition || 'N/A'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Seller:</span>
+                <span class="value">${item.sellerName}</span>
+              </div>
+              <div class="detail-row">
+                <span class="label">Status:</span>
+                <span class="value">${item.status.toUpperCase()}</span>
+              </div>
             </div>
-            <div class="detail-row">
-              <span class="label">Brand:</span> ${item.brand || 'N/A'}
+            
+            <div class="barcode-container">
+              <h4 style="margin: 0 0 15px 0; color: #333;">SCAN BARCODE</h4>
+              <img src="${dataURL}" alt="Barcode: ${barcodeData}" />
+              <div class="barcode-info">
+                <div class="barcode-id">${barcodeData}</div>
+                <p style="margin: 5px 0; font-size: 12px;">Generated: ${new Date().toLocaleString()}</p>
+              </div>
             </div>
-            <div class="detail-row">
-              <span class="label">Size:</span> ${item.size || 'N/A'}
+            
+            <div class="instructions no-print">
+              <h4>📋 Barcode Usage Instructions:</h4>
+              <ul>
+                <li>Use this barcode to quickly identify and track this item</li>
+                <li>Scan with any barcode scanner or smartphone app</li>
+                <li>Keep this label with the item during storage and handling</li>
+                <li>Reference the Barcode ID when communicating about this item</li>
+              </ul>
             </div>
-            <div class="detail-row">
-              <span class="label">Seller:</span> ${item.sellerName}
-            </div>
-            <div class="detail-row">
-              <span class="label">Approved:</span> ${new Date().toLocaleString()}
+            
+            <div class="print-info">
+              <p><strong>Barcode ID:</strong> ${barcodeData}</p>
+              <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+              <p><strong>Printed:</strong> ${new Date().toLocaleString()}</p>
+              <p><strong>Item ID:</strong> ${item.id}</p>
+              <p style="margin-top: 15px; font-style: italic;">Summit Gear Exchange - Your Mountain Equipment Marketplace</p>
             </div>
           </div>
-          <div class="barcode-container">
-            <img src="${dataURL}" alt="Barcode: ${barcodeData}" />
-          </div>
-          <div class="print-info">
-            <p>Barcode: ${barcodeData}</p>
-            <p>Generated: ${new Date().toLocaleString()}</p>
-          </div>
+          
+          <script>
+            // Auto-print when page loads
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+              }, 500);
+            };
+            
+            // Close window after printing
+            window.onafterprint = function() {
+              window.close();
+            };
+          </script>
         </body>
       </html>
     `);
     
     printWindow.document.close();
     printWindow.focus();
-    printWindow.print();
   };
 
   const handleConfirmAndApprove = async () => {

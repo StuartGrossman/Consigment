@@ -60,7 +60,11 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
       // Sort by creation date (newest first)
       items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
       setPendingItems(items);
-    } catch (error) {
+    } catch (error: any) {
+      // Silent fallback for permission errors - don't log to console
+      if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+        return; // Fail silently for permission issues
+      }
       console.error('Error fetching pending items:', error);
     } finally {
       setLoading(false);

@@ -91,8 +91,8 @@ export interface UploadProgress {
 
 export interface UserAnalytics {
   userId: string;
-  userName: string;
-  userEmail: string;
+  userName?: string; // Made optional to handle missing data
+  userEmail?: string; // Made optional to handle missing data
   totalItemsListed: number;
   totalItemsSold: number;
   totalEarnings: number; // User's 75% share

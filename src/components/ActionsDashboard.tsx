@@ -26,19 +26,26 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
     console.log('ActionsDashboard useEffect triggered, timeFilter:', timeFilter);
     setLoading(true);
     
-    // Log that the dashboard was accessed
+    // Log that the dashboard was accessed - but handle permission errors gracefully
     if (user) {
       console.log('Logging dashboard access for user:', user.displayName);
       logUserAction(user, 'dashboard_viewed', 'Accessed Actions Dashboard').catch(error => {
+        // Silent handling of permission errors for action logging
+        if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+          console.log('📍 Action logging not available due to permissions');
+          return;
+        }
         console.warn('Failed to log dashboard access:', error);
-        // Don't fail the dashboard load if logging fails
       });
     }
     
-    // Subscribe to real-time action logs
+    // Subscribe to real-time action logs with proper error handling
     console.log('Setting up subscription to action logs...');
+    let hasReceivedData = false;
+    
     const unsubscribe = subscribeToActionLogs((logs) => {
       try {
+        hasReceivedData = true;
         console.log('ActionsDashboard received action logs from Firebase:', logs.length);
         
         // If no logs from Firebase, just show empty state
@@ -76,14 +83,14 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
       }
     });
 
-    // Handle potential connection errors
+    // Handle potential connection errors with timeout
     const timeoutId = setTimeout(() => {
-      if (loading) {
-        console.warn('Action logs taking longer than expected to load');
+      if (loading && !hasReceivedData) {
+        console.log('📍 Action logs subscription timeout - likely permission issue');
         setActions([]);
         setLoading(false);
       }
-    }, 10000); // 10 second timeout
+    }, 5000); // Reduced to 5 seconds for faster fallback
 
     return () => {
       unsubscribe();
@@ -225,7 +232,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
             <>
               <button
                 onClick={() => setShowBanModal(true)}
-                className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
@@ -234,7 +241,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
               </button>
               <button
                 onClick={() => setShowUserAnalytics(true)}
-                className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -244,6 +251,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
               <button
                 onClick={async () => {
                   console.log('Manual fetch of action logs...');
+                  setLoading(true);
                   try {
                     const logs = await getActionLogs();
                     console.log('Manual fetch successful:', logs.length, 'logs');
@@ -258,11 +266,20 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
                     );
                     setActions(filteredByTime);
                     setLoading(false);
-                  } catch (error) {
+                  } catch (error: any) {
+                    // Handle permission errors silently
+                    if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+                      console.log('📍 Manual fetch not available due to permissions');
+                      setActions([]);
+                      setLoading(false);
+                      return;
+                    }
                     console.error('Manual fetch failed:', error);
+                    setActions([]);
+                    setLoading(false);
                   }
                 }}
-                className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -428,7 +445,16 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         {filteredActions.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-500">
-              {actions.length === 0 ? 'No actions found for this time period' : 'No actions match your filters'}
+              {actions.length === 0 ? (
+                <div className="space-y-2">
+                  <div>No actions found for this time period</div>
+                  <div className="text-sm text-gray-400">
+                    📍 Action logging may require additional permissions
+                  </div>
+                </div>
+              ) : (
+                'No actions match your filters'
+              )}
             </div>
           </div>
         )}

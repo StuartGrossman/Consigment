@@ -22,7 +22,8 @@ interface CartContextType {
   isBookmarked: (itemId: string) => boolean;
   getCartTotal: () => number;
   getCartItemCount: () => number;
-  getBookmarkCount: () => number;
+  getBookmarkCount: (availableItems?: ConsignmentItem[]) => number;
+  cleanupBookmarks: (availableItems: ConsignmentItem[]) => void;
   switchUser: (userId: string | null) => void;
   // Throttling functions
   isCartActionDisabled: (actionId: string) => boolean;
@@ -240,9 +241,17 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     return cartItems.reduce((total, cartItem) => total + cartItem.quantity, 0);
   }, [cartItems]);
 
-  const getBookmarkCount = useCallback((): number => {
-    return bookmarkedItems.length;
+  const getBookmarkCount = useCallback((availableItems?: ConsignmentItem[]): number => {
+    if (availableItems) {
+      return bookmarkedItems.filter(itemId => availableItems.some(item => item.id === itemId)).length;
+    } else {
+      return bookmarkedItems.length;
+    }
   }, [bookmarkedItems]);
+
+  const cleanupBookmarks = useCallback((availableItems: ConsignmentItem[]): void => {
+    setBookmarkedItems(prev => prev.filter(itemId => availableItems.some(item => item.id === itemId)));
+  }, []);
 
   const value: CartContextType = {
     cartItems,
@@ -258,6 +267,7 @@ export const CartProvider: React.FC<CartProviderProps> = ({ children }) => {
     getCartTotal,
     getCartItemCount,
     getBookmarkCount,
+    cleanupBookmarks,
     switchUser,
     isCartActionDisabled: isActionDisabled,
     isCartActionProcessing: isActionProcessing

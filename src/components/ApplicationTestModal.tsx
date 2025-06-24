@@ -1,11 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useButtonThrottle } from '../hooks/useButtonThrottle';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
 import { useTestPerformance } from '../hooks/useTestPerformance';
 import { db } from '../config/firebase';
-import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, deleteDoc, doc, updateDoc, limit, setDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../config/firebase';
 import TestPerformanceService, { TestPerformanceRun, FeatureTestResult } from '../services/testPerformanceService';
+import { logUserAction } from '../services/firebaseService';
+import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
+
+// Import the local asset images
+import image1 from '../assets/outlet images/s-l500.webp';
+import image2 from '../assets/outlet images/s-l500 (1).webp';
+import image3 from '../assets/outlet images/s-l500 (2).webp';
+import image4 from '../assets/outlet images/s-l500 (3).webp';
+import image5 from '../assets/outlet images/s-l500 (4).webp';
+import image6 from '../assets/outlet images/s-l500 (5).webp';
+import image7 from '../assets/outlet images/s-l500 (6).webp';
+import image8 from '../assets/outlet images/s-l500 (7).webp';
 
 interface ApplicationTestModalProps {
   isOpen: boolean;
@@ -63,7 +77,10 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
   const [showTestLogs, setShowTestLogs] = useState(false);
   const [showResultsModal, setShowResultsModal] = useState<'passed' | 'failed' | 'untested' | 'testing' | null>(null);
   
-  // Test Performance Hook
+  // State for admin verification
+  const [adminStatusVerified, setAdminStatusVerified] = useState(false);
+
+  // Test Performance Hook - conditionally loaded after admin verification
   const {
     testRuns,
     automaticRuns,
@@ -77,6 +94,34 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
     stopAutomaticTesting,
     isAutomaticTestingEnabled
   } = useTestPerformance();
+
+  // Verify and set admin status in Firestore on component mount
+  useEffect(() => {
+    const verifyAdminStatus = async () => {
+      if (!user || !isAdmin || !isOpen) {
+        setAdminStatusVerified(false);
+        return;
+      }
+
+      try {
+        console.log('🔧 Verifying admin status for test performance access...');
+        const userRef = doc(db, 'users', user.uid);
+        await setDoc(userRef, {
+          isAdmin: true,
+          email: user.email,
+          displayName: user.displayName,
+          lastSignIn: new Date()
+        }, { merge: true });
+        console.log('✅ Admin status verified and set in Firestore for test performance');
+        setAdminStatusVerified(true);
+      } catch (error) {
+        console.error('❌ Error setting admin status in Firestore:', error);
+        setAdminStatusVerified(false);
+      }
+    };
+
+    verifyAdminStatus();
+  }, [isOpen, user, isAdmin]);
 
   // Comprehensive feature list organized by categories
   const features: Feature[] = [
@@ -1153,13 +1198,55 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
     }
   };
 
-  // Create a test performance run from feature test results
+  // Upload local asset images to Firebase Storage and get public URLs
+  const uploadAssetImages = async (): Promise<string[]> => {
+    const localImages = [image1, image2, image3, image4, image5, image6, image7, image8];
+    const uploadedUrls: string[] = [];
+
+    addTestLog('📤 Uploading local asset images to Firebase Storage "Test Images" folder...');
+
+    for (let i = 0; i < localImages.length; i++) {
+      try {
+        addTestLog(`⬆️ Uploading image ${i + 1} of ${localImages.length}...`);
+        
+        // Fetch the image as a blob
+        const response = await fetch(localImages[i]);
+        const blob = await response.blob();
+        
+        // Create a storage reference under "Test Images"
+        const fileName = `Test Images/s-l500-${i + 1}.webp`;
+        const storageRef = ref(storage, fileName);
+        
+        // Upload the blob
+        await uploadBytes(storageRef, blob);
+        
+        // Get the download URL
+        const downloadUrl = await getDownloadURL(storageRef);
+        uploadedUrls.push(downloadUrl);
+        
+        addTestLog(`✅ Image ${i + 1} uploaded successfully`);
+      } catch (error) {
+        console.error(`Error uploading image ${i + 1}:`, error);
+        addTestLog(`❌ Failed to upload image ${i + 1}: ${error}`);
+        addTestLog(`🔄 Using local import as fallback for development`);
+        // Use original import as fallback (for development)
+        uploadedUrls.push(localImages[i]);
+      }
+    }
+
+    addTestLog(`🎉 Image upload complete! ${uploadedUrls.length} images ready for test data`);
+    return uploadedUrls;
+  };
+
   // Generate fake outdoor gear data
   const generateFakeData = async () => {
     if (!user) return;
     
     try {
-      addTestLog('🎯 Starting fake data generation...');
+      addTestLog('🎯 Starting fake data generation with barcodes and local images...');
+      
+      // First, upload the local asset images to Firebase Storage
+      const imageUrls = await uploadAssetImages();
       
       const fakeItems = [
         {
@@ -1173,7 +1260,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Men",
           color: "Navy Blue",
           material: "100% Recycled Polyester Shell, 800-fill Down",
-          images: ['/src/assets/outlet images/s-l500.webp'],
+          images: [imageUrls[0]],
           sellerUid: "mygrossman.stewart.gmail.com",
           sellerName: "Stuart Grossman",
           status: "live",
@@ -1190,7 +1277,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Unisex",
           color: "Orange",
           material: "Polycarbonate Shell, EPS Foam",
-          images: ['/src/assets/outlet images/s-l500 (1).webp'],
+          images: [imageUrls[1]],
           sellerUid: "mygrossman.stewart.gmail.com",
           sellerName: "Stuart Grossman",
           status: "live",
@@ -1207,7 +1294,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Men",
           color: "Graphite Grey",
           material: "210D Nylon, Aluminum Frame",
-          images: ['/src/assets/outlet images/s-l500 (2).webp'],
+          images: [imageUrls[2]],
           sellerUid: user.uid,
           sellerName: user.displayName || "Store Admin",
           status: "live",
@@ -1224,7 +1311,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Men",
           color: "Black/Red",
           material: "Synthetic/Textile Upper, Contagrip Outsole",
-          images: ['/src/assets/outlet images/s-l500 (3).webp'],
+          images: [imageUrls[3]],
           sellerUid: user.uid,
           sellerName: user.displayName || "Store Admin",
           status: "live",
@@ -1241,7 +1328,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Men",
           color: "Dynasty",
           material: "GORE-TEX Pro, N80p-X face fabric",
-          images: ['/src/assets/outlet images/s-l500 (4).webp'],
+          images: [imageUrls[4]],
           sellerUid: user.uid,
           sellerName: user.displayName || "Store Admin",
           status: "live",
@@ -1258,7 +1345,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Unisex",
           color: "Black/Orange",
           material: "Polyamide, Polyester",
-          images: ['/src/assets/outlet images/s-l500 (5).webp'],
+          images: [imageUrls[5]],
           sellerUid: user.uid,
           sellerName: user.displayName || "Store Admin",
           status: "live",
@@ -1275,7 +1362,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Women",
           color: "Heather Grey",
           material: "87% Merino Wool, 13% Nylon",
-          images: ['/src/assets/outlet images/s-l500 (6).webp'],
+          images: [imageUrls[6]],
           sellerUid: user.uid,
           sellerName: user.displayName || "Store Admin",
           status: "live",
@@ -1292,7 +1379,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           gender: "Unisex",
           color: "Charcoal",
           material: "56% Merino Wool, 39% Nylon, 5% Elastane",
-          images: ['/src/assets/outlet images/s-l500 (7).webp'],
+          images: [imageUrls[7]],
           sellerUid: user.uid,
           sellerName: user.displayName || "Store Admin",
           status: "live",
@@ -1300,13 +1387,35 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
         }
       ];
 
-      // Add items to Firebase
-      for (const item of fakeItems) {
+      // Helper function to generate barcode data
+      const generateBarcodeData = (itemIndex: number) => {
+        const now = new Date();
+        const timestamp = now.getTime().toString();
+        const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+        const itemIndexStr = itemIndex.toString().padStart(3, '0');
+        
+        // Create a unique barcode combining test prefix, date, time, and item index
+        const barcodeValue = `TEST${dateStr}${timeStr}${itemIndexStr}`.slice(0, 12);
+        return barcodeValue;
+      };
+
+      // Add items to Firebase with barcode data
+      for (let i = 0; i < fakeItems.length; i++) {
+        const item = fakeItems[i];
+        const barcodeData = generateBarcodeData(i);
+        const currentTime = new Date();
+        
         const itemData = {
           ...item,
-          createdAt: new Date(),
-          liveAt: new Date(),
-          approvedAt: new Date(),
+          createdAt: currentTime,
+          liveAt: currentTime,
+          approvedAt: currentTime,
+          // Barcode fields
+          barcodeData: barcodeData,
+          barcodeGeneratedAt: currentTime,
+          printConfirmedAt: currentTime,
+          // Additional fields
           sku: `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           weight: Math.random() * 5 + 0.5, // Random weight between 0.5-5.5 lbs
           dimensions: `${Math.floor(Math.random() * 20 + 10)}" x ${Math.floor(Math.random() * 15 + 8)}" x ${Math.floor(Math.random() * 8 + 3)}"`,
@@ -1315,10 +1424,12 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
         };
 
         await addDoc(collection(db, 'items'), itemData);
-        addTestLog(`✅ Created: ${item.title} (${item.brand})`);
+        addTestLog(`✅ Created: ${item.title} (${item.brand}) - Barcode: ${barcodeData}`);
       }
 
-      addTestLog(`🎉 Successfully generated ${fakeItems.length} test items!`);
+      addTestLog(`🎉 Successfully generated ${fakeItems.length} test items with barcodes and images!`);
+      addTestLog(`📊 All items include your local asset images and generated barcode labels`);
+      addTestLog(`🖼️ Images uploaded to Firebase Storage "Test Images" - visible on live version`);
       addTestLog(`📧 2 items assigned to: mygrossman.stewart.gmail.com`);
       addTestLog(`🏪 6 items assigned to: Store Admin (${user.displayName})`);
       
@@ -2042,9 +2153,9 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
                       <h4 className="font-semibold text-gray-900">Generate Test Items</h4>
                     </div>
                     <p className="text-sm text-gray-600 mb-4">
-                      Creates 8 realistic outdoor gear items based on product images. 
+                      Creates 8 realistic outdoor gear items using your local asset images and generated barcodes. 
                       2 items assigned to <strong>mygrossman.stewart.gmail.com</strong>, 
-                      6 items assigned to store admin.
+                      6 items assigned to store admin. All items include your outlet images uploaded to Firebase Storage and barcode labels for inventory tracking.
                     </p>
                     <button
                       onClick={() => throttledAction('generate_fake_data', generateFakeData)}
@@ -2122,7 +2233,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
                       </ul>
                       <p className="text-xs text-blue-700 mt-2">
                         All test items are tagged with <code className="bg-blue-100 px-1 py-0.5 rounded">isTestData: true</code> 
-                        and include realistic pricing, descriptions, and metadata.
+                        and include realistic pricing, your local outlet images uploaded to Firebase Storage, detailed descriptions, metadata, and generated barcode labels for inventory tracking.
                       </p>
                     </div>
                   </div>

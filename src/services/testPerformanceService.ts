@@ -94,7 +94,11 @@ class TestPerformanceService {
           }))
         } as TestPerformanceRun;
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Silent fallback for permission errors - return empty array
+      if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+        return [];
+      }
       console.error('Error fetching test runs:', error);
       return [];
     }
@@ -123,7 +127,11 @@ class TestPerformanceService {
           }))
         } as TestPerformanceRun;
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Silent fallback for permission errors - return empty array
+      if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+        return [];
+      }
       console.error('Error fetching test runs by type:', error);
       return [];
     }

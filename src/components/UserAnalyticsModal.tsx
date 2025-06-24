@@ -83,16 +83,16 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 if (!userMap.has(userId)) {
                     const user: User = {
                         uid: userId,
-                        email: item.sellerEmail,
-                        displayName: item.sellerName,
+                        email: item.sellerEmail || 'no-email@example.com',
+                        displayName: item.sellerName || 'Unknown User',
                         photoURL: ''
                     };
                     allUsers.push(user);
 
                     userMap.set(userId, {
                         userId,
-                        userName: item.sellerName,
-                        userEmail: item.sellerEmail,
+                        userName: item.sellerName || 'Unknown User',
+                        userEmail: item.sellerEmail || 'no-email@example.com',
                         totalItemsListed: 0,
                         totalItemsSold: 0,
                         totalEarnings: 0,
@@ -220,8 +220,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             
             const userAnalytics: UserAnalytics = {
                 userId,
-                userName: user?.displayName || 'User',
-                userEmail: user?.email || '',
+                userName: user?.displayName || 'Unknown User',
+                userEmail: user?.email || 'no-email@example.com',
                 totalItemsListed: 0,
                 totalItemsSold: 0,
                 totalEarnings: 0,
@@ -466,8 +466,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             // Create store credit transaction
             const creditTransaction: Omit<StoreCreditTransaction, 'id'> = {
                 userId: user.uid,
-                userName: user.displayName || 'User',
-                userEmail: user.email || '',
+                userName: user.displayName || 'Unknown User',
+                userEmail: user.email || 'no-email@example.com',
                 amount,
                 type: 'earned',
                 description: 'Redeemed from earnings',
@@ -496,8 +496,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             // Create payment record to reduce outstanding balance
             const paymentData: Omit<PaymentRecord, 'id'> = {
                 userId: user.uid,
-                userName: user.displayName || 'User',
-                userEmail: user.email || '',
+                userName: user.displayName || 'Unknown User',
+                userEmail: user.email || 'no-email@example.com',
                 amount,
                 type: 'store_credit',
                 itemsSold: [],
@@ -555,10 +555,13 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     };
 
     const filteredAndSortedUsers = userAnalytics
-        .filter(user => 
-            user.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            user.userEmail.toLowerCase().includes(searchQuery.toLowerCase())
-        )
+        .filter(user => {
+            const searchLower = searchQuery.toLowerCase();
+            const userName = user.userName || '';
+            const userEmail = user.userEmail || '';
+            return userName.toLowerCase().includes(searchLower) ||
+                   userEmail.toLowerCase().includes(searchLower);
+        })
         .sort((a, b) => {
             const aValue = a[sortField];
             const bValue = b[sortField];
@@ -824,8 +827,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                                     >
                                                         <td className="px-6 py-4 whitespace-nowrap">
                                                             <div>
-                                                                <div className="text-sm font-medium text-gray-900">{userAnalytic.userName}</div>
-                                                                <div className="text-sm text-gray-500">{userAnalytic.userEmail}</div>
+                                                                <div className="text-sm font-medium text-gray-900">{userAnalytic.userName || 'Unknown User'}</div>
+                                                                <div className="text-sm text-gray-500">{userAnalytic.userEmail || 'No email'}</div>
                                                                 <div className="text-xs text-gray-400">
                                                                     {userAnalytic.totalItemsListed} listed • {userAnalytic.activeItems.length} active • {userAnalytic.pendingItems.length} pending
                                                                 </div>
@@ -887,7 +890,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <h2 className="text-2xl font-bold text-gray-800">{selectedUserAnalytics.userName}</h2>
+                                    <h2 className="text-2xl font-bold text-gray-800">{selectedUserAnalytics.userName || 'Unknown User'}</h2>
                                     <p className="text-gray-600 mt-1">User Activity & Action History</p>
                                 </div>
                                 <button

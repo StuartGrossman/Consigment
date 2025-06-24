@@ -26,7 +26,7 @@ import ActionsDashboard from './ActionsDashboard';
 
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, signInWithPhone, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin } = useAuth();
-    const { getCartItemCount, getBookmarkCount, switchUser } = useCart();
+    const { getCartItemCount, getBookmarkCount, cleanupBookmarks, switchUser } = useCart();
     const [items, setItems] = useState<ConsignmentItem[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -49,7 +49,9 @@ const Home: React.FC = () => {
     const userMenuRef = useRef<HTMLDivElement>(null);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [alertsMenuOpen, setAlertsMenuOpen] = useState(false);
+    const [adminMenuOpen, setAdminMenuOpen] = useState(false);
     const alertsMenuRef = useRef<HTMLDivElement>(null);
+    const adminMenuRef = useRef<HTMLDivElement>(null);
     const [recentItems, setRecentItems] = useState<ConsignmentItem[]>([]);
     const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
     const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
@@ -68,6 +70,7 @@ const Home: React.FC = () => {
         approved: 0,
         sold: 0
     });
+    const [notificationsClearedAt, setNotificationsClearedAt] = useState<Date | null>(null);
     const [filtersOpen, setFiltersOpen] = useState(false); // For mobile filter collapse
     const filtersRef = useRef<HTMLDivElement>(null);
 
@@ -119,19 +122,22 @@ const Home: React.FC = () => {
             if (alertsMenuRef.current && !alertsMenuRef.current.contains(event.target as Node)) {
                 setAlertsMenuOpen(false);
             }
+            if (adminMenuRef.current && !adminMenuRef.current.contains(event.target as Node)) {
+                setAdminMenuOpen(false);
+            }
             if (filtersRef.current && !filtersRef.current.contains(event.target as Node) && window.innerWidth < 1024) {
                 setFiltersOpen(false);
             }
         };
 
-        if (userMenuOpen || alertsMenuOpen || filtersOpen) {
+        if (userMenuOpen || alertsMenuOpen || adminMenuOpen || filtersOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [userMenuOpen, alertsMenuOpen, filtersOpen]);
+    }, [userMenuOpen, alertsMenuOpen, adminMenuOpen, filtersOpen]);
 
     const checkAdminStatus = () => {
         if (!user) return;
@@ -176,7 +182,11 @@ const Home: React.FC = () => {
             };
             
             setNotificationCounts(newCounts);
-        } catch (error) {
+        } catch (error: any) {
+            // Silent fallback for permission errors - don't log to console
+            if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+                return; // Fail silently for permission issues
+            }
             console.error('Error fetching notification counts:', error);
         }
     }, [user]);
@@ -207,6 +217,11 @@ const Home: React.FC = () => {
             });
             
             setItems(fetchedItems);
+            
+            // Clean up bookmarks to remove sold/unavailable items
+            if (isAuthenticated) {
+                cleanupBookmarks(fetchedItems);
+            }
         } catch (error) {
             console.error('Error fetching items:', error);
             setItems([]);
@@ -321,7 +336,11 @@ const Home: React.FC = () => {
             // Limit to 15 most recent items for better coverage
             const limitedItems = fetchedItems.slice(0, 15);
             setRecentItems(limitedItems);
-        } catch (error) {
+        } catch (error: any) {
+            // Silent fallback for permission errors - don't log to console
+            if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+                return; // Fail silently for permission issues
+            }
             console.error('Error fetching recent items:', error);
         }
     }, [user, isAdmin]);
@@ -831,30 +850,127 @@ const Home: React.FC = () => {
                             
                             {isAdmin && (
                                 <>
-                                    <button
-                                        onClick={handleAdminModal}
-                                                    className="desktop-button-secondary relative"
-                                    >
-                                                    <span className="hidden sm:inline">Pending Items</span>
-                                                    <span className="sm:hidden">Pending</span>
-                                        {notificationCounts.pending > 0 && (
-                                                        <span className="absolute -top-2 -right-2 bg-yellow-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
-                                                {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
-                                            </span>
+                                    {/* Individual buttons for large screens (1100px+) */}
+                                    <div className="hidden xl:flex xl:gap-2">
+                                        <button
+                                            onClick={handleAdminModal}
+                                            className="desktop-button-secondary relative"
+                                        >
+                                            <span>Pending Items</span>
+                                            {notificationCounts.pending > 0 && (
+                                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
+                                                </span>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={handleApprovedModal}
+                                            className="desktop-button-secondary relative"
+                                        >
+                                            <span>Approved Items</span>
+                                            {notificationCounts.approved > 0 && (
+                                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
+                                                </span>
+                                            )}
+                                        </button>
+                                    </div>
+
+                                    {/* Dropdown for medium screens (640px-1100px) */}
+                                    <div ref={adminMenuRef} className="relative hidden sm:block xl:hidden">
+                                        <button
+                                            onClick={() => setAdminMenuOpen(!adminMenuOpen)}
+                                            className="desktop-button-secondary relative flex items-center gap-1"
+                                        >
+                                            <span>Admin</span>
+                                            <svg className={`w-4 h-4 transition-transform ${adminMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                            {(notificationCounts.pending > 0 || notificationCounts.approved > 0) && (
+                                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {Math.min(99, notificationCounts.pending + notificationCounts.approved)}
+                                                </span>
+                                            )}
+                                        </button>
+
+                                        {/* Admin Dropdown Menu */}
+                                        {adminMenuOpen && (
+                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                                                <div className="py-1">
+                                                    <button
+                                                        onClick={() => {
+                                                            handleAdminModal();
+                                                            setAdminMenuOpen(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            <span>Pending Items</span>
+                                                        </div>
+                                                        {notificationCounts.pending > 0 && (
+                                                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                                                {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            handleApprovedModal();
+                                                            setAdminMenuOpen(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                            </svg>
+                                                            <span>Approved Items</span>
+                                                        </div>
+                                                        {notificationCounts.approved > 0 && (
+                                                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                                                                {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
                                         )}
-                                    </button>
-                                    <button
-                                        onClick={handleApprovedModal}
-                                                    className="desktop-button-secondary relative"
-                                    >
-                                                    <span className="hidden sm:inline">Approved Items</span>
-                                                    <span className="sm:hidden">Approved</span>
-                                        {notificationCounts.approved > 0 && (
-                                                        <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
-                                                {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
-                                            </span>
-                                        )}
-                                    </button>
+                                    </div>
+
+                                    {/* Mobile/small screens - show icons only */}
+                                    <div className="flex gap-1 sm:hidden">
+                                        <button
+                                            onClick={handleAdminModal}
+                                            className="desktop-button-secondary relative p-2"
+                                            title="Pending Items"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            {notificationCounts.pending > 0 && (
+                                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
+                                                </span>
+                                            )}
+                                        </button>
+                                        <button
+                                            onClick={handleApprovedModal}
+                                            className="desktop-button-secondary relative p-2"
+                                            title="Approved Items"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            {notificationCounts.approved > 0 && (
+                                                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
+                                                </span>
+                                            )}
+                                        </button>
+                                    </div>
                                 </>
                             )}
                                     </div>
@@ -870,9 +986,9 @@ const Home: React.FC = () => {
                                                 <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                     </svg>
-                                    {getBookmarkCount() > 0 && (
+                                    {getBookmarkCount(items) > 0 && (
                                                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
-                                            {getBookmarkCount() > 9 ? '9+' : getBookmarkCount()}
+                                            {getBookmarkCount(items) > 9 ? '9+' : getBookmarkCount(items)}
                                         </span>
                                     )}
                                 </button>
@@ -899,17 +1015,39 @@ const Home: React.FC = () => {
                             {/* Alerts/Notifications Icon */}
                             <div ref={alertsMenuRef} className="relative">
                                 <button
-                                    onClick={() => setAlertsMenuOpen(!alertsMenuOpen)}
+                                    onClick={() => {
+                                        setAlertsMenuOpen(!alertsMenuOpen);
+                                        // Clear notifications when opening the alerts menu
+                                        if (!alertsMenuOpen) {
+                                            setNotificationsClearedAt(new Date());
+                                        }
+                                    }}
                                                 className="desktop-icon-button"
                                 >
                                                 <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                     </svg>
-                                    {recentItems.length > 0 && (
+                                    {(() => {
+                                        // Only show notification if there are recent items that haven't been cleared
+                                        const hasUnseenNotifications = recentItems.length > 0 && (
+                                            !notificationsClearedAt || 
+                                            recentItems.some(item => {
+                                                const latestActivity = Math.max(
+                                                    item.createdAt?.getTime() || 0,
+                                                    item.approvedAt?.getTime() || 0,
+                                                    item.liveAt?.getTime() || 0,
+                                                    item.soldAt?.getTime() || 0
+                                                );
+                                                return latestActivity > notificationsClearedAt.getTime();
+                                            })
+                                        );
+                                        
+                                        return hasUnseenNotifications ? (
                                                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                             {recentItems.length > 9 ? '9+' : recentItems.length}
                                         </span>
-                                    )}
+                                        ) : null;
+                                    })()}
                                 </button>
 
                                 {/* Alerts Dropdown */}
@@ -1532,9 +1670,9 @@ const Home: React.FC = () => {
                                                     <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                                 </svg>
-                                                {getBookmarkCount() > 0 && (
+                                                {getBookmarkCount(items) > 0 && (
                                                         <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
-                                                        {getBookmarkCount() > 9 ? '9+' : getBookmarkCount()}
+                                                        {getBookmarkCount(items) > 9 ? '9+' : getBookmarkCount(items)}
                                                     </span>
                                                 )}
                                             </button>
@@ -1561,17 +1699,39 @@ const Home: React.FC = () => {
                                             {/* Alerts/Notifications Icon */}
                                             <div ref={alertsMenuRef} className="relative">
                                                 <button
-                                                    onClick={() => setAlertsMenuOpen(!alertsMenuOpen)}
+                                                    onClick={() => {
+                                                        setAlertsMenuOpen(!alertsMenuOpen);
+                                                        // Clear notifications when opening the alerts menu
+                                                        if (!alertsMenuOpen) {
+                                                            setNotificationsClearedAt(new Date());
+                                                        }
+                                                    }}
                                                     className="desktop-icon-button"
                                                 >
                                                     <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                                     </svg>
-                                                    {recentItems.length > 0 && (
-                                                        <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {(() => {
+                                                        // Only show notification if there are recent items that haven't been cleared
+                                                        const hasUnseenNotifications = recentItems.length > 0 && (
+                                                            !notificationsClearedAt || 
+                                                            recentItems.some(item => {
+                                                                const latestActivity = Math.max(
+                                                                    item.createdAt?.getTime() || 0,
+                                                                    item.approvedAt?.getTime() || 0,
+                                                                    item.liveAt?.getTime() || 0,
+                                                                    item.soldAt?.getTime() || 0
+                                                                );
+                                                                return latestActivity > notificationsClearedAt.getTime();
+                                                            })
+                                                        );
+                                                        
+                                                        return hasUnseenNotifications ? (
+                                                                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                             {recentItems.length > 9 ? '9+' : recentItems.length}
                                                         </span>
-                                                    )}
+                                                        ) : null;
+                                                    })()}
                                                 </button>
 
                                                 {/* Alerts Dropdown */}

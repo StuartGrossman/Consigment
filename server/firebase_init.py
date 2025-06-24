@@ -1,16 +1,28 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
-from firebase_config import FIREBASE_CONFIG
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 try:
-    # Initialize Firebase Admin SDK
-    cred = credentials.Certificate(FIREBASE_CONFIG)
-    firebase_admin.initialize_app(cred)
+    # Try to initialize Firebase Admin SDK
+    # First try with service account key file if it exists
+    service_account_path = os.path.join(os.path.dirname(__file__), 'serviceAccountKey.json')
+    
+    if os.path.exists(service_account_path):
+        cred = credentials.Certificate(service_account_path)
+        firebase_admin.initialize_app(cred)
+        logger.info("Firebase initialized with service account key")
+    else:
+        # For development, initialize with default credentials
+        # This works when using the same project as the frontend
+        firebase_admin.initialize_app(credentials.ApplicationDefault(), {
+            'projectId': 'consignment-store-4a564'
+        })
+        logger.info("Firebase initialized with application default credentials")
     
     # Get Firestore instance
     db = firestore.client()

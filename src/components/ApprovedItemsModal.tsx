@@ -144,6 +144,95 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
     });
   };
 
+  // Print barcode from stored image
+  const printBarcode = (item: ConsignmentItem) => {
+    if (!item.barcodeImageUrl) return;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Barcode Label - ${item.title}</title>
+            <style>
+              @media print {
+                body { margin: 0; }
+                .no-print { display: none !important; }
+              }
+              body { 
+                font-family: Arial, sans-serif; 
+                margin: 20px; 
+                background-color: white; 
+                color: black;
+              }
+              .label-container { 
+                max-width: 600px; 
+                margin: 0 auto; 
+                border: 2px solid #000; 
+                padding: 20px;
+                background-color: white;
+              }
+              .header { 
+                text-align: center; 
+                border-bottom: 2px solid #000; 
+                padding-bottom: 15px; 
+                margin-bottom: 20px; 
+              }
+              .barcode-container { 
+                text-align: center; 
+                margin: 30px 0; 
+                padding: 20px;
+                background-color: white;
+                border: 2px dashed #333;
+              }
+              .barcode-container img { 
+                max-width: 100%; 
+                height: auto; 
+                background-color: white;
+                padding: 10px;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="label-container">
+              <div class="header">
+                <h1>🏔️ Summit Gear Exchange</h1>
+                <p>Mountain Consignment Store</p>
+              </div>
+              
+              <div class="item-info">
+                <h3>${item.title}</h3>
+                <p>Price: $${item.price} | Status: ${item.status.toUpperCase()}</p>
+              </div>
+              
+              <div class="barcode-container">
+                <h4>SCAN BARCODE</h4>
+                <img src="${item.barcodeImageUrl}" alt="Barcode: ${item.barcodeData}" />
+                <div class="barcode-info">
+                  <p><strong>Barcode ID:</strong> ${item.barcodeData}</p>
+                  <p><strong>Generated:</strong> ${item.barcodeGeneratedAt ? new Date(item.barcodeGeneratedAt).toLocaleDateString() : 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+            
+            <script>
+              window.onload = function() {
+                setTimeout(function() {
+                  window.print();
+                }, 500);
+              };
+              window.onafterprint = function() {
+                window.close();
+              };
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -240,6 +329,105 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                           )}
                         </div>
 
+                        {/* Barcode Section */}
+                        {item.barcodeData && (
+                          <div className="bg-blue-50 rounded-lg p-2 sm:p-3 border border-blue-200">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                                </svg>
+                                <span className="text-sm sm:text-base font-medium text-blue-800">Item Barcode</span>
+                              </div>
+                              {item.barcodeImageUrl && (
+                                <button
+                                  onClick={() => printBarcode(item)}
+                                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                                >
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                  </svg>
+                                  Print
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                              {/* Barcode Image */}
+                              {item.barcodeImageUrl ? (
+                                <div className="flex justify-center sm:justify-start">
+                                  <div className="bg-white p-2 rounded border border-blue-200 shadow-sm">
+                                    <img 
+                                      src={item.barcodeImageUrl} 
+                                      alt={`Barcode: ${item.barcodeData}`}
+                                      className="max-w-full h-auto max-h-16 sm:max-h-20"
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="flex justify-center sm:justify-start">
+                                  <div className="bg-gray-100 p-3 rounded border border-gray-200 text-center">
+                                    <svg className="w-8 h-8 mx-auto text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 100 4m0-4v2m0-6V4" />
+                                    </svg>
+                                    <p className="text-xs text-gray-500">No image</p>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Barcode Information */}
+                              <div className="space-y-1">
+                                <div className="text-xs font-medium text-blue-700">Barcode ID:</div>
+                                <div className="font-mono text-xs bg-white px-2 py-1 rounded border border-blue-200 break-all">
+                                  {item.barcodeData}
+                                </div>
+                                <div className="text-xs text-blue-600">
+                                  Generated: {item.barcodeGeneratedAt 
+                                    ? (item.barcodeGeneratedAt instanceof Date 
+                                        ? item.barcodeGeneratedAt.toLocaleDateString()
+                                        : new Date(item.barcodeGeneratedAt).toLocaleDateString())
+                                    : 'N/A'
+                                  }
+                                </div>
+                                <div className="flex gap-1 mt-2">
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(item.barcodeData!);
+                                      // Show a brief success message
+                                      const toast = document.createElement('div');
+                                      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-3 py-1 rounded text-sm';
+                                      toast.textContent = 'Barcode copied!';
+                                      document.body.appendChild(toast);
+                                      setTimeout(() => {
+                                        if (document.body.contains(toast)) {
+                                          document.body.removeChild(toast);
+                                        }
+                                      }, 2000);
+                                    }}
+                                    className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors flex items-center gap-1"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Copy
+                                  </button>
+                                  {item.barcodeImageUrl && (
+                                    <button
+                                      onClick={() => printBarcode(item)}
+                                      className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors flex items-center gap-1"
+                                    >
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                                      </svg>
+                                      Print
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="mobile-admin-item-details">
                           <div>
                             <strong>Seller:</strong> {item.sellerName}
@@ -247,22 +435,6 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                           <div>
                             <strong>Approved:</strong> {item.approvedAt?.toLocaleDateString()}
                           </div>
-                          {item.barcodeData && (
-                            <>
-                              <div>
-                                <strong>Barcode:</strong> {item.barcodeData}
-                              </div>
-                              <div>
-                                <strong>Label Generated:</strong> {
-                                  item.barcodeGeneratedAt 
-                                    ? (item.barcodeGeneratedAt instanceof Date 
-                                        ? item.barcodeGeneratedAt.toLocaleDateString()
-                                        : new Date(item.barcodeGeneratedAt).toLocaleDateString())
-                                    : 'N/A'
-                                }
-                              </div>
-                            </>
-                          )}
                         </div>
 
                         {/* Action Buttons */}

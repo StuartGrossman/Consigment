@@ -276,13 +276,13 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
               <div className="flex gap-2">
                 <button
                   onClick={() => exportData('csv')}
-                  className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 text-sm"
+                  className="bg-orange-500 text-white px-3 py-2 rounded-lg hover:bg-orange-600 text-sm"
                 >
                   📊 CSV
                 </button>
                 <button
                   onClick={() => exportData('json')}
-                  className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 text-sm"
+                  className="bg-gray-500 text-white px-3 py-2 rounded-lg hover:bg-gray-600 text-sm"
                 >
                   📋 JSON
                 </button>

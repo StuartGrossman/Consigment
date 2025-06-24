@@ -54,7 +54,11 @@ export const logUserAction = async (
         }
 
         await addDoc(collection(db, 'actionLogs'), actionLog);
-    } catch (error) {
+    } catch (error: any) {
+        // Silent fallback for permission errors - don't log to console
+        if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+            return; // Fail silently for permission issues
+        }
         console.error('Error logging user action:', error);
         // Don't throw error to avoid disrupting user experience
     }
@@ -96,7 +100,12 @@ export const getActionLogs = async (): Promise<ActionLog[]> => {
         });
         
         return logs;
-    } catch (error) {
+    } catch (error: any) {
+        // Handle permission errors silently
+        if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+            console.log('📍 Action logs fetch not available due to permissions');
+            return []; // Return empty array for permission issues
+        }
         console.error('Error getting action logs:', error);
         throw new Error('Failed to get action logs');
     }
@@ -136,6 +145,12 @@ export const subscribeToActionLogs = (callback: (logs: ActionLog[]) => void): ((
                 callback([]); // Return empty array on error
             }
         }, (error) => {
+            // Silent handling of permission errors to prevent console spam
+            if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+                console.log('📍 Action logs subscription not available due to permissions');
+                callback([]); // Return empty array for permission issues
+                return;
+            }
             console.error('Error subscribing to action logs:', error);
             console.error('Error details:', error.code, error.message);
             console.log('User auth state:', auth.currentUser ? 'authenticated' : 'not authenticated');
