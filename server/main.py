@@ -785,6 +785,90 @@ async def update_single_item_status(request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.post("/api/admin/update-item-with-barcode")
+async def update_item_with_barcode(request: Request):
+    """Update item with barcode data and status (admin only)"""
+    try:
+        # Get token from header
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        
+        # Verify token and admin status
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # Check if user is admin
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Get request data
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        barcode_data = data.get('barcodeData', '')
+        barcode_image_url = data.get('barcodeImageUrl', '')
+        new_status = data.get('status', 'approved')
+        
+        if not item_id or not barcode_data:
+            raise HTTPException(status_code=400, detail="Missing itemId or barcodeData")
+        
+        logger.info(f"Admin {user_id} updating item {item_id} with barcode and status: {new_status}")
+        
+        # Update item with barcode data
+        update_data = {
+            'barcodeData': barcode_data,
+            'barcodeGeneratedAt': datetime.utcnow(),
+            'barcodeImageUrl': barcode_image_url,
+            'printConfirmedAt': datetime.utcnow(),
+            'status': new_status,
+            'lastUpdated': datetime.utcnow(),
+            'updatedBy': user_id
+        }
+        
+        if new_status == 'approved':
+            update_data['approvedAt'] = datetime.utcnow()
+        elif new_status == 'live':
+            update_data['liveAt'] = datetime.utcnow()
+        
+        # Get item details for logging
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        item_ref.update(update_data)
+        
+        # Log admin action
+        admin_action = {
+            'adminId': user_id,
+            'action': 'item_barcode_update',
+            'details': f'Updated item "{item_data.get("title", "Unknown")}" with barcode and status {new_status}',
+            'itemId': item_id,
+            'timestamp': datetime.utcnow(),
+            'oldStatus': item_data.get('status', 'unknown'),
+            'newStatus': new_status,
+            'barcodeData': barcode_data
+        }
+        db.collection('adminActions').add(admin_action)
+        
+        return {
+            "success": True,
+            "message": f"Successfully updated item with barcode and status {new_status}",
+            "itemId": item_id,
+            "newStatus": new_status,
+            "barcodeData": barcode_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in barcode item update: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

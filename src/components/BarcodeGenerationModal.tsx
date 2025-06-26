@@ -6,6 +6,7 @@ import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logUserAction } from '../services/firebaseService';
 import { useAuth } from '../hooks/useAuth';
+import { apiService } from '../services/apiService';
 
 interface BarcodeGenerationModalProps {
   isOpen: boolean;
@@ -376,23 +377,19 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
         }, 'image/png');
       });
 
-      // Save barcode data and approve the item
-      const itemRef = doc(db, 'items', item.id);
-      const updateData = {
-        barcodeData: barcodeData,
-        barcodeGeneratedAt: serverTimestamp(),
-        barcodeImageUrl: barcodeImageUrl,
-        printConfirmedAt: serverTimestamp(),
-        status: 'approved',
-        approvedAt: serverTimestamp()
-      };
-      
-      console.log('Attempting to update item...');
+      // Save barcode data and approve the item via server API
+      console.log('Attempting to update item via server API...');
       console.log('Item ID:', item.id);
-      console.log('Update data:', updateData);
+      console.log('Barcode data:', barcodeData);
+      console.log('Barcode image URL:', barcodeImageUrl);
       console.log('Current user admin status:', isAdmin);
       
-      await updateDoc(itemRef, updateData);
+      // Use the server API to update the item with barcode data and approve it
+      await apiService.updateItemWithBarcode(item.id, {
+        barcodeData: barcodeData,
+        barcodeImageUrl: barcodeImageUrl,
+        status: 'approved'
+      });
 
       console.log('Item updated successfully');
 

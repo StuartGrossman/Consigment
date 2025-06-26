@@ -1,4 +1,5 @@
-import { auth } from '../config/firebase';
+import { auth, db } from '../config/firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 // Detect environment and use appropriate API URL
 const getApiBaseUrl = () => {
@@ -200,6 +201,25 @@ class ApiService {
             });
         } catch (error) {
             console.error('❌ Failed to update item status:', error);
+            throw error;
+        }
+    }
+
+    async updateItemWithBarcode(itemId: string, barcodeData: {
+        barcodeData: string;
+        barcodeImageUrl: string;
+        status: string;
+    }): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/update-item-with-barcode', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId: itemId,
+                    ...barcodeData,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to update item with barcode:', error);
             throw error;
         }
     }
