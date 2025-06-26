@@ -19,101 +19,133 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // ======================================
+    // USER-SIDE COLLECTIONS (User Access)
+    // ======================================
+
     // Users collection - users can read/write their own profile, admins can read all
     match /users/{userId} {
-      // Users can always read and write their own profile
       allow read, write: if isOwner(userId);
-      // Admins can read all user profiles
-      allow read: if isAdmin();
-      // Admins can update other users (for admin status management)
-      allow update: if isAdmin();
+      allow read, update: if isAdmin();
     }
 
-    // Items collection - restricted write access, public read for live items
+    // User's personal items (drafts, pending items they created)
+    match /userItems/{userId}/items/{itemId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAdmin(); // Admins can view user items
+    }
+
+    // User's cart data
+    match /userCarts/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // User's bookmarks
+    match /userBookmarks/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // User's action history (personal logs)
+    match /userActions/{userId}/actions/{actionId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAdmin(); // Admins can view user actions for support
+    }
+
+    // User's purchase history (personal copy)
+    match /userPurchases/{userId}/orders/{orderId} {
+      allow read, write: if isOwner(userId);
+      allow read: if isAdmin(); // Admins can view for customer service
+    }
+
+    // ======================================
+    // PUBLIC COLLECTIONS (Controlled Access)
+    // ======================================
+
+    // Live items - public read, server-only write
     match /items/{itemId} {
-      // Public read access for live items
-      allow read: if resource.data.status == 'live' || 
-                     isAdmin() || 
-                     (isAuthenticated() && resource.data.sellerId == request.auth.uid);
-      
-      // Users can create items (pending approval) or admins can create test data
-      allow create: if (isAuthenticated() && 
-                        request.resource.data.sellerId == request.auth.uid &&
-                        request.resource.data.status == 'pending') ||
-                       (isAdmin() && request.resource.data.isTestData == true);
-      
-      // Users can update their own items (but not change status to sold - server only)
-      allow update: if isAuthenticated() && 
-                       resource.data.sellerId == request.auth.uid &&
-                       request.resource.data.status != 'sold' &&
-                       request.resource.data.sellerId == resource.data.sellerId;
-      
-      // Admins can update item status (but only through server for sold items)
-      allow update: if isAdmin() && 
-                       (request.resource.data.status != 'sold' || 
-                        request.resource.data.status == resource.data.status);
-      
-      // Allow admins to delete test data only
-      allow delete: if isAdmin() && resource.data.isTestData == true;
-    }
-
-    // Sales collection - SERVER ONLY ACCESS
-    // This prevents clients from directly creating fake sales records
-    match /sales/{saleId} {
-      allow read: if isAdmin() || 
-                     (isAuthenticated() && 
-                      (resource.data.sellerId == request.auth.uid || 
-                       resource.data.buyerId == request.auth.uid));
-      
-      // NO direct write access - only server can create sales records
-      allow write: if false;
-    }
-
-    // Orders collection - SERVER ONLY ACCESS
-    // This prevents clients from creating fake orders
-    match /orders/{orderId} {
-      allow read: if isAdmin() || 
-                     (isAuthenticated() && resource.data.userId == request.auth.uid);
-      
-      // NO direct write access - only server can create orders
-      allow write: if false;
-    }
-
-    // Store credits collection - SERVER ONLY ACCESS
-    // This prevents clients from giving themselves free credits
-    match /store_credits/{creditId} {
-      allow read: if isAdmin() || 
-                     (isAuthenticated() && resource.data.userId == request.auth.uid);
-      
-      // NO direct write access - only server can create store credits
-      allow write: if false;
-    }
-
-    // Store credit transactions - SERVER ONLY ACCESS
-    match /store_credit_transactions/{transactionId} {
-      allow read: if isAdmin() || 
-                     (isAuthenticated() && resource.data.userId == request.auth.uid);
-      
-      // NO direct write access - only server can create transactions
-      allow write: if false;
-    }
-
-    // Payments collection - ADMIN ONLY
-    match /payments/{paymentId} {
+      // Anyone can read live items
+      allow read: if resource.data.status == 'live';
+      // Item creators can read their own items regardless of status
+      allow read: if isAuthenticated() && resource.data.sellerId == request.auth.uid;
+      // Admins can read all items
       allow read: if isAdmin();
-      allow write: if isAdmin();
+      
+      // Only server (Firebase Admin SDK) can write to items
+      // This prevents users from marking items as sold or changing prices
+      allow write: if false; // All writes handled by server
     }
 
-    // User actions (logs) - read-only for users, full access for admins
-    match /user_actions/{actionId} {
+    // ======================================
+    // ADMIN-ONLY COLLECTIONS
+    // ======================================
+
+    // Pending items awaiting admin approval
+    match /pendingItems/{itemId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Admin action logs
+    match /adminActions/{actionId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Sales records - SERVER ONLY (created by payment processing)
+    match /sales/{saleId} {
+      // Users can read their own sales
       allow read: if isAuthenticated() && 
-                     (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && 
-                       request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+                     (resource.data.sellerId == request.auth.uid || 
+                      resource.data.buyerId == request.auth.uid);
+      // Admins can read all sales
+      allow read: if isAdmin();
+      // Only server can create/update sales
+      allow write: if false;
     }
 
-    // Action logs collection - admin read access, authenticated users can create logs  
+    // Orders - SERVER ONLY (created by payment processing)
+    match /orders/{orderId} {
+      // Users can read their own orders
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Admins can read all orders
+      allow read: if isAdmin();
+      // Only server can create/update orders
+      allow write: if false;
+    }
+
+    // Store credits - SERVER ONLY
+    match /store_credits/{creditId} {
+      // Users can read their own credits
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Admins can read all credits
+      allow read: if isAdmin();
+      // Only server can create/update credits
+      allow write: if false;
+    }
+
+    // Store credit transactions - SERVER ONLY
+    match /store_credit_transactions/{transactionId} {
+      // Users can read their own transactions
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Admins can read all transactions
+      allow read: if isAdmin();
+      // Only server can create/update transactions
+      allow write: if false;
+    }
+
+    // Refunds - ADMIN ONLY
+    match /refunds/{refundId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Payments - ADMIN ONLY
+    match /payments/{paymentId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ======================================
+    // LEGACY/COMPATIBILITY COLLECTIONS
+    // ======================================
+
+    // Action logs - for backward compatibility, but prefer userActions
     match /actionLogs/{logId} {
       allow read: if isAdmin();
       allow create: if isAuthenticated();
@@ -125,13 +157,12 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // ======================================
+    // ADMIN ANALYTICS COLLECTIONS
+    // ======================================
+
     // Performance metrics - admin only
     match /performance_metrics/{metricId} {
-      allow read, write: if isAdmin();
-    }
-
-    // Refunds collection - admin only
-    match /refunds/{refundId} {
       allow read, write: if isAdmin();
     }
 
@@ -157,6 +188,19 @@ service cloud.firestore {
 
     // Feature test data - admin only
     match /feature_tests/{testId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Rate limiting and security collections
+    match /banned_ips/{ipId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /banned_users/{userId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /rate_limit_violations/{violationId} {
       allow read, write: if isAdmin();
     }
 

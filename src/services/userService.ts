@@ -1,5 +1,5 @@
 import { db } from '../config/firebase';
-import { collection, query, where, getDocs, addDoc, serverTimestamp, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, setDoc, doc, serverTimestamp, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { AuthUser } from '../types';
 
 export interface UserActionLog {
@@ -15,7 +15,7 @@ export interface UserActionLog {
 }
 
 /**
- * User-safe logging function that silently handles permission errors
+ * User-safe logging function using user-specific collections
  */
 export const logUserActionSafe = async (
     user: AuthUser | null,
@@ -40,7 +40,9 @@ export const logUserActionSafe = async (
         if (itemId) actionLog.itemId = itemId;
         if (itemTitle) actionLog.itemTitle = itemTitle;
 
-        await addDoc(collection(db, 'userActions'), actionLog);
+        // Use user-specific subcollection for actions
+        const userActionsRef = collection(db, 'userActions', user.uid, 'actions');
+        await addDoc(userActionsRef, actionLog);
     } catch (error: any) {
         // Silently handle all errors for user actions to prevent disruption
         console.debug('User action logging skipped:', error?.code || 'unknown error');
@@ -48,13 +50,12 @@ export const logUserActionSafe = async (
 };
 
 /**
- * Get user's own action history (user-safe)
+ * Get user's own action history using user-specific collection
  */
 export const getUserActionHistory = async (userId: string): Promise<UserActionLog[]> => {
     try {
         const userActionsQuery = query(
-            collection(db, 'userActions'),
-            where('userId', '==', userId),
+            collection(db, 'userActions', userId, 'actions'),
             orderBy('timestamp', 'desc'),
             limit(50)
         );
@@ -71,13 +72,12 @@ export const getUserActionHistory = async (userId: string): Promise<UserActionLo
 };
 
 /**
- * Subscribe to user's own actions (user-safe)
+ * Subscribe to user's own actions using user-specific collection
  */
 export const subscribeToUserActions = (userId: string, callback: (actions: UserActionLog[]) => void): (() => void) => {
     try {
         const userActionsQuery = query(
-            collection(db, 'userActions'),
-            where('userId', '==', userId),
+            collection(db, 'userActions', userId, 'actions'),
             orderBy('timestamp', 'desc'),
             limit(20)
         );
@@ -104,78 +104,229 @@ export const subscribeToUserActions = (userId: string, callback: (actions: UserA
 };
 
 /**
- * User-safe cart operations
+ * Save user cart to user-specific collection
  */
-export const updateUserCart = async (userId: string, cartData: any): Promise<void> => {
+export const saveUserCart = async (userId: string, cartData: any): Promise<void> => {
     try {
-        // Store cart in localStorage for user-side operations
+        // Store cart in user-specific collection
+        const userCartRef = doc(db, 'userCarts', userId);
+        await setDoc(userCartRef, {
+            cartData,
+            updatedAt: serverTimestamp()
+        });
+        
+        // Also store locally as backup
         localStorage.setItem(`cart_${userId}`, JSON.stringify(cartData));
-        
-        // Also try to sync with Firestore if permissions allow
-        try {
-            await addDoc(collection(db, 'userCarts'), {
-                userId,
-                cartData,
-                updatedAt: serverTimestamp()
-            });
-        } catch (error) {
-            // Silently fail if no permissions
-            console.debug('Cart sync to Firestore skipped:', error);
-        }
     } catch (error) {
-        console.debug('Cart update failed:', error);
+        console.debug('Cart save to Firestore failed, using localStorage:', error);
+        // Fallback to localStorage only
+        localStorage.setItem(`cart_${userId}`, JSON.stringify(cartData));
     }
 };
 
 /**
- * User-safe purchase history
+ * Load user cart from user-specific collection
  */
-export const getUserPurchaseHistory = async (userId: string): Promise<any[]> => {
+export const loadUserCart = async (userId: string): Promise<any> => {
     try {
-        // Try to get from localStorage first
-        const localHistory = localStorage.getItem(`purchase_history_${userId}`);
-        if (localHistory) {
-            return JSON.parse(localHistory);
-        }
+        // Try Firestore first
+        const userCartRef = doc(db, 'userCarts', userId);
+        const cartDoc = await getDocs(query(collection(db, 'userCarts'), where('__name__', '==', userId)));
         
-        // Try Firestore if available (user-accessible collection)
-        try {
-            const purchasesQuery = query(
-                collection(db, 'userPurchases'),
-                where('userId', '==', userId),
-                orderBy('purchaseDate', 'desc')
-            );
-            
-            const querySnapshot = await getDocs(purchasesQuery);
-            return querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-        } catch (error) {
-            console.debug('Firestore purchase history not accessible:', error);
-            return [];
+        if (!cartDoc.empty) {
+            const cartData = cartDoc.docs[0].data().cartData;
+            // Sync to localStorage
+            localStorage.setItem(`cart_${userId}`, JSON.stringify(cartData));
+            return cartData;
         }
     } catch (error) {
-        console.debug('Could not fetch purchase history:', error);
-        return [];
+        console.debug('Could not load cart from Firestore:', error);
+    }
+    
+    // Fallback to localStorage
+    try {
+        const localCart = localStorage.getItem(`cart_${userId}`);
+        return localCart ? JSON.parse(localCart) : null;
+    } catch (error) {
+        console.debug('Could not load cart from localStorage:', error);
+        return null;
     }
 };
 
 /**
- * User-safe bookmark operations
+ * Save user bookmarks to user-specific collection
  */
-export const updateUserBookmarks = async (userId: string, bookmarks: string[]): Promise<void> => {
+export const saveUserBookmarks = async (userId: string, bookmarks: string[]): Promise<void> => {
     try {
-        // Store bookmarks locally
+        const userBookmarksRef = doc(db, 'userBookmarks', userId);
+        await setDoc(userBookmarksRef, {
+            bookmarks,
+            updatedAt: serverTimestamp()
+        });
+        
+        // Also store locally
         localStorage.setItem(`bookmarks_${userId}`, JSON.stringify(bookmarks));
         
-        // Log the action using user-safe logging
+        // Log the action
         await logUserActionSafe(
             { uid: userId } as AuthUser,
             'bookmarks_updated',
             `Updated bookmarks (${bookmarks.length} items)`
         );
     } catch (error) {
-        console.debug('Bookmark update failed:', error);
+        console.debug('Bookmark save to Firestore failed, using localStorage:', error);
+        localStorage.setItem(`bookmarks_${userId}`, JSON.stringify(bookmarks));
+    }
+};
+
+/**
+ * Load user bookmarks from user-specific collection
+ */
+export const loadUserBookmarks = async (userId: string): Promise<string[]> => {
+    try {
+        // Try Firestore first
+        const userBookmarksRef = doc(db, 'userBookmarks', userId);
+        const bookmarksDoc = await getDocs(query(collection(db, 'userBookmarks'), where('__name__', '==', userId)));
+        
+        if (!bookmarksDoc.empty) {
+            const bookmarks = bookmarksDoc.docs[0].data().bookmarks || [];
+            // Sync to localStorage
+            localStorage.setItem(`bookmarks_${userId}`, JSON.stringify(bookmarks));
+            return bookmarks;
+        }
+    } catch (error) {
+        console.debug('Could not load bookmarks from Firestore:', error);
+    }
+    
+    // Fallback to localStorage
+    try {
+        const localBookmarks = localStorage.getItem(`bookmarks_${userId}`);
+        return localBookmarks ? JSON.parse(localBookmarks) : [];
+    } catch (error) {
+        console.debug('Could not load bookmarks from localStorage:', error);
+        return [];
+    }
+};
+
+/**
+ * Save user's personal item (draft/pending) to user-specific collection
+ */
+export const saveUserItem = async (userId: string, itemData: any): Promise<string | null> => {
+    try {
+        // Validate userId
+        if (!userId || userId.trim() === '') {
+            console.error('❌ Invalid userId provided to saveUserItem');
+            return null;
+        }
+
+        const userItemsRef = collection(db, 'userItems', userId, 'items');
+        const docRef = await addDoc(userItemsRef, {
+            ...itemData,
+            createdAt: serverTimestamp(),
+            status: 'draft' // User items start as drafts
+        });
+        
+        console.log('✅ User item saved to user-specific collection:', docRef.id);
+        return docRef.id;
+    } catch (error: any) {
+        console.error('❌ Failed to save user item:', error);
+        
+        // Log more detailed error information
+        if (error?.code === 'permission-denied') {
+            console.error('Permission denied - user may not be properly authenticated');
+            console.error('User ID:', userId);
+            console.error('Error details:', error);
+        } else if (error?.code === 'unauthenticated') {
+            console.error('User is not authenticated');
+        } else {
+            console.error('Unknown error saving user item:', error?.message || error);
+        }
+        
+        return null;
+    }
+};
+
+/**
+ * Get user's personal items from user-specific collection
+ */
+export const getUserItems = async (userId: string): Promise<any[]> => {
+    try {
+        const userItemsQuery = query(
+            collection(db, 'userItems', userId, 'items'),
+            orderBy('createdAt', 'desc')
+        );
+        
+        const querySnapshot = await getDocs(userItemsQuery);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+    } catch (error) {
+        console.debug('Could not fetch user items:', error);
+        return [];
+    }
+};
+
+/**
+ * Save user purchase to user-specific collection (local copy for user access)
+ */
+export const saveUserPurchase = async (userId: string, purchaseData: any): Promise<void> => {
+    try {
+        const userPurchasesRef = collection(db, 'userPurchases', userId, 'orders');
+        await addDoc(userPurchasesRef, {
+            ...purchaseData,
+            createdAt: serverTimestamp()
+        });
+        
+        // Also save to localStorage as backup
+        const existingHistory = localStorage.getItem(`purchase_history_${userId}`);
+        const history = existingHistory ? JSON.parse(existingHistory) : [];
+        history.unshift(purchaseData);
+        localStorage.setItem(`purchase_history_${userId}`, JSON.stringify(history));
+        
+        console.log('✅ User purchase saved to user-specific collection');
+    } catch (error) {
+        console.debug('Purchase save to Firestore failed, using localStorage:', error);
+        // Fallback to localStorage only
+        const existingHistory = localStorage.getItem(`purchase_history_${userId}`);
+        const history = existingHistory ? JSON.parse(existingHistory) : [];
+        history.unshift(purchaseData);
+        localStorage.setItem(`purchase_history_${userId}`, JSON.stringify(history));
+    }
+};
+
+/**
+ * Get user's purchase history from user-specific collection
+ */
+export const getUserPurchaseHistory = async (userId: string): Promise<any[]> => {
+    try {
+        // Try Firestore first
+        const userPurchasesQuery = query(
+            collection(db, 'userPurchases', userId, 'orders'),
+            orderBy('createdAt', 'desc')
+        );
+        
+        const querySnapshot = await getDocs(userPurchasesQuery);
+        const firestorePurchases = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+        
+        if (firestorePurchases.length > 0) {
+            // Sync to localStorage
+            localStorage.setItem(`purchase_history_${userId}`, JSON.stringify(firestorePurchases));
+            return firestorePurchases;
+        }
+    } catch (error) {
+        console.debug('Could not fetch purchases from Firestore:', error);
+    }
+    
+    // Fallback to localStorage
+    try {
+        const localHistory = localStorage.getItem(`purchase_history_${userId}`);
+        return localHistory ? JSON.parse(localHistory) : [];
+    } catch (error) {
+        console.debug('Could not fetch purchases from localStorage:', error);
+        return [];
     }
 }; 

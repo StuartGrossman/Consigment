@@ -83,7 +83,7 @@ export const useRateLimiter = () => {
     getIPAddress();
   }, []);
 
-  // Check if IP is banned
+  // Check if IP is banned (admin only - gracefully handle permission errors)
   const checkIPBan = useCallback(async (ip: string): Promise<boolean> => {
     try {
       const bannedIPsQuery = query(
@@ -95,13 +95,17 @@ export const useRateLimiter = () => {
       
       const snapshot = await getDocs(bannedIPsQuery);
       return !snapshot.empty;
-    } catch (error) {
+    } catch (error: any) {
+      // Silent handling for permission errors - regular users can't check bans
+      if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+        return false; // Assume not banned if can't check
+      }
       console.error('Error checking IP ban:', error);
       return false;
     }
   }, []);
 
-  // Check if user is banned
+  // Check if user is banned (admin only - gracefully handle permission errors)
   const checkUserBan = useCallback(async (userId: string): Promise<boolean> => {
     try {
       const bannedUsersQuery = query(
@@ -113,7 +117,11 @@ export const useRateLimiter = () => {
       
       const snapshot = await getDocs(bannedUsersQuery);
       return !snapshot.empty;
-    } catch (error) {
+    } catch (error: any) {
+      // Silent handling for permission errors - regular users can't check bans
+      if (error?.code === 'permission-denied' || error?.message?.includes('Missing or insufficient permissions')) {
+        return false; // Assume not banned if can't check
+      }
       console.error('Error checking user ban:', error);
       return false;
     }

@@ -5,6 +5,7 @@ import { ConsignmentItem } from '../types';
 import { AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
 import { useAuth } from '../hooks/useAuth';
+import { apiService } from '../services/apiService';
 
 interface InventoryDashboardProps {
   user: AuthUser | null;
@@ -266,56 +267,99 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
 
   const handleBulkStatusChange = async (newStatus: string) => {
     try {
-      const updates = selectedItems.map(async (itemId) => {
-        const itemRef = doc(db, 'items', itemId);
-        const updateData: any = { status: newStatus };
-        
-        if (newStatus === 'live') {
-          updateData.liveAt = new Date();
-        } else if (newStatus === 'approved') {
-          updateData.approvedAt = new Date();
-        }
-        
-        return updateDoc(itemRef, updateData);
-      });
-
-      await Promise.all(updates);
+      await apiService.bulkUpdateItemStatus(selectedItems, newStatus);
       
-      // Log the bulk action
-      await logUserAction(user, 'bulk_action', `Bulk updated ${selectedItems.length} items to ${newStatus}`);
+      // Show success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = `Successfully updated ${selectedItems.length} items to ${newStatus}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 3000);
       
       await fetchAllItems();
       setSelectedItems([]);
       setShowBulkActions(false);
     } catch (error) {
       console.error('Error updating items:', error);
+      
+      // Show error message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = `Error: ${error instanceof Error ? error.message : 'Failed to update items'}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 5000);
     }
   };
 
   const handleSingleItemAction = async (itemId: string, action: string) => {
     try {
-      const itemRef = doc(db, 'items', itemId);
-      const updateData: any = { status: action };
-      
-      if (action === 'live') {
-        updateData.liveAt = new Date();
-      } else if (action === 'approved') {
-        updateData.approvedAt = new Date();
-      } else if (action === 'archived') {
-        updateData.archivedAt = new Date();
+      // Get user token for authentication
+      const idToken = await (user as any)?.getIdToken();
+      if (!idToken) {
+        throw new Error('Authentication required');
       }
-      
-      await updateDoc(itemRef, updateData);
-      
-      // Find the item for logging
-      const item = items.find(i => i.id === itemId);
-      if (item) {
-        await logUserAction(user, `item_${action}`, `Updated item status to ${action}`, itemId, item.title);
+
+             // Use the same API detection logic as apiService
+       const getApiBaseUrl = () => {
+         if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
+         if (import.meta.env.DEV) return 'http://localhost:8000';
+         return ''; // Use relative URLs for production
+       };
+       const API_BASE_URL = getApiBaseUrl();
+       
+       const response = await fetch(`${API_BASE_URL}/api/admin/update-item-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          itemId: itemId,
+          status: action
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update item');
       }
+
+      const result = await response.json();
+      console.log('Single item update success:', result.message);
+      
+      // Show success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = result.message;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 3000);
       
       await fetchAllItems();
     } catch (error) {
       console.error('Error updating item:', error);
+      
+      // Show error message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = `Error: ${error instanceof Error ? error.message : 'Failed to update item'}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 5000);
     }
   };
 
@@ -657,16 +701,22 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
             <div className="flex flex-wrap gap-2">
               <button
+                onClick={() => handleBulkStatusChange('pending')}
+                className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600"
+              >
+                Move to Pending
+              </button>
+              <button
                 onClick={() => handleBulkStatusChange('approved')}
-                className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
+                className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
               >
                 Move to Approved
               </button>
               <button
                 onClick={() => handleBulkStatusChange('live')}
-                className="bg-orange-500 text-white px-3 py-1 rounded text-sm hover:bg-orange-600"
+                className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
               >
-                Make Live
+                Mark as Live
               </button>
               <button
                 onClick={() => handleBulkStatusChange('archived')}
@@ -676,7 +726,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
               </button>
               <button
                 onClick={() => setShowBulkActions(false)}
-                className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
+                className="bg-gray-400 text-white px-3 py-1 rounded text-sm hover:bg-gray-500"
               >
                 Cancel
               </button>

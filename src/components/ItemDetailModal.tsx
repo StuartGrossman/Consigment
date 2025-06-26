@@ -6,6 +6,7 @@ import { doc, updateDoc, collection, addDoc } from 'firebase/firestore';
 import { db, storage } from '../config/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logUserAction } from '../services/firebaseService';
+import { apiService } from '../services/apiService';
 import JsBarcode from 'jsbarcode';
 import { useFormSubmitThrottle } from '../hooks/useButtonThrottle';
 
@@ -572,22 +573,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
     if (!item) return;
     
     try {
-      const itemRef = doc(db, 'items', item.id);
-      const updateData: any = { status: action };
-      
-      if (action === 'live') {
-        updateData.liveAt = new Date();
-      } else if (action === 'approved') {
-        updateData.approvedAt = new Date();
-      } else if (action === 'archived') {
-        updateData.archivedAt = new Date();
-      } else if (action === 'pending') {
-        // Reset approval and live dates when moving back to pending
-        updateData.approvedAt = null;
-        updateData.liveAt = null;
-      }
-      
-      await updateDoc(itemRef, updateData);
+      // Use the server API instead of direct Firestore updates
+      await apiService.updateItemStatus(item.id, action);
       
       // Log the admin action
       const actionText = action === 'live' ? 'made item live' : 
@@ -704,7 +691,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                 </div>
               )}
 
-              {/* Admin Actions for Sold Items - Issue Refund */}
+              {/* Admin Actions for Sold Items - Combined Actions */}
               {isAdmin && item.status === 'sold' && (
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button
@@ -1173,16 +1160,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                   </button>
                 )}
 
-                {/* Issue Refund Button */}
-                <button
-                  onClick={() => setShowRefundModal(true)}
-                  className="py-2 px-4 rounded-lg font-medium bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 15v-1a4 4 0 00-4-4H8m0 0l3 3m-3-3l3-3m9 14V5a2 2 0 00-2-2H6a2 2 0 00-2 2v16l4-2 4 2 4-2 4 2z" />
-                  </svg>
-                  Issue Refund
-                </button>
+
               </div>
             </div>
           </div>

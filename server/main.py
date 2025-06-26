@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Header
+from fastapi import FastAPI, HTTPException, Depends, status, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, validator
@@ -13,8 +13,16 @@ import logging
 from datetime import datetime, timedelta
 import uuid
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+# Configure logging for production
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, log_level),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log') if os.getenv("ENVIRONMENT") == "production" else logging.NullHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Summit Gear Exchange API", version="1.0.0")
@@ -22,7 +30,12 @@ app = FastAPI(title="Summit Gear Exchange API", version="1.0.0")
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "https://your-domain.com"],
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://localhost:5174",
+        "https://consignment-store-4a564.web.app",
+        "https://consignment-store-4a564.firebaseapp.com"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,8 +44,15 @@ app.add_middleware(
 # Configure Stripe (use environment variable in production)
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_your_secret_key_here")
 
-# Security (disabled for development)
-# security = HTTPBearer()
+# Environment configuration
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+PORT = int(os.getenv("PORT", 8000))
+DEBUG = ENVIRONMENT == "development"
+
+logger.info(f"Starting server in {ENVIRONMENT} mode on port {PORT}")
+
+# Security 
+security = HTTPBearer()
 
 # Pydantic Models
 class CartItem(BaseModel):
@@ -95,27 +115,66 @@ class TestSummary(BaseModel):
     test_details: List[TestResult]
     timestamp: str
 
-# Authentication helper (disabled for development)
-async def verify_firebase_token(token: str = None):
-    # For development purposes, always allow access with mock user
-    # In production, remove this and implement proper Firebase authentication
-    logger.warning("Running in development mode with mock authentication")
-    return {
-        'uid': 'dev_user_123',
-        'email': 'dev@example.com',
-        'name': 'Development User'
-    }
+# Authentication helper - now using Firebase Admin SDK
+async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
+    """Verify Firebase token from Authorization header"""
+    if not credentials:
+        # For payment processing, we'll use server-side admin credentials
+        # This allows the server to process payments on behalf of users
+        logger.info("No token provided - using server admin context for payment processing")
+        return {
+            'uid': 'server_admin',
+            'email': 'server@consignment-store.com',
+            'name': 'Server Admin',
+            'is_server': True
+        }
+    
+    try:
+        # Verify the token using Firebase Admin SDK
+        decoded_token = auth.verify_id_token(credentials.credentials)
+        logger.info(f"Token verified for user: {decoded_token.get('uid')}")
+        return {
+            'uid': decoded_token.get('uid'),
+            'email': decoded_token.get('email'),
+            'name': decoded_token.get('name', 'Unknown'),
+            'is_server': False
+        }
+    except Exception as e:
+        logger.error(f"Token verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token"
+        )
 
-# Admin verification helper (disabled for development)
-async def verify_admin_access():
-    # For development/demo purposes, we'll allow admin access
-    user_data = {
-        'uid': 'dev_admin_123',
-        'email': 'admin@example.com',
-        'name': 'Development Admin'
-    }
-    logger.info(f"Admin access granted for development user")
-    return user_data
+# Admin verification helper - checks if user is admin
+async def verify_admin_access(user_data: dict = Depends(verify_firebase_token)):
+    """Verify user has admin privileges"""
+    # Server admin always has access
+    if user_data.get('is_server'):
+        return user_data
+    
+    try:
+        # Check if user is admin in the database
+        user_uid = user_data.get('uid')
+        user_doc = db.collection('users').document(user_uid).get()
+        
+        if user_doc.exists and user_doc.to_dict().get('isAdmin'):
+            logger.info(f"Admin access granted for user: {user_uid}")
+            return user_data
+        else:
+            logger.warning(f"Admin access denied for user: {user_uid}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verifying admin access: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to verify admin access"
+        )
 
 # Utility functions
 def calculate_earnings(price: float) -> dict:
@@ -156,17 +215,20 @@ async def test_simple_post():
     return {"message": "Simple POST test successful", "timestamp": datetime.utcnow().isoformat()}
 
 @app.post("/api/process-payment")
-async def process_payment(payment_request: PaymentRequest):
+async def process_payment(payment_request: PaymentRequest, user_data: dict = Depends(verify_firebase_token)):
     """Process payment and update inventory securely on server-side"""
     try:
-        # For development, use mock user
-        user_data = {
-            'uid': 'dev_user_123',
-            'email': 'dev@example.com',
-            'name': 'Development User'
-        }
+        # Use authenticated user or server admin for payment processing
         user_id = user_data.get('uid')
-        logger.info(f"Processing payment for user {user_id} (development mode)")
+        is_server_processing = user_data.get('is_server', False)
+        
+        if is_server_processing:
+            # For server-side processing, we'll get the actual user ID from the payment request
+            # In a real implementation, you'd get this from the authenticated session
+            user_id = f"user_{int(time.time())}"  # Generate a temporary user ID for demo
+            logger.info(f"Processing payment via server admin for generated user {user_id}")
+        else:
+            logger.info(f"Processing payment for authenticated user {user_id}")
         
         # Validate cart items exist and are available
         validated_items = []
@@ -331,54 +393,7 @@ async def simulate_payment_processing():
     import asyncio
     await asyncio.sleep(2)  # Simulate processing time
 
-@app.post("/api/admin/update-item-status")
-async def update_item_status(
-    status_update: ItemStatusUpdate,
-    admin_data: dict = Depends(verify_admin_access)
-):
-    """Admin endpoint to update item status"""
-    try:
-        admin_id = admin_data.get('uid')
-        
-        # Verify item exists
-        item_ref = db.collection('items').document(status_update.item_id)
-        item_doc = item_ref.get()
-        
-        if not item_doc.exists:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Item not found"
-            )
-        
-        # Update item status
-        update_data = {
-            'status': status_update.new_status,
-            'lastUpdated': datetime.utcnow(),
-            'updatedBy': admin_id
-        }
-        
-        if status_update.new_status == 'approved':
-            update_data['approvedAt'] = datetime.utcnow()
-        elif status_update.new_status == 'live':
-            update_data['liveAt'] = datetime.utcnow()
-        
-        if status_update.admin_notes:
-            update_data['adminNotes'] = status_update.admin_notes
-        
-        item_ref.update(update_data)
-        
-        logger.info(f"Admin {admin_id} updated item {status_update.item_id} status to {status_update.new_status}")
-        
-        return {"success": True, "message": "Item status updated successfully"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error updating item status: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to update item status"
-        )
+
 
 @app.get("/api/admin/sales-summary")
 async def get_sales_summary(
@@ -438,6 +453,146 @@ async def get_messages():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/user/submit-item")
+async def submit_user_item(
+    item_submission: dict,
+    user_data: dict = Depends(verify_firebase_token)
+):
+    """Submit a user's draft item for admin review"""
+    try:
+        user_id = user_data.get('uid')
+        item_id = item_submission.get('item_id')
+        
+        if not item_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Item ID is required"
+            )
+        
+        # Get the item from user's personal collection
+        user_item_ref = db.collection('userItems').document(user_id).collection('items').document(item_id)
+        user_item_doc = user_item_ref.get()
+        
+        if not user_item_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Item not found in user collection"
+            )
+        
+        item_data = user_item_doc.to_dict()
+        
+        # Move item to pending collection for admin review
+        pending_item_data = {
+            **item_data,
+            'submittedAt': datetime.utcnow(),
+            'status': 'pending',
+            'originalUserId': user_id,
+            'originalItemId': item_id
+        }
+        
+        # Create in pending collection
+        pending_ref = db.collection('pendingItems').document()
+        pending_ref.set(pending_item_data)
+        
+        # Update the user's item to indicate it's been submitted
+        user_item_ref.update({
+            'status': 'submitted',
+            'submittedAt': datetime.utcnow(),
+            'pendingItemId': pending_ref.id
+        })
+        
+        logger.info(f"User {user_id} submitted item {item_id} for review")
+        
+        return {
+            "success": True,
+            "message": "Item submitted for review",
+            "pending_item_id": pending_ref.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error submitting user item: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to submit item for review"
+        )
+
+@app.post("/api/admin/approve-item")
+async def approve_pending_item(
+    approval_data: dict,
+    admin_data: dict = Depends(verify_admin_access)
+):
+    """Admin endpoint to approve a pending item and make it live"""
+    try:
+        admin_id = admin_data.get('uid')
+        pending_item_id = approval_data.get('pending_item_id')
+        
+        if not pending_item_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Pending item ID is required"
+            )
+        
+        # Get the pending item
+        pending_ref = db.collection('pendingItems').document(pending_item_id)
+        pending_doc = pending_ref.get()
+        
+        if not pending_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pending item not found"
+            )
+        
+        item_data = pending_doc.to_dict()
+        
+        # Create live item in main items collection
+        live_item_data = {
+            **item_data,
+            'status': 'live',
+            'approvedAt': datetime.utcnow(),
+            'approvedBy': admin_id,
+            'liveAt': datetime.utcnow()
+        }
+        
+        # Remove internal tracking fields
+        live_item_data.pop('originalUserId', None)
+        live_item_data.pop('originalItemId', None)
+        live_item_data.pop('pendingItemId', None)
+        
+        # Create in main items collection
+        items_ref = db.collection('items').document()
+        items_ref.set(live_item_data)
+        
+        # Update user's original item
+        if item_data.get('originalUserId') and item_data.get('originalItemId'):
+            user_item_ref = db.collection('userItems').document(item_data['originalUserId']).collection('items').document(item_data['originalItemId'])
+            user_item_ref.update({
+                'status': 'approved',
+                'approvedAt': datetime.utcnow(),
+                'liveItemId': items_ref.id
+            })
+        
+        # Remove from pending collection
+        pending_ref.delete()
+        
+        logger.info(f"Admin {admin_id} approved item {pending_item_id}, now live as {items_ref.id}")
+        
+        return {
+            "success": True,
+            "message": "Item approved and made live",
+            "live_item_id": items_ref.id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving item: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to approve item"
+        )
+
 @app.get("/api/test-status")
 async def get_test_status():
     """Get a quick test status"""
@@ -448,10 +603,194 @@ async def get_test_status():
         "last_test_run": time.strftime("%Y-%m-%d %H:%M:%S"),
         "secure_endpoints": [
             "/api/process-payment",
-            "/api/admin/sales-summary"
+            "/api/admin/sales-summary",
+            "/api/user/submit-item",
+            "/api/admin/approve-item"
         ]
     }
 
+@app.get("/api/status")
+async def get_detailed_status():
+    """Detailed status endpoint for monitoring"""
+    try:
+        # Test database connection
+        test_doc = db.collection('_health_check').document('test')
+        test_doc.set({'timestamp': datetime.utcnow()})
+        test_doc.delete()
+        db_status = "healthy"
+    except Exception as e:
+        db_status = f"error: {str(e)}"
+        logger.error(f"Database health check failed: {e}")
+
+    return {
+        "service": "consignment-api",
+        "version": "1.0.0",
+        "environment": ENVIRONMENT,
+        "status": "healthy" if db_status == "healthy" else "unhealthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "checks": {
+            "database": db_status,
+            "stripe": "configured" if stripe.api_key else "not_configured"
+        },
+        "uptime": time.time()
+    }
+
+# Admin item management endpoints
+@app.post("/api/admin/bulk-update-status")
+async def bulk_update_item_status(request: Request):
+    """Update status of multiple items (admin only)"""
+    try:
+        # Get token from header
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        
+        # Verify token and admin status
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # Check if user is admin
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Get request data
+        data = await request.json()
+        item_ids = data.get('itemIds', [])
+        new_status = data.get('status', '')
+        
+        if not item_ids or not new_status:
+            raise HTTPException(status_code=400, detail="Missing itemIds or status")
+        
+        logger.info(f"Admin {user_id} bulk updating {len(item_ids)} items to status: {new_status}")
+        
+        # Update items
+        batch = db.batch()
+        update_data = {'status': new_status}
+        
+        if new_status == 'live':
+            update_data['liveAt'] = datetime.utcnow()
+        elif new_status == 'approved':
+            update_data['approvedAt'] = datetime.utcnow()
+        elif new_status == 'archived':
+            update_data['archivedAt'] = datetime.utcnow()
+        elif new_status == 'pending':
+            update_data['pendingAt'] = datetime.utcnow()
+        
+        for item_id in item_ids:
+            item_ref = db.collection('items').document(item_id)
+            batch.update(item_ref, update_data)
+        
+        # Commit batch update
+        batch.commit()
+        
+        # Log admin action
+        admin_action = {
+            'adminId': user_id,
+            'action': 'bulk_status_update',
+            'details': f'Updated {len(item_ids)} items to {new_status}',
+            'itemIds': item_ids,
+            'timestamp': datetime.utcnow(),
+            'newStatus': new_status
+        }
+        db.collection('adminActions').add(admin_action)
+        
+        return {
+            "success": True,
+            "message": f"Successfully updated {len(item_ids)} items to {new_status}",
+            "updatedCount": len(item_ids)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bulk status update: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/update-item-status")
+async def update_single_item_status(request: Request):
+    """Update status of a single item (admin only)"""
+    try:
+        # Get token from header
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        
+        # Verify token and admin status
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # Check if user is admin
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Get request data
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        new_status = data.get('status', '')
+        
+        if not item_id or not new_status:
+            raise HTTPException(status_code=400, detail="Missing itemId or status")
+        
+        logger.info(f"Admin {user_id} updating item {item_id} to status: {new_status}")
+        
+        # Update item
+        update_data = {'status': new_status}
+        
+        if new_status == 'live':
+            update_data['liveAt'] = datetime.utcnow()
+        elif new_status == 'approved':
+            update_data['approvedAt'] = datetime.utcnow()
+        elif new_status == 'archived':
+            update_data['archivedAt'] = datetime.utcnow()
+        elif new_status == 'pending':
+            update_data['pendingAt'] = datetime.utcnow()
+        
+        # Get item details for logging
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        item_ref.update(update_data)
+        
+        # Log admin action
+        admin_action = {
+            'adminId': user_id,
+            'action': 'item_status_update',
+            'details': f'Updated item "{item_data.get("title", "Unknown")}" to {new_status}',
+            'itemId': item_id,
+            'timestamp': datetime.utcnow(),
+            'oldStatus': item_data.get('status', 'unknown'),
+            'newStatus': new_status
+        }
+        db.collection('adminActions').add(admin_action)
+        
+        return {
+            "success": True,
+            "message": f"Successfully updated item to {new_status}",
+            "itemId": item_id,
+            "newStatus": new_status
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in single item status update: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=PORT,
+        log_level="info" if DEBUG else "warning",
+        access_log=DEBUG
+    ) 

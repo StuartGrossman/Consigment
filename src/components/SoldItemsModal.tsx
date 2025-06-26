@@ -306,7 +306,7 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                             </div>
                         </div>
 
-                        <div className="p-6 space-y-6">
+                        <div className="p-6 space-y-6 pb-24">
                             {/* Item Images */}
                             {selectedItem.images && selectedItem.images.length > 0 && (
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -444,7 +444,7 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                             )}
                         </div>
 
-                        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
+                        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200 mt-6">
                             <div className="flex justify-end">
                                 <button
                                     onClick={() => setShowDetailModal(false)}

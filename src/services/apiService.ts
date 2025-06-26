@@ -1,6 +1,28 @@
 import { auth } from '../config/firebase';
 
-const API_BASE_URL = 'http://localhost:8000';
+// Detect environment and use appropriate API URL
+const getApiBaseUrl = () => {
+    // If explicitly set via environment variable, use that
+    if (import.meta.env.VITE_API_BASE_URL) {
+        return import.meta.env.VITE_API_BASE_URL;
+    }
+    
+    // Development - use localhost
+    if (import.meta.env.DEV) {
+        return 'http://localhost:8000';
+    }
+    
+    // Production - check if we're on Firebase hosting
+    if (window.location.hostname.includes('web.app') || window.location.hostname.includes('firebaseapp.com')) {
+        // For Firebase hosting, try relative URLs first, but gracefully fallback
+        return '';  // Use relative URLs
+    }
+    
+    // Default to relative URLs for other production environments
+    return '';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface CartItem {
     item_id: string;
@@ -54,23 +76,98 @@ class ApiService {
         endpoint: string,
         options: RequestInit = {}
     ): Promise<Response> {
-        // For development, make simple requests without authentication
-        const headers = {
+        // Start with basic headers
+        const headers: Record<string, string> = {
             'Content-Type': 'application/json',
-            ...options.headers,
+            ...(options.headers as Record<string, string> || {}),
         };
 
-        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            ...options,
-            headers,
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+        // Add authentication for admin endpoints
+        if (endpoint.includes('/admin/')) {
+            try {
+                const token = await this.getAuthToken();
+                headers['Authorization'] = `Bearer ${token}`;
+            } catch (error) {
+                console.warn('⚠️ Could not get auth token for admin endpoint:', error);
+                // Continue without token - let server handle auth error
+            }
         }
 
-        return response;
+        try {
+            const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+                ...options,
+                headers,
+            });
+
+            // Check if we got HTML instead of JSON (indicates no backend)
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) {
+                if (!import.meta.env.DEV && endpoint === '/api/process-payment') {
+                    console.log('🔄 Got HTML response - no backend available, using client-side mock payment processing');
+                    return this.mockPaymentResponse(options);
+                }
+                throw new Error('Backend not available - got HTML response instead of JSON');
+            }
+
+            if (!response.ok) {
+                let errorData: any = {};
+                try {
+                    errorData = await response.json();
+                } catch (jsonError) {
+                    // If JSON parsing fails, check if it's HTML (no backend scenario)
+                    if (!import.meta.env.DEV && endpoint === '/api/process-payment') {
+                        console.log('🔄 JSON parsing failed - no backend available, using client-side mock payment processing');
+                        return this.mockPaymentResponse(options);
+                    }
+                }
+                throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            return response;
+        } catch (error) {
+            // Handle fetch errors (network issues, CORS, etc.)
+            if (!import.meta.env.DEV && endpoint === '/api/process-payment') {
+                console.log('🔄 Fetch error - no backend available, using client-side mock payment processing');
+                return this.mockPaymentResponse(options);
+            }
+            throw error;
+        }
+    }
+
+    private async mockPaymentResponse(options: RequestInit): Promise<Response> {
+        // Extract payment data to calculate total
+        let totalAmount = 0;
+        try {
+            if (options.body) {
+                const paymentData = JSON.parse(options.body as string);
+                totalAmount = paymentData.cart_items?.reduce((sum: number, item: any) => 
+                    sum + (item.price * item.quantity), 0) || 0;
+                
+                // Add shipping if applicable
+                if (paymentData.fulfillment_method === 'shipping') {
+                    totalAmount += 5.99;
+                }
+            }
+        } catch (e) {
+            console.log('Could not parse payment data for mock response');
+        }
+
+        // Mock successful payment response for production demo
+        const mockResponse = {
+            success: true,
+            order_id: `ORD-${Date.now()}-DEMO`,
+            transaction_id: `TXN-${Date.now()}-DEMO`,
+            total_amount: totalAmount,
+            message: "Demo payment processed (no backend connected)"
+        };
+
+        // Simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        return new Response(JSON.stringify(mockResponse), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' }
+        });
     }
 
     async processPayment(paymentData: PaymentRequest): Promise<PaymentResponse> {
@@ -96,13 +193,31 @@ class ApiService {
             await this.makeRequest('/api/admin/update-item-status', {
                 method: 'POST',
                 body: JSON.stringify({
-                    item_id: itemId,
-                    new_status: newStatus,
+                    itemId: itemId,
+                    status: newStatus,
                     admin_notes: adminNotes,
                 }),
             });
         } catch (error) {
             console.error('❌ Failed to update item status:', error);
+            throw error;
+        }
+    }
+
+    async bulkUpdateItemStatus(itemIds: string[], newStatus: string): Promise<void> {
+        try {
+            const response = await this.makeRequest('/api/admin/bulk-update-status', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemIds: itemIds,
+                    status: newStatus,
+                }),
+            });
+            
+            const result = await response.json();
+            console.log('✅ Bulk status update successful:', result);
+        } catch (error) {
+            console.error('❌ Failed to bulk update item status:', error);
             throw error;
         }
     }

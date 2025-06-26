@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../config/firebase';
+import { storage } from '../config/firebase';
 import { AuthUser } from '../types';
-import { logUserActionSafe } from '../services/userService';
+import { logUserActionSafe, saveUserItem } from '../services/userService';
 import { useRateLimiter } from '../hooks/useRateLimiter';
 
 interface AddItemModalProps {
@@ -99,8 +98,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
           sellerId: user.uid,
           sellerName: user.displayName || 'Anonymous',
           sellerEmail: user.email || ('phoneNumber' in user ? user.phoneNumber : ''),
-          status: 'pending',
-          createdAt: serverTimestamp(),
+          status: 'draft', // Items start as drafts in user collection
         };
 
         // Only add optional fields if they have values
@@ -126,13 +124,37 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
           itemData.color = color.trim();
         }
 
-        // Add item to Firestore
-        const docRef = await addDoc(collection(db, 'items'), itemData);
+        // Save item to user-specific collection
+        const itemId = await saveUserItem(user.uid, itemData);
+        
+        if (!itemId) {
+          // Try fallback: save to localStorage for offline/permission issues
+          const offlineItemId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const offlineItems = JSON.parse(localStorage.getItem(`offline_items_${user.uid}`) || '[]');
+          offlineItems.push({
+            id: offlineItemId,
+            ...itemData,
+            createdAt: new Date().toISOString(),
+            isOffline: true
+          });
+          localStorage.setItem(`offline_items_${user.uid}`, JSON.stringify(offlineItems));
+          
+          console.log('📦 Item saved offline due to connection/permission issues');
+          
+          // Still log the action if possible
+          await logUserActionSafe(user, 'item_created_offline', 'Created item draft (offline)', offlineItemId, title.trim());
+          
+          return { 
+            id: offlineItemId, 
+            isOffline: true,
+            message: 'Item saved locally. It will be synced when connection is restored.' 
+          };
+        }
 
-        // Log the action
-        await logUserActionSafe(user, 'item_listed', 'Listed new item for consignment', docRef.id, title.trim());
+        // Log the action for successful online save
+        await logUserActionSafe(user, 'item_created', 'Created new item draft', itemId, title.trim());
 
-        return docRef;
+        return { id: itemId };
       } catch (error) {
         console.error('Error adding item:', error);
         throw error;
@@ -140,8 +162,12 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
     });
 
     if (result.success) {
-      // Show success message
-      setShowSuccess(true);
+      // Show success message (different for online vs offline saves)
+      if (result.data?.isOffline) {
+        alert(result.data.message || 'Item saved locally and will sync when connection is restored.');
+      } else {
+        setShowSuccess(true);
+      }
       setShowPreview(false);
     } else {
       // Show rate limit or error message
@@ -185,16 +211,17 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Item Submitted Successfully!</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Item Draft Saved Successfully!</h3>
             <p className="text-gray-600 mb-6">
-              Your item has been submitted for review. Please bring the physical item to the front desk so our team can inspect and approve it.
+              Your item has been saved as a draft. When you're ready, bring the physical item to the front desk and we'll submit it for review.
             </p>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <p className="text-sm text-blue-800">
                 <strong>Next Steps:</strong><br />
-                1. Bring your item to the front desk<br />
-                2. Our team will inspect and approve it<br />
-                3. Then it goes live for all customers
+                1. Your item is saved in your personal collection<br />
+                2. Bring the physical item to the front desk<br />
+                3. We'll submit it for admin review<br />
+                4. Once approved, it goes live for all customers
               </p>
             </div>
             <button
