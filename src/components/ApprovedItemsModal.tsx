@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
+import { apiService } from '../services/apiService';
 
 interface ApprovedItemsModalProps {
   isOpen: boolean;
@@ -98,10 +99,7 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       setProcessingItemId(selectedItem.id);
       
       try {
-        await updateDoc(doc(db, 'items', selectedItem.id), {
-          status: 'live',
-          liveAt: serverTimestamp()
-        });
+        await apiService.makeItemLive(selectedItem.id);
         
         // Remove from approved list since it's now live
         setApprovedItems(prev => prev.filter(i => i.id !== selectedItem.id));
@@ -124,11 +122,7 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       setProcessingItemId(item.id);
       
       try {
-        await updateDoc(doc(db, 'items', item.id), {
-          status: 'pending',
-          liveAt: null,
-          // Keep barcode data but remove live status
-        });
+        await apiService.sendBackToPending(item.id);
         
         // Remove from approved list since it's now pending
         setApprovedItems(prev => prev.filter(i => i.id !== item.id));

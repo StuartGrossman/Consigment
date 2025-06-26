@@ -266,6 +266,64 @@ class ApiService {
             throw error;
         }
     }
+
+    async rejectItem(itemId: string, rejectionReason?: string): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/reject-item', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                    rejectionReason,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to reject item:', error);
+            throw error;
+        }
+    }
+
+    async editItem(itemId: string, itemData: any): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/edit-item', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                    ...itemData,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to edit item:', error);
+            throw error;
+        }
+    }
+
+    async makeItemLive(itemId: string): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/make-item-live', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to make item live:', error);
+            throw error;
+        }
+    }
+
+    async sendBackToPending(itemId: string): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/send-back-to-pending', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to send item back to pending:', error);
+            throw error;
+        }
+    }
 }
 
 export const apiService = new ApiService();

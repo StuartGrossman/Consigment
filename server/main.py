@@ -869,6 +869,210 @@ async def update_item_with_barcode(request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.post("/api/admin/reject-item")
+async def reject_item(request: Request):
+    """Admin endpoint to reject an item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        rejection_reason = data.get('rejectionReason', 'No reason provided')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Update item
+        item_ref = db.collection('items').document(item_id)
+        item_ref.update({
+            'status': 'rejected',
+            'rejectedAt': datetime.utcnow(),
+            'rejectionReason': rejection_reason,
+            'rejectedBy': user_id
+        })
+        
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': user_id,
+            'action': 'item_rejected',
+            'itemId': item_id,
+            'details': f'Rejected item. Reason: {rejection_reason}',
+            'timestamp': datetime.utcnow()
+        })
+        
+        return {"success": True, "message": "Item rejected successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error rejecting item: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/edit-item")
+async def edit_item(request: Request):
+    """Admin endpoint to edit item details"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Update item
+        item_ref = db.collection('items').document(item_id)
+        update_data = {
+            'title': data.get('title'),
+            'description': data.get('description'),
+            'price': data.get('price'),
+            'category': data.get('category'),
+            'gender': data.get('gender'),
+            'size': data.get('size'),
+            'brand': data.get('brand'),
+            'condition': data.get('condition'),
+            'material': data.get('material'),
+            'lastUpdated': datetime.utcnow(),
+            'editedBy': user_id
+        }
+        
+        # Remove None values
+        update_data = {k: v for k, v in update_data.items() if v is not None}
+        
+        item_ref.update(update_data)
+        
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': user_id,
+            'action': 'item_edited',
+            'itemId': item_id,
+            'details': f'Edited item details',
+            'timestamp': datetime.utcnow()
+        })
+        
+        return {"success": True, "message": "Item updated successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error editing item: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/make-item-live")
+async def make_item_live(request: Request):
+    """Admin endpoint to make an item live"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Update item to live status
+        item_ref = db.collection('items').document(item_id)
+        item_ref.update({
+            'status': 'live',
+            'liveAt': datetime.utcnow(),
+            'madeBy': user_id
+        })
+        
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': user_id,
+            'action': 'item_made_live',
+            'itemId': item_id,
+            'details': 'Made item live',
+            'timestamp': datetime.utcnow()
+        })
+        
+        return {"success": True, "message": "Item made live successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error making item live: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/send-back-to-pending")
+async def send_back_to_pending(request: Request):
+    """Admin endpoint to send item back to pending"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Update item back to pending
+        item_ref = db.collection('items').document(item_id)
+        item_ref.update({
+            'status': 'pending',
+            'liveAt': None,
+            'sentBackBy': user_id,
+            'sentBackAt': datetime.utcnow()
+        })
+        
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': user_id,
+            'action': 'item_sent_back_to_pending',
+            'itemId': item_id,
+            'details': 'Sent item back to pending',
+            'timestamp': datetime.utcnow()
+        })
+        
+        return {"success": True, "message": "Item sent back to pending successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error sending item back to pending: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

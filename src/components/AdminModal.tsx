@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import BarcodeGenerationModal from './BarcodeGenerationModal';
-
+import { apiService } from '../services/apiService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 
 interface AdminModalProps {
@@ -118,11 +118,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
       setShowRejectModal(false);
       
       try {
-        await updateDoc(doc(db, 'items', selectedItem.id), {
-          status: 'rejected',
-          rejectedAt: serverTimestamp(),
-          rejectionReason: rejectionReason || 'No reason provided'
-        });
+        await apiService.rejectItem(selectedItem.id, rejectionReason || 'No reason provided');
         
         // Remove from pending list
         setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
@@ -149,7 +145,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     await throttledAction(`save-edit-${updatedItem.id}`, async () => {
       setProcessingItemId(updatedItem.id);
       try {
-        await updateDoc(doc(db, 'items', updatedItem.id), {
+        await apiService.editItem(updatedItem.id, {
           title: updatedItem.title,
           description: updatedItem.description,
           price: updatedItem.price,
