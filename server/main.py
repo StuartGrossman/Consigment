@@ -46,7 +46,7 @@ stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_your_secret_key_here")
 
 # Environment configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
-PORT = int(os.getenv("PORT", 8000))
+PORT = int(os.getenv("PORT", 8080))
 DEBUG = ENVIRONMENT == "development"
 
 logger.info(f"Starting server in {ENVIRONMENT} mode on port {PORT}")
