@@ -475,6 +475,29 @@ class ApiService {
             throw error;
         }
     }
+
+    async issueRefund(itemId: string, refundReason: string, refundPassword?: string): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        refundAmount: number;
+        processedAt: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/issue-refund', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                    refundReason,
+                    refundPassword,
+                }),
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to issue refund:', error);
+            throw error;
+        }
+    }
 }
 
 export const apiService = new ApiService();

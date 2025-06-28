@@ -319,7 +319,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Analytics Dashboard</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Sales Dashboard</h1>
           <p className="text-gray-600 mt-2">Comprehensive business insights and performance metrics</p>
         </div>
 

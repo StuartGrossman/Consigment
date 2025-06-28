@@ -269,7 +269,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-3xl font-bold text-gray-800">Analytics Dashboard</h2>
+                                  <h2 className="text-3xl font-bold text-gray-800">Sales Dashboard</h2>
               <p className="text-gray-600">Comprehensive business insights and metrics</p>
             </div>
             <div className="flex items-center gap-4">

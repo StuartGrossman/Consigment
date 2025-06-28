@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, orderBy, doc, updateDoc, deleteDoc, getDoc, addDoc, setDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, UserAnalytics, PaymentRecord, User, StoreCreditTransaction, AuthUser } from '../types';
-import { subscribeToActionLogs, ActionLog } from '../services/firebaseService';
+import { subscribeToUserActions, UserActionLog } from '../services/userService';
 
 interface UserAnalyticsModalProps {
     isOpen: boolean;
@@ -36,7 +36,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const [soldPrice, setSoldPrice] = useState('');
     const [sortField, setSortField] = useState<SortField>('totalEarnings');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-    const [userActions, setUserActions] = useState<ActionLog[]>([]);
+    const [userActions, setUserActions] = useState<UserActionLog[]>([]);
     const [showUserDetail, setShowUserDetail] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUserAnalytics, setSelectedUserAnalytics] = useState<UserAnalytics | null>(null);
@@ -533,24 +533,49 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         setSelectedUserAnalytics(userAnalytic);
         setShowUserDetail(true);
         
-        // Fetch user's action history
+        // Check if this is a phone user - handle undefined userId
+        const userId = userAnalytic.userId || '';
+        const isPhoneUser = userId.startsWith('phone_');
+        
+        // Fetch user's action history using appropriate subscription
         try {
-            const unsubscribe = subscribeToActionLogs((logs) => {
-                const userLogs = logs
-                    .filter(log => log.userId === userAnalytic.userId)
-                    .map(log => ({
-                        ...log,
-                        timestamp: log.timestamp?.toDate ? log.timestamp.toDate() : new Date()
-                    }))
-                    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-                
-                setUserActions(userLogs);
-            });
+            console.log('Setting up user actions subscription for:', userId, isPhoneUser ? '(phone user)' : '(regular user)');
             
-            // Store unsubscribe function for cleanup
-            (window as any).userActionsUnsubscribe = unsubscribe;
+            if (isPhoneUser) {
+                // For phone users, show a placeholder message since they may not have user-specific action logs
+                console.log('Phone user detected - limited action history available');
+                setUserActions([
+                    {
+                        userId: userId,
+                        userName: userAnalytic.userName || 'Unknown User',
+                        userEmail: userAnalytic.userEmail || 'No email',
+                        action: 'phone_user_activity',
+                        details: `Phone user with ${userAnalytic.totalItemsListed} items listed and ${userAnalytic.totalItemsSold} items sold`,
+                        timestamp: new Date(),
+                        id: `phone-summary-${userId}`
+                    }
+                ]);
+                
+                // Return empty unsubscribe function for phone users
+                (window as any).userActionsUnsubscribe = () => {};
+            } else {
+                // For regular users, use the user-specific subscription
+                const unsubscribe = subscribeToUserActions(userId, (actions) => {
+                    console.log('Received user actions:', actions.length);
+                    const processedActions = actions.map(action => ({
+                        ...action,
+                        timestamp: action.timestamp?.toDate ? action.timestamp.toDate() : new Date()
+                    }));
+                    
+                    setUserActions(processedActions);
+                });
+                
+                // Store unsubscribe function for cleanup
+                (window as any).userActionsUnsubscribe = unsubscribe;
+            }
         } catch (error) {
             console.error('Error fetching user actions:', error);
+            setUserActions([]); // Set empty array on error
         }
     };
 
@@ -644,6 +669,12 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
                     </svg>
                 );
+            case 'phone_user_activity': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                );
             default: 
                 return (
                     <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -698,7 +729,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                     <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
                         <div className="flex justify-between items-center">
                             <div>
-                                <h2 className="text-2xl font-bold text-gray-800">User Analytics Dashboard</h2>
+                                <h2 className="text-2xl font-bold text-gray-800">User Sales Dashboard</h2>
                                 <p className="text-gray-600 mt-1">Comprehensive user performance and statistics</p>
                             </div>
                             <button
@@ -714,8 +745,8 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
 
                     <div className="p-6 overflow-y-auto max-h-[calc(95vh-200px)]">
                         {/* Search and Summary */}
-                        <div className="mb-6 space-y-4">
-                            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                        <div className="mb-6">
+                            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between mb-4">
                                 <div className="flex-1 max-w-md">
                                     <input
                                         type="text"
@@ -815,13 +846,13 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                             </tr>
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-200">
-                                            {filteredAndSortedUsers.map((userAnalytic) => {
+                                            {filteredAndSortedUsers.map((userAnalytic, index) => {
                                                 const successRate = calculateSuccessRate(userAnalytic);
                                                 const lastActivity = getLastActivity(userAnalytic);
                                                 
                                                 return (
                                                     <tr 
-                                                        key={userAnalytic.userId} 
+                                                        key={userAnalytic.userId || `user-${index}`} 
                                                         className="hover:bg-gray-50 cursor-pointer"
                                                         onClick={() => handleUserClick(userAnalytic)}
                                                     >
@@ -951,7 +982,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                     ) : (
                                         <div className="divide-y divide-gray-200">
                                             {userActions.map((action, index) => (
-                                                <div key={`${action.userId}-${action.action}-${action.timestamp.getTime()}-${index}`} className="p-4 hover:bg-gray-50">
+                                                <div key={action.id || `${action.userId}-${action.action}-${action.timestamp.getTime()}-${index}`} className="p-4 hover:bg-gray-50">
                                                     <div className="flex items-start space-x-3">
                                                         <div className="flex-shrink-0 mt-0.5">{getActionIcon(action.action)}</div>
                                                         <div className="flex-1 min-w-0">

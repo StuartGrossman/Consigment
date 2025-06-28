@@ -152,8 +152,8 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
             </span>
           </div>
           
-          {/* Action Buttons - Only show for live items and non-admin users */}
-          {!isAdmin && item.status === 'live' && (
+          {/* Action Buttons - Only show for live items and non-admin users, and not for own items */}
+          {!isAdmin && item.status === 'live' && user?.uid !== item.sellerId && (
             <div className="flex gap-2">
               {/* Bookmark Button */}
               <button
@@ -192,6 +192,14 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
                   <span>Add to Cart</span>
                 )}
               </button>
+            </div>
+          )}
+          
+          {/* Message for own items */}
+          {!isAdmin && item.status === 'live' && user?.uid === item.sellerId && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+              <p className="text-sm text-blue-700 font-medium">This is your listing</p>
+              <p className="text-xs text-blue-600">You cannot purchase your own items</p>
             </div>
           )}
         </div>

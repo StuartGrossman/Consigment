@@ -1281,7 +1281,7 @@ const Home: React.FC = () => {
                                                     }}
                                                             className={`mobile-user-menu-item ${showAnalyticsPage ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
                                                 >
-                                                            📊 {isAdmin ? 'Analytics Dashboard' : 'My User History'}
+                                                            📊 {isAdmin ? 'Sales Dashboard' : 'My User History'}
                                                 </button>
 
                                                 {isAdmin && (
@@ -1977,7 +1977,7 @@ const Home: React.FC = () => {
                                                             }}
                                                                 className={`w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation ${showAnalyticsPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}`}
                                                         >
-                                                            📈 {isAdmin ? 'Analytics Dashboard' : 'My User History'}
+                                                            📈 {isAdmin ? 'Sales Dashboard' : 'My User History'}
                                                         </button>
 
                                                         {isAdmin && (

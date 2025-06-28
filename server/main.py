@@ -1711,6 +1711,114 @@ async def update_user_item(item_id: str, request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.post("/api/admin/issue-refund")
+async def issue_refund(request: Request):
+    """Admin endpoint to issue a refund for a sold item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        admin_user_id = decoded_token['uid']
+        
+        # Verify admin status
+        admin_doc = db.collection('users').document(admin_user_id).get()
+        if not admin_doc.exists or not admin_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId')
+        refund_reason = data.get('refundReason', 'No reason provided')
+        refund_password = data.get('refundPassword', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        if not refund_reason.strip():
+            raise HTTPException(status_code=400, detail="Refund reason is required")
+        
+        # Optional password validation for extra security
+        # You can add additional validation here if needed
+        
+        logger.info(f"Admin {admin_user_id} processing refund for item {item_id}")
+        
+        # Get the item to verify it's sold and get details
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        # Verify the item is sold
+        if item_data.get('status') != 'sold':
+            raise HTTPException(status_code=400, detail="Only sold items can be refunded")
+        
+        # Create refund record
+        refund_data = {
+            'itemId': item_id,
+            'itemTitle': item_data.get('title', 'Unknown Item'),
+            'originalPrice': item_data.get('price', 0),
+            'soldPrice': item_data.get('soldPrice') or item_data.get('price', 0),
+            'refundAmount': item_data.get('soldPrice') or item_data.get('price', 0),
+            'refundReason': refund_reason.strip(),
+            'processedBy': admin_user_id,
+            'processedAt': datetime.utcnow(),
+            'originalBuyerId': item_data.get('buyerId', ''),
+            'originalBuyerName': item_data.get('buyerName') or item_data.get('buyerInfo', {}).get('name', 'Unknown Buyer'),
+            'sellerName': item_data.get('sellerName', 'Unknown Seller'),
+            'sellerId': item_data.get('sellerId', 'unknown_seller'),
+            'saleType': item_data.get('saleType', 'unknown'),
+            'adminNotes': f'Refund processed by admin. Reason: {refund_reason.strip()}'
+        }
+        
+        # Add refund record to Firebase
+        db.collection('refunds').add(refund_data)
+        
+        # Update item status back to approved and clear sale information
+        item_ref.update({
+            'status': 'approved',
+            'soldAt': None,
+            'soldPrice': None,
+            'buyerId': None,
+            'buyerName': None,
+            'buyerEmail': None,
+            'buyerInfo': None,
+            'saleType': None,
+            'refundedAt': datetime.utcnow(),
+            'refundReason': refund_reason.strip(),
+            'lastUpdated': datetime.utcnow()
+        })
+        
+        # Log admin action
+        admin_action = {
+            'adminId': admin_user_id,
+            'action': 'item_refunded',
+            'details': f'Issued refund for "{item_data.get("title", "Unknown")}" - Reason: {refund_reason.strip()}',
+            'itemId': item_id,
+            'refundAmount': refund_data['refundAmount'],
+            'timestamp': datetime.utcnow()
+        }
+        db.collection('adminActions').add(admin_action)
+        
+        logger.info(f"Successfully processed refund for item {item_id}")
+        
+        return {
+            "success": True,
+            "message": "Refund processed successfully",
+            "itemId": item_id,
+            "refundAmount": refund_data['refundAmount'],
+            "processedAt": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing refund: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

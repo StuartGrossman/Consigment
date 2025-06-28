@@ -206,70 +206,12 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
   };
 
   const handleConfirmRefund = async () => {
-    if (!refundReason.trim()) {
-      // Show error toast
-      const toast = document.createElement('div');
-      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg';
-      toast.textContent = 'Please provide a reason for the refund.';
-      document.body.appendChild(toast);
-      setTimeout(() => {
-        if (document.body.contains(toast)) {
-          document.body.removeChild(toast);
-        }
-      }, 3000);
-      return;
-    }
-    
-    if (refundPassword !== '123') {
-      // Show error toast
-      const toast = document.createElement('div');
-      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg';
-      toast.textContent = 'Invalid password. Please enter the correct password.';
-      document.body.appendChild(toast);
-      setTimeout(() => {
-        if (document.body.contains(toast)) {
-          document.body.removeChild(toast);
-        }
-      }, 3000);
-      return;
-    }
+    if (!item || !user || refundReason.trim() === '') return;
 
     setIsProcessingRefund(true);
     try {
-      // Create refund record with proper fallback values
-      const refundRecord = {
-        id: `refund_${item.id}_${Date.now()}`,
-        itemId: item.id,
-        itemTitle: item.title,
-        originalPrice: item.soldPrice || item.price,
-        refundAmount: item.soldPrice || item.price,
-        reason: refundReason.trim(),
-        refundedAt: new Date(),
-        refundedBy: user?.uid || '',
-        refundedByName: user?.displayName || user?.email || 'Admin',
-        originalBuyerId: item.buyerId || '',
-        originalBuyerName: item.buyerName || item.buyerInfo?.name || 'Unknown Buyer',
-        sellerName: item.sellerName || 'Unknown Seller',
-        sellerId: item.sellerId || 'unknown_seller' // Add fallback for sellerId
-      };
-
-      // Add refund record to Firebase
-      const refundsRef = collection(db, 'refunds');
-      await addDoc(refundsRef, refundRecord);
-
-      // Update item status back to approved
-      const itemRef = doc(db, 'items', item.id);
-      await updateDoc(itemRef, {
-        status: 'approved',
-        soldAt: null,
-        soldPrice: null,
-        buyerId: null,
-        buyerName: null,
-        buyerEmail: null,
-        saleType: null,
-        refundedAt: new Date(),
-        refundReason: refundReason.trim()
-      });
+      // Use the API service instead of direct Firestore operations
+      await apiService.issueRefund(item.id, refundReason.trim(), refundPassword);
 
       // Log the action
       await logUserAction(user, 'item_refunded', `Issued refund: ${refundReason}`, item.id, item.title);
@@ -277,6 +219,22 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
       setShowRefundModal(false);
       setRefundReason('');
       setRefundPassword('');
+      
+      // Show success message
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg';
+      toast.textContent = 'Refund processed successfully!';
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 3000);
+      
+      // Call refresh callback if provided
+      if (onItemUpdated) {
+        onItemUpdated();
+      }
       
       // Close modal after brief delay
       setTimeout(() => {
@@ -987,8 +945,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
         </div>
 
         {/* Action Buttons */}
-        {!isAdmin && canPurchase ? (
-          /* User Actions - Only show for live items */
+        {!isAdmin && canPurchase && user?.uid !== item.sellerId ? (
+          /* User Actions - Only show for live items and not for own items */
           <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6">
             <div className="flex gap-3">
               {/* Bookmark Button */}
@@ -1038,6 +996,22 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
             </div>
           </div>
         ) : null}
+        
+        {/* Message for own items */}
+        {!isAdmin && canPurchase && user?.uid === item.sellerId && (
+          <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <div className="flex items-center justify-center mb-2">
+                <svg className="w-6 h-6 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-blue-800">This is Your Listing</h3>
+              </div>
+              <p className="text-sm text-blue-700 mb-2">You cannot purchase your own items.</p>
+              <p className="text-xs text-blue-600">You can track its performance in your User Analytics.</p>
+            </div>
+          </div>
+        )}
 
         {/* Status Message for Non-Live Items */}
         {!canPurchase && item.status !== 'sold' && (
