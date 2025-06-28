@@ -23,6 +23,8 @@ import UserAnalytics from './UserAnalytics';
 import InventoryDashboard from './InventoryDashboard';
 import ActionsDashboard from './ActionsDashboard';
 import MyPendingItemsModal from './MyPendingItemsModal';
+import { Banner } from './Banner';
+import { bannerImages } from '../assets/banner-images';
 
 
 const Home: React.FC = () => {
@@ -1349,6 +1351,16 @@ const Home: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+                    {/* Banner Section - Only show for non-admin users */}
+                    {!isAdmin && (
+                        <Banner 
+                            images={bannerImages}
+                            autoPlay={true}
+                            interval={6000}
+                            height="h-96 sm:h-[500px]"
+                        />
+                    )}
                 </>
             )}
 
