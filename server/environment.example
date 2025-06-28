@@ -43,4 +43,8 @@ SMTP_USER=your_email@example.com
 SMTP_PASSWORD=your_email_password
 
 # Webhook Configuration
-STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here 
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+
+# DeepSeek API Configuration
+DEEPSEEK_API_KEY=sk-your_deepseek_api_key_here
+DEEPSEEK_API_URL=https://api.deepseek.com/v1/chat/completions 

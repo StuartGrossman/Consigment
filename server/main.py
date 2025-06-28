@@ -10,6 +10,7 @@ import json
 import os
 import time
 import logging
+import requests
 from datetime import datetime, timedelta
 import uuid
 
@@ -215,6 +216,157 @@ async def health_check():
 @app.post("/api/test-simple")
 async def test_simple_post():
     return {"message": "Simple POST test successful", "timestamp": datetime.utcnow().isoformat()}
+
+@app.post("/api/admin/analyze-data")
+async def analyze_data_with_deepseek(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Use DeepSeek AI to analyze and reformat CSV/JSON data into our ConsignmentItem format"""
+    try:
+        data = await request.json()
+        raw_data = data.get('raw_data', '')
+        data_type = data.get('data_type', 'csv')  # 'csv' or 'json'
+        
+        if not raw_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No data provided for analysis"
+            )
+        
+        # DeepSeek API configuration
+        deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        deepseek_api_url = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/v1/chat/completions")
+        
+        if not deepseek_api_key:
+            deepseek_api_key = "sk-0bd6e4c111cc4568b6b0806235bcfd28"  # Use provided key as fallback
+        
+        # Create the prompt for DeepSeek
+        system_prompt = """You are a data analyst specialized in e-commerce inventory management. 
+        Your task is to analyze CSV or JSON data and convert it into a standardized format for a consignment store that sells outdoor gear.
+
+        The target data structure should be an array of objects with the following fields:
+        - title: string (product name/title)
+        - brand: string (manufacturer/brand name)
+        - category: string (standardized categories: 'Jackets', 'Pants', 'Shirts', 'Footwear', 'Backpacks', 'Climbing Gear', 'Sleep Systems', 'Cooking Gear', 'Base Layers', 'Socks', 'Vests', 'Outerwear', 'Accessories')
+        - size: string (size information)
+        - color: string (primary color)
+        - condition: string (standardized: 'Excellent', 'Very Good', 'Good', 'Fair')
+        - originalPrice: number (retail/original price)
+        - price: number (listing/asking price)
+        - description: string (item description)
+        - sellerEmail: string (seller's email)
+        - sellerPhone: string (seller's phone, optional)
+        - gender: string ('Men', 'Women', 'Unisex', 'Kids')
+        - material: string (fabric/material type, optional)
+
+        Instructions:
+        1. Analyze the provided data and map fields to the target structure
+        2. Standardize category names to match our predefined categories
+        3. Normalize condition values to our standards
+        4. Extract prices as numbers (remove currency symbols)
+        5. Ensure all required fields are present
+        6. Return ONLY valid JSON array format
+        7. If data cannot be mapped, return an error explanation
+
+        Respond with properly formatted JSON only."""
+
+        user_prompt = f"""Please analyze and convert this {data_type.upper()} data into our standardized consignment item format:
+
+        {raw_data}
+        
+        Convert this data to match our inventory structure and return as a JSON array."""
+
+        # Make request to DeepSeek API
+        headers = {
+            "Authorization": f"Bearer {deepseek_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "model": "deepseek-chat",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 4000,
+            "stream": False
+        }
+        
+        logger.info(f"Sending request to DeepSeek API for data analysis")
+        
+        response = requests.post(deepseek_api_url, headers=headers, json=payload, timeout=30)
+        
+        if response.status_code != 200:
+            logger.error(f"DeepSeek API error: {response.status_code} - {response.text}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"DeepSeek API error: {response.status_code}"
+            )
+        
+        response_data = response.json()
+        ai_response = response_data["choices"][0]["message"]["content"]
+        
+        logger.info(f"Received response from DeepSeek API")
+        
+        # Try to parse the AI response as JSON
+        try:
+            # Clean up the response (remove markdown formatting if present)
+            clean_response = ai_response.strip()
+            if clean_response.startswith("```json"):
+                clean_response = clean_response[7:-3]
+            elif clean_response.startswith("```"):
+                clean_response = clean_response[3:-3]
+            
+            parsed_items = json.loads(clean_response)
+            
+            # Validate that it's an array
+            if not isinstance(parsed_items, list):
+                raise ValueError("Response is not an array")
+            
+            # Add additional fields required by our system
+            processed_items = []
+            for item in parsed_items:
+                processed_item = {
+                    **item,
+                    'id': str(uuid.uuid4()),
+                    'status': 'pending',
+                    'createdAt': datetime.utcnow().isoformat(),
+                    'sellerId': admin_data.get('uid', 'imported'),
+                    'importedAt': datetime.utcnow().isoformat(),
+                    'importSource': 'deepseek_ai'
+                }
+                processed_items.append(processed_item)
+            
+            return {
+                "success": True,
+                "message": f"Successfully processed {len(processed_items)} items",
+                "items": processed_items,
+                "ai_confidence": "high",
+                "processing_time": response_data.get("usage", {}).get("total_tokens", 0)
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            return {
+                "success": False,
+                "message": "AI response could not be parsed as JSON",
+                "raw_response": ai_response,
+                "error": str(e)
+            }
+        except Exception as e:
+            logger.error(f"Error processing AI response: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error processing AI response: {str(e)}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in data analysis: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during data analysis"
+        )
 
 @app.post("/api/process-payment")
 async def process_payment(payment_request: PaymentRequest, user_data: dict = Depends(verify_firebase_token)):

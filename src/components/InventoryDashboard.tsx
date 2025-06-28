@@ -7,6 +7,7 @@ import { logUserAction } from '../services/firebaseService';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import NotificationModal from './NotificationModal';
+import { testDataFiles } from '../assets/test-data';
 
 interface InventoryDashboardProps {
   user: AuthUser | null;
@@ -1228,6 +1229,9 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [useAI, setUseAI] = useState(true);
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiResults, setAiResults] = useState<any>(null);
   const { user } = useAuth();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1249,31 +1253,37 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
 
   const handlePreview = async (file: File, type: 'csv' | 'json') => {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       
-      if (type === 'csv') {
-        const lines = text.split('\n').filter(line => line.trim());
-        const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-        const rows = lines.slice(1, 6).map(line => {
-          const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-          const obj: any = {};
-          headers.forEach((header, index) => {
-            obj[header] = values[index] || '';
+      if (useAI && (type === 'csv' || type === 'json')) {
+        // Use AI analysis for intelligent data processing
+        await handleAIAnalysis(text, type);
+      } else {
+        // Use traditional preview method
+        if (type === 'csv') {
+          const lines = text.split('\n').filter(line => line.trim());
+          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+          const rows = lines.slice(1, 6).map(line => {
+            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+            const obj: any = {};
+            headers.forEach((header, index) => {
+              obj[header] = values[index] || '';
+            });
+            return obj;
           });
-          return obj;
-        });
-        setPreviewData(rows);
-      } else if (type === 'json') {
-        try {
-          const data = JSON.parse(text);
-          setPreviewData(Array.isArray(data) ? data.slice(0, 5) : [data]);
-        } catch (error) {
-          console.error('Invalid JSON format');
+          setPreviewData(rows);
+        } else if (type === 'json') {
+          try {
+            const data = JSON.parse(text);
+            setPreviewData(Array.isArray(data) ? data.slice(0, 5) : [data]);
+          } catch (error) {
+            console.error('Invalid JSON format');
+          }
         }
+        
+        setShowPreview(true);
       }
-      
-      setShowPreview(true);
     };
     reader.readAsText(file);
   };
@@ -1359,6 +1369,59 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const handleDownloadTestData = (type: 'csv' | 'json') => {
+    const testData = testDataFiles[type];
+    const blob = new Blob([testData.content], { type: testData.mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = testData.filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAIAnalysis = async (fileContent: string, fileType: 'csv' | 'json') => {
+    if (!user) return;
+
+    setAiProcessing(true);
+    try {
+      // Create a manual fetch request to the analyze-data endpoint
+      const response = await fetch('http://localhost:8080/api/admin/analyze-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          raw_data: fileContent,
+          data_type: fileType
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      setAiResults(result);
+      
+      if (result.success) {
+        setPreviewData(result.items);
+        setShowPreview(true);
+      }
+    } catch (error) {
+      console.error('AI analysis failed:', error);
+      setAiResults({
+        success: false,
+        message: 'AI analysis failed. Please try manual import.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    } finally {
+      setAiProcessing(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
@@ -1379,6 +1442,37 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
         <div className="p-6 overflow-y-auto max-h-[calc(90vh-200px)]">
           {!isUploading ? (
             <>
+              {/* Download Test Data Section */}
+              <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                  <svg className="w-5 h-5 text-blue-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download Test Data
+                </h3>
+                <p className="text-gray-600 mb-4">Download sample data files to test the import functionality</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleDownloadTestData('csv')}
+                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Sample CSV
+                  </button>
+                  <button
+                    onClick={() => handleDownloadTestData('json')}
+                    className="bg-indigo-500 text-white px-4 py-2 rounded-lg hover:bg-indigo-600 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Sample JSON
+                  </button>
+                </div>
+              </div>
+
               {/* File Upload Section */}
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -1418,6 +1512,38 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                     <div className="text-lg font-semibold">SQL</div>
                     <div className="text-sm text-gray-500">SQL Insert Statements</div>
                   </button>
+                </div>
+                
+                {/* AI Processing Toggle */}
+                <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-gray-800 flex items-center">
+                        <svg className="w-5 h-5 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                        </svg>
+                        AI-Powered Data Analysis
+                      </h4>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Use DeepSeek AI to automatically analyze and format your data into our structure
+                      </p>
+                    </div>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={useAI}
+                        onChange={(e) => setUseAI(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div className={`relative inline-block w-12 h-6 rounded-full transition-colors ${
+                        useAI ? 'bg-purple-500' : 'bg-gray-300'
+                      }`}>
+                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                          useAI ? 'transform translate-x-6' : ''
+                        }`} />
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
                 {/* File Drop Zone */}
@@ -1468,10 +1594,67 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                 )}
               </div>
 
+              {/* AI Analysis Results */}
+              {aiProcessing && (
+                <div className="mb-6 p-6 bg-purple-50 rounded-lg border border-purple-200">
+                  <div className="flex items-center">
+                    <svg className="w-6 h-6 text-purple-500 mr-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-800">AI Analysis in Progress...</h3>
+                      <p className="text-sm text-gray-600">DeepSeek is analyzing and formatting your data</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {aiResults && !aiProcessing && (
+                <div className="mb-6">
+                  <div className={`p-4 rounded-lg border ${
+                    aiResults.success 
+                      ? 'bg-green-50 border-green-200' 
+                      : 'bg-red-50 border-red-200'
+                  }`}>
+                    <div className="flex items-start">
+                      <svg className={`w-5 h-5 mt-0.5 mr-2 ${
+                        aiResults.success ? 'text-green-500' : 'text-red-500'
+                      }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                          d={aiResults.success 
+                            ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            : "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          } 
+                        />
+                      </svg>
+                      <div>
+                        <h4 className={`font-semibold ${
+                          aiResults.success ? 'text-green-800' : 'text-red-800'
+                        }`}>
+                          AI Analysis {aiResults.success ? 'Complete' : 'Failed'}
+                        </h4>
+                        <p className={`text-sm ${
+                          aiResults.success ? 'text-green-700' : 'text-red-700'
+                        }`}>
+                          {aiResults.message}
+                        </p>
+                        {!aiResults.success && aiResults.error && (
+                          <p className="text-xs text-red-600 mt-1">
+                            Error: {aiResults.error}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Data Preview */}
               {showPreview && previewData.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Data Preview</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                    {useAI && aiResults?.success ? 'AI-Processed Data Preview' : 'Data Preview'}
+                  </h3>
                   <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">

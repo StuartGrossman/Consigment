@@ -1,0 +1,82 @@
+{
+  "outdoor_equipment": [
+    {
+      "item_title": "Mammut Trion Alpinist 28+7 Backpack",
+      "manufacturer": "Mammut",
+      "product_category": "alpine_packs",
+      "dimensions": "28+7L",
+      "primary_color": "graphite",
+      "wear_condition": "minimal_use",
+      "retail_value": 189.95,
+      "asking_price": 125.00,
+      "item_notes": "Technical alpine pack with helmet attachment. Used on 2 mountaineering trips.",
+      "owner_contact": {
+        "email_address": "summit.seeker@alpine.com",
+        "phone_number": "555-1234"
+      }
+    },
+    {
+      "item_title": "Outdoor Research Ferrosi Pants",
+      "manufacturer": "Outdoor Research",
+      "product_category": "softshell_pants",
+      "dimensions": "32W x 32L",
+      "primary_color": "charcoal",
+      "wear_condition": "excellent",
+      "retail_value": 139.00,
+      "asking_price": 85.00,
+      "item_notes": "Wind-resistant softshell pants. Perfect for alpine climbing and hiking.",
+      "owner_contact": {
+        "email_address": "mountain.athlete@peaks.net",
+        "phone_number": "555-5678"
+      }
+    },
+    {
+      "item_title": "La Sportiva Nepal Cube GTX Boots",
+      "manufacturer": "La Sportiva", 
+      "product_category": "mountaineering_boots",
+      "dimensions": "EU 42 / US 9",
+      "primary_color": "yellow",
+      "wear_condition": "good",
+      "retail_value": 599.95,
+      "asking_price": 375.00,
+      "item_notes": "Double boots for high-altitude mountaineering. Some wear on outer shell.",
+      "owner_contact": {
+        "email_address": "ice.climber@frozen.peaks",
+        "phone_number": "555-9012"
+      }
+    },
+    {
+      "item_title": "Petzl Grigri+ Belay Device",
+      "manufacturer": "Petzl",
+      "product_category": "belay_devices",
+      "dimensions": "standard",
+      "primary_color": "orange",
+      "wear_condition": "like_new",
+      "retail_value": 109.95,
+      "asking_price": 75.00,
+      "item_notes": "Assisted-braking belay device. Used less than 10 times.",
+      "owner_contact": {
+        "email_address": "rope.access@vertical.world",
+        "phone_number": "555-3456"
+      }
+    },
+    {
+      "item_title": "Western Mountaineering Kodiak MF Sleeping Bag",
+      "manufacturer": "Western Mountaineering",
+      "product_category": "sleep_systems",
+      "dimensions": "6ft Regular",
+      "primary_color": "red",
+      "wear_condition": "very_good",
+      "retail_value": 575.00,
+      "asking_price": 395.00,
+      "item_notes": "0°F down sleeping bag. Premium goose down fill. Stored uncompressed.",
+      "owner_contact": {
+        "email_address": "winter.camper@cold.mountains",
+        "phone_number": "555-7890"
+      }
+    }
+  ],
+  "data_format_version": "2.1",
+  "export_timestamp": "2024-12-30T15:30:00Z",
+  "total_items": 5
+} 
