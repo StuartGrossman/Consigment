@@ -16,11 +16,17 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
   
+  // Multi-select state
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  
   // Button throttling hook
   const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   
   // Modal states
   const [showMakeLiveModal, setShowMakeLiveModal] = useState(false);
+  const [showBulkMakeLiveModal, setShowBulkMakeLiveModal] = useState(false);
+  const [showBulkSendBackModal, setShowBulkSendBackModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
@@ -61,6 +67,29 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
     } finally {
       setLoading(false);
     }
+  };
+
+  // Multi-select functions
+  const toggleSelectItem = (itemId: string) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
+    }
+    setSelectedItems(newSelected);
+    setShowBulkActions(newSelected.size > 0);
+  };
+
+  const selectAllItems = () => {
+    const allIds = new Set(approvedItems.map(item => item.id));
+    setSelectedItems(allIds);
+    setShowBulkActions(true);
+  };
+
+  const clearSelection = () => {
+    setSelectedItems(new Set());
+    setShowBulkActions(false);
   };
 
   const calculateTimeRemaining = (approvedAt: Date) => {
@@ -133,6 +162,95 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
         setModalMessage('Error sending item back to pending. Please try again.');
         setShowErrorModal(true);
       } finally {
+        setProcessingItemId(null);
+      }
+    });
+  };
+
+  // Bulk actions
+  const handleBulkMakeLive = async () => {
+    if (selectedItems.size === 0) return;
+    setShowBulkMakeLiveModal(true);
+  };
+
+  const confirmBulkMakeLive = async () => {
+    if (selectedItems.size === 0) return;
+    
+    await throttledAction('bulk-make-live', async () => {
+      setShowBulkMakeLiveModal(false);
+      setProcessingItemId('bulk');
+      let successCount = 0;
+      let failCount = 0;
+      
+      try {
+        // Process each selected item
+        for (const itemId of selectedItems) {
+          try {
+            await apiService.makeItemLive(itemId);
+            successCount++;
+          } catch (error) {
+            console.error(`Failed to make item ${itemId} live:`, error);
+            failCount++;
+          }
+        }
+        
+        // Remove successful items from the list
+        if (successCount > 0) {
+          setApprovedItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+        }
+        
+        setModalMessage(`${successCount} items made live successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
+        setShowSuccessModal(true);
+        clearSelection();
+        setProcessingItemId(null);
+      } catch (error) {
+        console.error('Error in bulk make live:', error);
+        setModalMessage('Error processing bulk action. Please try again.');
+        setShowErrorModal(true);
+        setProcessingItemId(null);
+      }
+    });
+  };
+
+  const handleBulkSendBack = async () => {
+    if (selectedItems.size === 0) return;
+    setShowBulkSendBackModal(true);
+  };
+
+  const confirmBulkSendBack = async () => {
+    if (selectedItems.size === 0) return;
+    
+    await throttledAction('bulk-send-back', async () => {
+      setShowBulkSendBackModal(false);
+      setProcessingItemId('bulk');
+      let successCount = 0;
+      let failCount = 0;
+      
+      try {
+        // Process each selected item
+        for (const itemId of selectedItems) {
+          try {
+            await apiService.sendBackToPending(itemId);
+            successCount++;
+          } catch (error) {
+            console.error(`Failed to send item ${itemId} back to pending:`, error);
+            failCount++;
+          }
+        }
+        
+        // Remove successful items from the list
+        if (successCount > 0) {
+          setApprovedItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+        }
+        
+        setModalMessage(`${successCount} items sent back to pending successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
+        setShowSuccessModal(true);
+        clearSelection();
+        setProcessingItemId(null);
+      } catch (error) {
+        console.error('Error in bulk send back:', error);
+        setModalMessage('Error processing bulk action. Please try again.');
+        setShowErrorModal(true);
         setProcessingItemId(null);
       }
     });
@@ -267,12 +385,101 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
               <p className="text-gray-400 text-sm mt-2">Items will appear here after approval</p>
             </div>
           ) : (
-            <div className="space-y-4 sm:space-y-6">
-              {approvedItems.map((item) => {
-                const timeInfo = calculateTimeRemaining(item.approvedAt!);
-                return (
-                  <div key={item.id} className="mobile-admin-item-card bg-gradient-to-r from-orange-50 to-yellow-50">
-                    <div className="mobile-admin-item-layout">
+            <>
+              {/* Bulk Selection Controls */}
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={selectedItems.size === approvedItems.length ? clearSelection : selectAllItems}
+                      className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <div className={`w-4 h-4 border-2 rounded flex items-center justify-center ${
+                        selectedItems.size === approvedItems.length 
+                          ? 'bg-orange-500 border-orange-500' 
+                          : selectedItems.size > 0 
+                            ? 'bg-orange-200 border-orange-400' 
+                            : 'border-gray-300'
+                      }`}>
+                        {selectedItems.size === approvedItems.length && (
+                          <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        {selectedItems.size > 0 && selectedItems.size < approvedItems.length && (
+                          <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                        )}
+                      </div>
+                      <span>
+                        {selectedItems.size === 0 ? 'Select All' : 
+                         selectedItems.size === approvedItems.length ? 'Deselect All' : 
+                         `${selectedItems.size} Selected`}
+                      </span>
+                    </button>
+                    
+                    {selectedItems.size > 0 && (
+                      <span className="text-sm text-gray-600">
+                        {selectedItems.size} of {approvedItems.length} items selected
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Bulk Action Buttons */}
+                  {showBulkActions && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={handleBulkMakeLive}
+                        disabled={processingItemId === 'bulk' || isActionDisabled('bulk-make-live')}
+                        className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {processingItemId === 'bulk' ? 'Processing...' : `🚀 Make ${selectedItems.size} Live`}
+                      </button>
+                      <button
+                        onClick={handleBulkSendBack}
+                        disabled={processingItemId === 'bulk' || isActionDisabled('bulk-send-back')}
+                        className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        {`↶ Send ${selectedItems.size} Back`}
+                      </button>
+                      <button
+                        onClick={clearSelection}
+                        className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-4 sm:space-y-6">
+                {approvedItems.map((item) => {
+                  const timeInfo = calculateTimeRemaining(item.approvedAt!);
+                  return (
+                    <div key={item.id} className={`mobile-admin-item-card bg-gradient-to-r from-orange-50 to-yellow-50 relative transition-all duration-200 ${
+                      selectedItems.has(item.id) ? 'ring-2 ring-orange-500 bg-orange-100' : ''
+                    }`}>
+                      {/* Selection Checkbox */}
+                      <div className="absolute top-3 left-3 z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectItem(item.id);
+                          }}
+                          className={`w-6 h-6 border-2 rounded flex items-center justify-center transition-colors ${
+                            selectedItems.has(item.id)
+                              ? 'bg-orange-500 border-orange-500'
+                              : 'bg-white border-gray-300 hover:border-orange-400'
+                          }`}
+                        >
+                          {selectedItems.has(item.id) && (
+                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                      
+                      <div className="mobile-admin-item-layout">
                       {/* Images */}
                       <div className="mobile-admin-item-image">
                         {item.images.length > 0 ? (
@@ -453,9 +660,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                       </div>
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>
@@ -517,6 +725,70 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
               >
                 OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Make Live Confirmation Modal */}
+      {showBulkMakeLiveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-green-600 text-xl">🚀</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Bulk Make Live</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to make {selectedItems.size} items live? This will make them available to all customers immediately.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowBulkMakeLiveModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkMakeLive}
+                disabled={isActionDisabled('bulk-make-live')}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isActionProcessing('bulk-make-live') ? 'Processing...' : `Make ${selectedItems.size} Items Live`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Send Back Confirmation Modal */}
+      {showBulkSendBackModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-gray-600 text-xl">↶</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Bulk Send Back to Pending</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to send {selectedItems.size} items back to pending? They will need to be re-approved.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowBulkSendBackModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkSendBack}
+                disabled={isActionDisabled('bulk-send-back')}
+                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isActionProcessing('bulk-send-back') ? 'Processing...' : `Send ${selectedItems.size} Items Back`}
               </button>
             </div>
           </div>

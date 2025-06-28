@@ -3,6 +3,7 @@ import { AuthUser } from '../types';
 import { subscribeToActionLogs, ActionLog, logUserAction, getActionLogs } from '../services/firebaseService';
 import UserAnalyticsModal from './UserAnalyticsModal';
 import AdminBanModal from './AdminBanModal';
+import AdminManageModal from './AdminManageModal';
 
 interface ActionsDashboardProps {
   user: AuthUser | null;
@@ -19,6 +20,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
   const [timeFilter, setTimeFilter] = useState('24h');
   const [showUserAnalytics, setShowUserAnalytics] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
+  const [showAdminManageModal, setShowAdminManageModal] = useState(false);
 
 
 
@@ -238,6 +240,15 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
                 </svg>
                 🚫 Ban Management
+              </button>
+              <button
+                onClick={() => setShowAdminManageModal(true)}
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                👑 Make Admin or Remove
               </button>
               <button
                 onClick={() => setShowUserAnalytics(true)}
@@ -503,6 +514,13 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
       {showBanModal && (
         <AdminBanModal
           onClose={() => setShowBanModal(false)}
+        />
+      )}
+
+      {/* Admin Management Modal */}
+      {showAdminManageModal && (
+        <AdminManageModal
+          onClose={() => setShowAdminManageModal(false)}
         />
       )}
     </div>

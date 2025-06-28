@@ -3,6 +3,8 @@ import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'fire
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
+import { apiService } from '../services/apiService';
+import NotificationModal from './NotificationModal';
 
 interface SoldItemsModalProps {
     isOpen: boolean;
@@ -18,6 +20,18 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
     const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
     const [showDetailModal, setShowDetailModal] = useState(false);
     const [isMarkingShipped, setIsMarkingShipped] = useState(false);
+    const [showNotification, setShowNotification] = useState(false);
+    const [notificationData, setNotificationData] = useState({
+        title: '',
+        message: '',
+        type: 'info' as 'success' | 'error' | 'info' | 'warning'
+    });
+
+    // Helper function to show notifications
+    const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
+        setNotificationData({ title, message, type });
+        setShowNotification(true);
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -78,32 +92,41 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
         
         setIsMarkingShipped(true);
         try {
-            const trackingNumber = `TRK${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-            
-            const itemRef = doc(db, 'items', item.id);
-            await updateDoc(itemRef, {
-                shippedAt: new Date(),
-                trackingNumber: trackingNumber,
-                shippingLabelGenerated: true
-            });
+            // Check if user is authenticated and not a phone user
+            if (!user || ('isPhoneUser' in user && user.isPhoneUser)) {
+                throw new Error('Admin access required - please sign in with Google');
+            }
+
+            // Use apiService to mark item as shipped
+            const result = await apiService.markItemShipped(item.id);
 
             // Log the shipping action
-            await logUserAction(user, 'item_shipped', `Item marked as shipped with tracking ${trackingNumber}`, item.id, item.title);
+            await logUserAction(user, 'item_shipped', `Item marked as shipped with tracking ${result.trackingNumber}`, item.id, item.title);
 
-            // Update the local state
+            // Update the local state with shipping information
+            const shippingData = {
+                shippedAt: new Date(result.shippedAt),
+                trackingNumber: result.trackingNumber,
+                shippingLabelGenerated: true
+            };
+
             setSoldItems(prev => prev.map(soldItem => 
                 soldItem.id === item.id 
-                    ? { ...soldItem, shippedAt: new Date(), trackingNumber, shippingLabelGenerated: true }
+                    ? { ...soldItem, ...shippingData }
                     : soldItem
             ));
 
             // Update the selected item if it's the one being shipped
             if (selectedItem?.id === item.id) {
-                setSelectedItem({ ...selectedItem, shippedAt: new Date(), trackingNumber, shippingLabelGenerated: true });
+                setSelectedItem({ ...selectedItem, ...shippingData });
             }
+
+            console.log(`✅ Item ${item.id} marked as shipped successfully`);
 
         } catch (error) {
             console.error('Error marking item as shipped:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            showNotificationModal('Shipping Error', `Failed to mark item as shipped: ${errorMessage}`, 'error');
         } finally {
             setIsMarkingShipped(false);
         }
@@ -457,6 +480,15 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                     </div>
                 </div>
             )}
+
+            {/* Notification Modal */}
+            <NotificationModal
+                isOpen={showNotification}
+                onClose={() => setShowNotification(false)}
+                title={notificationData.title}
+                message={notificationData.message}
+                type={notificationData.type}
+            />
         </>
     );
 };

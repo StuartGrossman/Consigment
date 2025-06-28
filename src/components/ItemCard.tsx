@@ -187,7 +187,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
                 {isCartActionProcessing(`cart-action-${item.id}`) ? (
                   <span>Processing...</span>
                 ) : isInCart(item.id) ? (
-                  <span>Remove from Cart</span>
+                  <span>Remove</span>
                 ) : (
                   <span>Add to Cart</span>
                 )}

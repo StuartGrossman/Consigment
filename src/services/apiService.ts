@@ -10,7 +10,7 @@ const getApiBaseUrl = () => {
     
     // Development - use localhost
     if (import.meta.env.DEV) {
-        return 'http://localhost:8000';
+        return 'http://localhost:8080';
     }
     
     // Production - check if we're on Firebase hosting
@@ -83,13 +83,13 @@ class ApiService {
             ...(options.headers as Record<string, string> || {}),
         };
 
-        // Add authentication for admin endpoints
-        if (endpoint.includes('/admin/')) {
+        // Add authentication for admin endpoints, create-item endpoint, and user endpoints
+        if (endpoint.includes('/admin/') || endpoint.includes('/api/create-item') || endpoint.includes('/api/user/')) {
             try {
                 const token = await this.getAuthToken();
                 headers['Authorization'] = `Bearer ${token}`;
             } catch (error) {
-                console.warn('⚠️ Could not get auth token for admin endpoint:', error);
+                console.warn('⚠️ Could not get auth token for protected endpoint:', error);
                 // Continue without token - let server handle auth error
             }
         }
@@ -267,17 +267,60 @@ class ApiService {
         }
     }
 
-    async rejectItem(itemId: string, rejectionReason?: string): Promise<void> {
+    async rejectItem(itemId: string, reason: string): Promise<void> {
         try {
             await this.makeRequest('/api/admin/reject-item', {
                 method: 'POST',
                 body: JSON.stringify({
                     itemId,
-                    rejectionReason,
+                    reason
                 }),
             });
         } catch (error) {
             console.error('❌ Failed to reject item:', error);
+            throw error;
+        }
+    }
+
+    async approveItem(itemId: string): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/approve-item', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to approve item:', error);
+            throw error;
+        }
+    }
+
+    async bulkApproveItems(itemIds: string[]): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/bulk-approve', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemIds,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to bulk approve items:', error);
+            throw error;
+        }
+    }
+
+    async bulkRejectItems(itemIds: string[], reason: string): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/bulk-reject-items', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemIds,
+                    reason,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to bulk reject items:', error);
             throw error;
         }
     }
@@ -321,6 +364,114 @@ class ApiService {
             });
         } catch (error) {
             console.error('❌ Failed to send item back to pending:', error);
+            throw error;
+        }
+    }
+
+    async markItemShipped(itemId: string, trackingNumber?: string): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        trackingNumber: string;
+        shippedAt: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/mark-shipped', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                    trackingNumber,
+                }),
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to mark item as shipped:', error);
+            throw error;
+        }
+    }
+
+    async createItem(itemData: any): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        status: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/create-item', {
+                method: 'POST',
+                body: JSON.stringify(itemData),
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to create item:', error);
+            throw error;
+        }
+    }
+
+    async toggleAdminStatus(userId: string, isAdmin: boolean): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/toggle-admin-status', {
+                method: 'POST',
+                body: JSON.stringify({
+                    userId,
+                    isAdmin,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to toggle admin status:', error);
+            throw error;
+        }
+    }
+
+    async getAllUsers(): Promise<any[]> {
+        try {
+            const response = await this.makeRequest('/api/admin/get-all-users', {
+                method: 'GET',
+            }) as any;
+            return response.users;
+        } catch (error) {
+            console.error('❌ Failed to get all users:', error);
+            throw error;
+        }
+    }
+
+    async banUser(userId: string, email: string, ipAddress: string, reason: string, durationHours: number = 24): Promise<void> {
+        try {
+            await this.makeRequest('/api/admin/ban-user', {
+                method: 'POST',
+                body: JSON.stringify({
+                    userId,
+                    email,
+                    ipAddress,
+                    reason,
+                    durationHours,
+                }),
+            });
+        } catch (error) {
+            console.error('❌ Failed to ban user:', error);
+            throw error;
+        }
+    }
+
+    async removeUserItem(itemId: string): Promise<void> {
+        try {
+            await this.makeRequest(`/api/user/remove-item/${itemId}`, {
+                method: 'DELETE',
+            });
+        } catch (error) {
+            console.error('❌ Failed to remove user item:', error);
+            throw error;
+        }
+    }
+
+    async updateUserItem(itemId: string, itemData: any): Promise<void> {
+        try {
+            await this.makeRequest(`/api/user/update-item/${itemId}`, {
+                method: 'PUT',
+                body: JSON.stringify(itemData),
+            });
+        } catch (error) {
+            console.error('❌ Failed to update user item:', error);
             throw error;
         }
     }

@@ -22,6 +22,7 @@ import Analytics from './Analytics';
 import UserAnalytics from './UserAnalytics';
 import InventoryDashboard from './InventoryDashboard';
 import ActionsDashboard from './ActionsDashboard';
+import MyPendingItemsModal from './MyPendingItemsModal';
 
 
 const Home: React.FC = () => {
@@ -34,6 +35,7 @@ const Home: React.FC = () => {
     const [isAnalyticsModalOpen, setIsAnalyticsModalOpen] = useState(false);
     const [isApplicationTestModalOpen, setIsApplicationTestModalOpen] = useState(false);
     const [isSoldItemsModalOpen, setIsSoldItemsModalOpen] = useState(false);
+    const [isMyPendingItemsModalOpen, setIsMyPendingItemsModalOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
@@ -425,6 +427,17 @@ const Home: React.FC = () => {
     const handleSoldItemsModalClose = () => {
         setIsSoldItemsModalOpen(false);
         fetchItems();
+    };
+
+    const handleMyPendingItemsModal = async () => {
+        await logUserAction(user, 'modal_opened', 'Opened My Pending Items modal');
+        setIsMyPendingItemsModalOpen(true);
+    };
+
+    const handleMyPendingItemsModalClose = () => {
+        setIsMyPendingItemsModalOpen(false);
+        fetchItems();
+        fetchRecentItems();
     };
 
     const handleDashboard = () => {
@@ -848,6 +861,38 @@ const Home: React.FC = () => {
                                             <span className="sm:hidden">List</span>
                             </button>
                             
+                            {/* My Pending Items button for regular users */}
+                            {!isAdmin && (
+                                <>
+                                    {/* Full text for large screens (1000px+) */}
+                                    <button
+                                        onClick={handleMyPendingItemsModal}
+                                        className="desktop-button-secondary hidden lg:inline-flex"
+                                    >
+                                        <span>My Pending Items</span>
+                                    </button>
+                                    
+                                    {/* Icon only for medium screens (640px-1000px) to prevent overlap */}
+                                    <button
+                                        onClick={handleMyPendingItemsModal}
+                                        className="desktop-button-secondary hidden sm:inline-flex lg:hidden p-2"
+                                        title="My Pending Items"
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                        </svg>
+                                    </button>
+                                    
+                                    {/* Short text for small screens (<640px) */}
+                                    <button
+                                        onClick={handleMyPendingItemsModal}
+                                        className="desktop-button-secondary sm:hidden"
+                                    >
+                                        <span>My Items</span>
+                                    </button>
+                                </>
+                            )}
+                            
                             {isAdmin && (
                                 <>
                                     {/* Individual buttons for large screens (1100px+) */}
@@ -882,9 +927,9 @@ const Home: React.FC = () => {
                                             onClick={() => setAdminMenuOpen(!adminMenuOpen)}
                                             className="desktop-button-secondary relative flex items-center gap-1"
                                         >
-                                            <span>Admin</span>
+                                            <span>Actions</span>
                                             <svg className={`w-4 h-4 transition-transform ${adminMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                                             </svg>
                                             {(notificationCounts.pending > 0 || notificationCounts.approved > 0) && (
                                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
@@ -893,7 +938,7 @@ const Home: React.FC = () => {
                                             )}
                                         </button>
 
-                                        {/* Admin Dropdown Menu */}
+                                        {/* Actions Dropdown Menu */}
                                         {adminMenuOpen && (
                                             <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
                                                 <div className="py-1">
@@ -906,7 +951,7 @@ const Home: React.FC = () => {
                                                     >
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
                                                             </svg>
                                                             <span>Pending Items</span>
                                                         </div>
@@ -925,7 +970,7 @@ const Home: React.FC = () => {
                                                     >
                                                         <div className="flex items-center gap-2">
                                                             <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m4.5 12.75 6 6 9-13.5" />
                                                             </svg>
                                                             <span>Approved Items</span>
                                                         </div>
@@ -2062,6 +2107,12 @@ const Home: React.FC = () => {
                 onClose={() => setIsBookmarksModalOpen(false)}
                 items={items}
                 onItemClick={handleItemClick}
+            />
+
+            <MyPendingItemsModal 
+                isOpen={isMyPendingItemsModalOpen}
+                onClose={handleMyPendingItemsModalClose}
+                user={user}
             />
 
             <Checkout 

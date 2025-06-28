@@ -4,6 +4,7 @@ import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import { PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import ItemDetailModal from './ItemDetailModal';
+import NotificationModal from './NotificationModal';
 
 interface UserAnalyticsProps {
   user: AuthUser | null;
@@ -78,6 +79,18 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
   } | null>(null);
   const [showSoldItemModal, setShowSoldItemModal] = useState(false);
   const [selectedSoldItem, setSelectedSoldItem] = useState<ConsignmentItem | null>(null);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationData, setNotificationData] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'info' | 'warning'
+  });
+
+  // Helper function to show notifications
+  const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
+    setNotificationData({ title, message, type });
+    setShowNotification(true);
+  };
 
   // Use refs to prevent excessive re-renders
   const lastFetchRef = useRef<number>(0);
@@ -395,7 +408,11 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
       setIsGeneratingLabel(false);
 
       // Show success message
-      alert(`Shipping label generated!\nTracking: ${labelData.trackingNumber}\nEstimated delivery: ${new Date(labelData.estimatedDelivery).toLocaleDateString()}`);
+      showNotificationModal(
+        'Shipping Label Generated!', 
+        `Tracking: ${labelData.trackingNumber}\nEstimated delivery: ${new Date(labelData.estimatedDelivery).toLocaleDateString()}`, 
+        'success'
+      );
     };
 
     const printShippingLabel = () => {
@@ -1428,6 +1445,15 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
         isOpen={showSoldItemModal}
         onClose={handleSoldItemModalClose}
         item={selectedSoldItem}
+      />
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={showNotification}
+        onClose={() => setShowNotification(false)}
+        title={notificationData.title}
+        message={notificationData.message}
+        type={notificationData.type}
       />
     </div>
   );

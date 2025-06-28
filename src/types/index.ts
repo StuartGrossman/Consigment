@@ -7,15 +7,36 @@ export interface ConsignmentItem {
   sellerId: string;
   sellerName: string;
   sellerEmail: string;
-  status: 'pending' | 'approved' | 'live' | 'sold' | 'archived';
+  status: 'pending' | 'approved' | 'live' | 'sold' | 'archived' | 'rejected';
   createdAt: Date;
   approvedAt?: Date;
   liveAt?: Date;
   soldAt?: Date;
+  rejectedAt?: Date;
+  rejectionReason?: string;
+  category?: string;
+  gender?: 'Men' | 'Women' | 'Unisex';
+  size?: string;
+  brand?: string;
+  condition?: 'New' | 'Like New' | 'Good' | 'Fair';
+  material?: string;
+  color?: string;
+  barcode?: string;
+  barcodeImageUrl?: string;
+  barcodeGeneratedAt?: Date;
+  printConfirmedAt?: Date;
+  shippedAt?: Date;
+  trackingNumber?: string;
+  shippingStatus?: 'pending' | 'shipped' | 'delivered';
   soldPrice?: number;
+  userEarnings?: number;
   buyerId?: string;
   buyerName?: string;
   buyerEmail?: string;
+  paymentId?: string;
+  paymentStatus?: 'pending' | 'completed' | 'failed' | 'refunded';
+  notes?: string;
+  tags?: string[];
   // Sale type tracking
   saleType?: 'in-store' | 'online';
   // Buyer information for sold items
@@ -32,34 +53,19 @@ export interface ConsignmentItem {
   // Fulfillment method for online orders
   fulfillmentMethod?: 'pickup' | 'shipping';
   // Shipping tracking
-  trackingNumber?: string;
   shippingLabelGenerated?: boolean;
-  shippedAt?: Date;
   deliveredAt?: Date;
   // Earnings split (user gets 75%, admin gets 25%)
-  userEarnings?: number;
   adminEarnings?: number;
   // Archive tracking
   archivedAt?: Date;
   archiveReason?: string;
   // Barcode tracking
   barcodeData?: string;
-  barcodeGeneratedAt?: Date;
-  barcodeImageUrl?: string; // URL to the stored barcode image
-  printConfirmedAt?: Date;
-  // New filtering fields
-  category?: string;
-  gender?: 'Men' | 'Women' | 'Unisex' | '';
-  size?: string;
-  brand?: string;
-  condition?: 'New' | 'Like New' | 'Good' | 'Fair' | '';
-  material?: string;
-  color?: string;
-  // Discount tracking
-  originalPrice?: number; // Store original price when discount is applied
   discountPercentage?: number; // Percentage discount applied
   discountAppliedAt?: Date; // When discount was applied
   discountReason?: string; // Reason for discount (e.g., "Shelf time over 30 days")
+  originalPrice?: number; // Store original price when discount is applied
 }
 
 export interface User {

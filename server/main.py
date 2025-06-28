@@ -33,6 +33,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173", 
         "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
         "https://consignment-store-4a564.web.app",
         "https://consignment-store-4a564.firebaseapp.com"
     ],
@@ -1069,6 +1071,642 @@ async def send_back_to_pending(request: Request):
         
     except Exception as e:
         logger.error(f"Error sending item back to pending: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/mark-shipped")
+async def mark_item_shipped(request: Request):
+    """Admin endpoint to mark an item as shipped"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # Check if user is admin
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        tracking_number = data.get('trackingNumber', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Get item details for logging
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        # Verify the item is sold and ready for shipping
+        if item_data.get('status') != 'sold':
+            raise HTTPException(status_code=400, detail="Item must be sold before it can be shipped")
+        
+        if item_data.get('saleType') != 'online':
+            raise HTTPException(status_code=400, detail="Only online sales can be marked as shipped")
+        
+        if item_data.get('fulfillmentMethod') != 'shipping':
+            raise HTTPException(status_code=400, detail="Item fulfillment method must be shipping")
+        
+        if item_data.get('shippedAt'):
+            raise HTTPException(status_code=400, detail="Item has already been shipped")
+        
+        # Generate tracking number if not provided
+        if not tracking_number:
+            tracking_number = f"TRK{int(time.time())}{str(uuid.uuid4())[:4].upper()}"
+        
+        logger.info(f"Admin {user_id} marking item {item_id} as shipped with tracking {tracking_number}")
+        
+        # Update item with shipping information
+        update_data = {
+            'shippedAt': datetime.utcnow(),
+            'trackingNumber': tracking_number,
+            'shippingLabelGenerated': True,
+            'shippedBy': user_id,
+            'lastUpdated': datetime.utcnow()
+        }
+        
+        item_ref.update(update_data)
+        
+        # Log admin action
+        admin_action = {
+            'adminId': user_id,
+            'action': 'item_shipped',
+            'details': f'Marked item "{item_data.get("title", "Unknown")}" as shipped with tracking {tracking_number}',
+            'itemId': item_id,
+            'timestamp': datetime.utcnow(),
+            'trackingNumber': tracking_number
+        }
+        db.collection('adminActions').add(admin_action)
+        
+        logger.info(f"Successfully marked item {item_id} as shipped")
+        
+        return {
+            "success": True,
+            "message": "Item marked as shipped successfully",
+            "itemId": item_id,
+            "trackingNumber": tracking_number,
+            "shippedAt": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error marking item as shipped: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/create-item")
+async def create_item(request: Request):
+    """Endpoint for all users to create items that go to pending queue"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # All authenticated users can create items
+        data = await request.json()
+        
+        # Validate required fields
+        required_fields = ['title', 'description', 'price', 'sellerId', 'sellerName', 'sellerEmail']
+        for field in required_fields:
+            if not data.get(field):
+                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
+        
+        # Validate price is a positive number
+        try:
+            price = float(data.get('price'))
+            if price <= 0:
+                raise ValueError("Price must be positive")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid price format")
+        
+        logger.info(f"User {user_id} creating item: {data.get('title')}")
+        
+        # Prepare item data for items collection
+        item_data = {
+            'title': data.get('title').strip(),
+            'description': data.get('description').strip(),
+            'price': price,
+            'images': data.get('images', []),
+            'sellerId': data.get('sellerId'),
+            'sellerName': data.get('sellerName'),
+            'sellerEmail': data.get('sellerEmail'),
+            'status': 'pending',
+            'createdAt': datetime.utcnow(),
+            'submittedBy': user_id,  # Track who submitted it
+            'lastUpdated': datetime.utcnow()
+        }
+        
+        # Add optional fields if provided
+        optional_fields = ['category', 'gender', 'size', 'brand', 'condition', 'material', 'color']
+        for field in optional_fields:
+            if data.get(field) and data.get(field).strip():
+                item_data[field] = data.get(field).strip()
+        
+        # Create item in main items collection
+        items_ref = db.collection('items')
+        doc_ref = items_ref.add(item_data)
+        item_id = doc_ref[1].id
+        
+        # Log the action
+        action_log = {
+            'userId': user_id,
+            'action': 'item_created',
+            'details': f'Created item "{data.get("title")}" for pending review',
+            'itemId': item_id,
+            'timestamp': datetime.utcnow()
+        }
+        db.collection('actionLogs').add(action_log)
+        
+        logger.info(f"Successfully created item {item_id} for pending review")
+        
+        return {
+            "success": True,
+            "message": "Item created successfully and added to pending review",
+            "itemId": item_id,
+            "status": "pending"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating item: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/approve-item")
+async def approve_single_item(request: Request):
+    """Admin endpoint to approve a single item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Update item to approved status
+        item_ref = db.collection('items').document(item_id)
+        item_ref.update({
+            'status': 'approved',
+            'approvedAt': datetime.utcnow(),
+            'approvedBy': user_id
+        })
+        
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': user_id,
+            'action': 'item_approved',
+            'itemId': item_id,
+            'details': 'Approved item',
+            'timestamp': datetime.utcnow()
+        })
+        
+        return {"success": True, "message": "Item approved successfully"}
+        
+    except Exception as e:
+        logger.error(f"Error approving item: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/bulk-approve")
+async def bulk_approve_items(request: Request):
+    """Admin endpoint to approve multiple items"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_ids = data.get('itemIds', [])
+        
+        if not item_ids or not isinstance(item_ids, list):
+            raise HTTPException(status_code=400, detail="Missing or invalid itemIds array")
+        
+        success_count = 0
+        error_count = 0
+        
+        for item_id in item_ids:
+            try:
+                # Update item to approved status
+                item_ref = db.collection('items').document(item_id)
+                item_ref.update({
+                    'status': 'approved',
+                    'approvedAt': datetime.utcnow(),
+                    'approvedBy': user_id
+                })
+                success_count += 1
+                
+                # Log admin action
+                db.collection('adminActions').add({
+                    'adminId': user_id,
+                    'action': 'item_approved',
+                    'itemId': item_id,
+                    'details': 'Approved item via bulk action',
+                    'timestamp': datetime.utcnow()
+                })
+                
+            except Exception as item_error:
+                logger.error(f"Error approving item {item_id}: {item_error}")
+                error_count += 1
+        
+        return {
+            "success": True, 
+            "message": f"Bulk approval completed. {success_count} items approved, {error_count} failed.",
+            "successCount": success_count,
+            "errorCount": error_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bulk approve: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/bulk-reject")
+async def bulk_reject_items(request: Request):
+    """Admin endpoint to reject multiple items"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_ids = data.get('itemIds', [])
+        reason = data.get('reason', 'No reason provided')
+        
+        if not item_ids or not isinstance(item_ids, list):
+            raise HTTPException(status_code=400, detail="Missing or invalid itemIds array")
+        
+        success_count = 0
+        error_count = 0
+        
+        for item_id in item_ids:
+            try:
+                # Update item to rejected status
+                item_ref = db.collection('items').document(item_id)
+                item_ref.update({
+                    'status': 'rejected',
+                    'rejectedAt': datetime.utcnow(),
+                    'rejectedBy': user_id,
+                    'rejectionReason': reason
+                })
+                success_count += 1
+                
+                # Log admin action
+                db.collection('adminActions').add({
+                    'adminId': user_id,
+                    'action': 'item_rejected',
+                    'itemId': item_id,
+                    'details': f'Rejected item via bulk action. Reason: {reason}',
+                    'timestamp': datetime.utcnow()
+                })
+                
+            except Exception as item_error:
+                logger.error(f"Error rejecting item {item_id}: {item_error}")
+                error_count += 1
+        
+        return {
+            "success": True, 
+            "message": f"Bulk rejection completed. {success_count} items rejected, {error_count} failed.",
+            "successCount": success_count,
+            "errorCount": error_count
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in bulk reject: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/toggle-admin-status")
+async def toggle_admin_status(request: Request):
+    """Admin endpoint to toggle admin status of a user"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        admin_user_id = decoded_token['uid']
+        
+        # Verify admin status
+        admin_doc = db.collection('users').document(admin_user_id).get()
+        if not admin_doc.exists or not admin_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        target_user_id = data.get('userId')
+        new_admin_status = data.get('isAdmin')
+        
+        if not target_user_id:
+            raise HTTPException(status_code=400, detail="Missing userId")
+        
+        if target_user_id == admin_user_id:
+            raise HTTPException(status_code=400, detail="Cannot modify your own admin status")
+        
+        # Update user admin status
+        user_ref = db.collection('users').document(target_user_id)
+        user_ref.update({
+            'isAdmin': new_admin_status,
+            'adminStatusChangedAt': datetime.utcnow(),
+            'adminStatusChangedBy': admin_user_id
+        })
+        
+        # Log the action
+        db.collection('action_logs').add({
+            'userId': admin_user_id,
+            'action': 'admin_action',
+            'details': f"{'Granted' if new_admin_status else 'Removed'} admin privileges for user {target_user_id}",
+            'timestamp': datetime.utcnow(),
+            'userAgent': request.headers.get('user-agent', ''),
+            'ip': request.client.host
+        })
+        
+        return {"success": True, "message": f"Admin status {'granted' if new_admin_status else 'removed'} successfully"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/get-all-users")
+async def get_all_users(request: Request):
+    """Admin endpoint to get all users with their details"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        admin_user_id = decoded_token['uid']
+        
+        # Verify admin status
+        admin_doc = db.collection('users').document(admin_user_id).get()
+        if not admin_doc.exists or not admin_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Get all users
+        users_ref = db.collection('users')
+        users_docs = users_ref.stream()
+        
+        users_list = []
+        for doc in users_docs:
+            data = doc.to_dict()
+            users_list.append({
+                'id': doc.id,
+                'email': data.get('email', ''),
+                'displayName': data.get('displayName', ''),
+                'photoURL': data.get('photoURL', ''),
+                'isAdmin': data.get('isAdmin', False),
+                'createdAt': data.get('createdAt'),
+                'lastLoginAt': data.get('lastLoginAt'),
+                'lastKnownIP': data.get('lastKnownIP', 'Unknown')
+            })
+        
+        return {"users": users_list}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/ban-user")
+async def ban_user(request: Request):
+    """Admin endpoint to ban a user"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        admin_user_id = decoded_token['uid']
+        
+        # Verify admin status
+        admin_doc = db.collection('users').document(admin_user_id).get()
+        if not admin_doc.exists or not admin_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        target_user_id = data.get('userId')
+        target_email = data.get('email')
+        target_ip = data.get('ipAddress')
+        reason = data.get('reason', 'No reason provided')
+        duration_hours = data.get('durationHours', 24)
+        
+        if not target_user_id or not target_email:
+            raise HTTPException(status_code=400, detail="Missing userId or email")
+        
+        if target_user_id == admin_user_id:
+            raise HTTPException(status_code=400, detail="Cannot ban yourself")
+        
+        expires_at = datetime.utcnow() + timedelta(hours=duration_hours)
+        
+        # Ban user by email/ID
+        db.collection('banned_users').add({
+            'userId': target_user_id,
+            'email': target_email,
+            'reason': reason,
+            'bannedAt': datetime.utcnow(),
+            'expiresAt': expires_at,
+            'active': True,
+            'autoGenerated': False,
+            'bannedBy': admin_user_id
+        })
+        
+        # Also ban their IP if available
+        if target_ip and target_ip != 'Unknown':
+            db.collection('banned_ips').add({
+                'ip': target_ip,
+                'reason': f"User ban: {reason}",
+                'bannedAt': datetime.utcnow(),
+                'expiresAt': expires_at,
+                'active': True,
+                'autoGenerated': False,
+                'bannedBy': admin_user_id,
+                'associatedUser': target_email
+            })
+        
+        # Log the action
+        db.collection('action_logs').add({
+            'userId': admin_user_id,
+            'action': 'admin_action',
+            'details': f"Banned user {target_email} for {duration_hours} hours. Reason: {reason}",
+            'timestamp': datetime.utcnow(),
+            'userAgent': request.headers.get('user-agent', ''),
+            'ip': request.client.host
+        })
+        
+        return {"success": True, "message": f"User {target_email} banned successfully"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.delete("/api/user/remove-item/{item_id}")
+async def remove_user_item(item_id: str, request: Request):
+    """User endpoint to remove their own pending item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # Get the item to verify ownership and status
+        item_doc = db.collection('items').document(item_id).get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        # Verify the user owns this item
+        if item_data.get('sellerId') != user_id:
+            raise HTTPException(status_code=403, detail="You can only remove your own items")
+        
+        # Only allow removing pending items
+        if item_data.get('status') != 'pending':
+            raise HTTPException(status_code=400, detail="Only pending items can be removed")
+        
+        # Delete the item
+        db.collection('items').document(item_id).delete()
+        
+        # Log the action
+        db.collection('action_logs').add({
+            'userId': user_id,
+            'action': 'item_removed',
+            'details': f"User removed their pending item: {item_data.get('title', 'Unknown')}",
+            'timestamp': datetime.utcnow(),
+            'userAgent': request.headers.get('user-agent', ''),
+            'ip': request.client.host,
+            'itemTitle': item_data.get('title')
+        })
+        
+        return {"success": True, "message": "Item removed successfully"}
+        
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.put("/api/user/update-item/{item_id}")
+async def update_user_item(item_id: str, request: Request):
+    """User endpoint to update their own pending item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        # Get the item to verify ownership and status
+        item_doc = db.collection('items').document(item_id).get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        # Verify the user owns this item
+        if item_data.get('sellerId') != user_id:
+            raise HTTPException(status_code=403, detail="You can only update your own items")
+        
+        # Only allow updating pending items
+        if item_data.get('status') != 'pending':
+            raise HTTPException(status_code=400, detail="Only pending items can be updated")
+        
+        # Get update data
+        update_data = await request.json()
+        
+        # Validate required fields
+        if not update_data.get('title') or not update_data.get('description'):
+            raise HTTPException(status_code=400, detail="Title and description are required")
+        
+        try:
+            price = float(update_data.get('price', 0))
+            if price <= 0:
+                raise HTTPException(status_code=400, detail="Price must be greater than 0")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="Invalid price format")
+        
+        # Prepare update fields (only allow certain fields to be updated)
+        allowed_fields = {
+            'title': update_data.get('title').strip(),
+            'description': update_data.get('description').strip(),
+            'price': price,
+            'updatedAt': datetime.utcnow()
+        }
+        
+        # Add optional fields if provided
+        optional_fields = ['category', 'gender', 'size', 'brand', 'condition', 'material']
+        for field in optional_fields:
+            if field in update_data and update_data[field]:
+                allowed_fields[field] = update_data[field].strip() if isinstance(update_data[field], str) else update_data[field]
+        
+        # Update the item
+        db.collection('items').document(item_id).update(allowed_fields)
+        
+        # Log the action
+        db.collection('action_logs').add({
+            'userId': user_id,
+            'action': 'item_updated',
+            'details': f"User updated their pending item: {allowed_fields['title']}",
+            'timestamp': datetime.utcnow(),
+            'userAgent': request.headers.get('user-agent', ''),
+            'ip': request.client.host,
+            'itemTitle': allowed_fields['title']
+        })
+        
+        return {"success": True, "message": "Item updated successfully"}
+        
+    except Exception as e:
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

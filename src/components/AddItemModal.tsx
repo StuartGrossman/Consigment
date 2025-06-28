@@ -4,6 +4,9 @@ import { storage } from '../config/firebase';
 import { AuthUser } from '../types';
 import { logUserActionSafe, saveUserItem } from '../services/userService';
 import { useRateLimiter } from '../hooks/useRateLimiter';
+import { useAuth } from '../hooks/useAuth';
+import { apiService } from '../services/apiService';
+import NotificationModal from './NotificationModal';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -12,6 +15,7 @@ interface AddItemModalProps {
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) => {
+  const { isAdmin } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -19,6 +23,18 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const [uploading, setUploading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationData, setNotificationData] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'info' | 'warning'
+  });
+
+  // Helper function to show notifications
+  const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
+    setNotificationData({ title, message, type });
+    setShowNotification(true);
+  };
   
   // Rate limiting hook
   const { executeWithRateLimit } = useRateLimiter();
@@ -65,13 +81,13 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
 
   const handlePreview = () => {
     if (!title.trim() || !description.trim() || !price.trim()) {
-      alert('Please fill in all required fields before previewing');
+      showNotificationModal('Missing Information', 'Please fill in all required fields before previewing', 'warning');
       return;
     }
 
     const priceValue = parseFloat(price);
     if (isNaN(priceValue) || priceValue <= 0) {
-      alert('Please enter a valid price greater than 0');
+      showNotificationModal('Invalid Price', 'Please enter a valid price greater than 0', 'warning');
       return;
     }
 
@@ -98,7 +114,6 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
           sellerId: user.uid,
           sellerName: user.displayName || 'Anonymous',
           sellerEmail: user.email || ('phoneNumber' in user ? user.phoneNumber : ''),
-          status: 'draft', // Items start as drafts in user collection
         };
 
         // Only add optional fields if they have values
@@ -124,57 +139,32 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
           itemData.color = color.trim();
         }
 
-        // Save item to user-specific collection
-        const itemId = await saveUserItem(user.uid, itemData);
+        let itemId: string | null;
+
+        // Both users and admins use the same server API to create items
+        // Items go directly to pending queue for review
+        const result = await apiService.createItem(itemData);
+        itemId = result.itemId;
         
-        if (!itemId) {
-          // Try fallback: save to localStorage for offline/permission issues
-          const offlineItemId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const offlineItems = JSON.parse(localStorage.getItem(`offline_items_${user.uid}`) || '[]');
-          offlineItems.push({
-            id: offlineItemId,
-            ...itemData,
-            createdAt: new Date().toISOString(),
-            isOffline: true
-          });
-          localStorage.setItem(`offline_items_${user.uid}`, JSON.stringify(offlineItems));
-          
-          console.log('📦 Item saved offline due to connection/permission issues');
-          
-          // Still log the action if possible
-          await logUserActionSafe(user, 'item_created_offline', 'Created item draft (offline)', offlineItemId, title.trim());
-          
-          return { 
-            id: offlineItemId, 
-            isOffline: true,
-            message: 'Item saved locally. It will be synced when connection is restored.' 
-          };
+        console.log('✅ Item created and added to pending queue:', itemId);
+
+        if (itemId) {
+          await logUserActionSafe(user, 'item_created', `Created new item: ${title}`, itemId, title);
+          setShowSuccess(true);
+        } else {
+          throw new Error('Failed to save item');
         }
-
-        // Log the action for successful online save
-        await logUserActionSafe(user, 'item_created', 'Created new item draft', itemId, title.trim());
-
-        return { id: itemId };
       } catch (error) {
-        console.error('Error adding item:', error);
-        throw error;
+        console.error('Error creating item:', error);
+        showNotificationModal('Creation Failed', 'Failed to create item. Please try again.', 'error');
+      } finally {
+        setUploading(false);
       }
     });
 
-    if (result.success) {
-      // Show success message (different for online vs offline saves)
-      if (result.data?.isOffline) {
-        alert(result.data.message || 'Item saved locally and will sync when connection is restored.');
-      } else {
-        setShowSuccess(true);
-      }
-      setShowPreview(false);
-    } else {
-      // Show rate limit or error message
-      alert(result.error || 'Error adding item. Please try again.');
+    if (!result.success) {
+      showNotificationModal('Error Adding Item', result.error || 'Error adding item. Please try again.', 'error');
     }
-    
-    setUploading(false);
   };
 
   const resetForm = () => {
@@ -203,36 +193,51 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   // Success Modal
   if (showSuccess) {
     return (
-      <div className="modal-backdrop flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+      <>
+        <div className="modal-backdrop flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
           <div className="p-8 text-center">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Item Draft Saved Successfully!</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">
+              Item Submitted for Review!
+            </h3>
             <p className="text-gray-600 mb-6">
-              Your item has been saved as a draft. When you're ready, bring the physical item to the front desk and we'll submit it for review.
+              Your item has been submitted and added to the pending review queue. It will be reviewed by our team before going live.
             </p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <p className="text-sm text-blue-800">
-                <strong>Next Steps:</strong><br />
-                1. Your item is saved in your personal collection<br />
-                2. Bring the physical item to the front desk<br />
-                3. We'll submit it for admin review<br />
-                4. Once approved, it goes live for all customers
-              </p>
-            </div>
+            {!isAdmin && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <p className="text-sm text-blue-800">
+                  <strong>Next Steps:</strong><br />
+                  1. Your item is in the pending review queue<br />
+                  2. Bring the physical item to the front desk<br />
+                  3. Our team will review and approve it<br />
+                  4. Once approved, it goes live for all customers
+                </p>
+              </div>
+            )}
             <button
               onClick={handleClose}
-              className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
+              className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 transition-colors"
             >
-              Got it!
+              {isAdmin ? "Done" : "Got it, thanks!"}
             </button>
           </div>
+                  </div>
         </div>
-      </div>
+
+        {/* Notification Modal */}
+        <NotificationModal
+          isOpen={showNotification}
+          onClose={() => setShowNotification(false)}
+          title={notificationData.title}
+          message={notificationData.message}
+          type={notificationData.type}
+        />
+      </>
     );
   }
 

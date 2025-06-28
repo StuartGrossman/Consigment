@@ -732,7 +732,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
         {/* Scrollable Content */}
         <div className="overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="p-6">
+          <div className="p-6 pb-32">
             {/* Barcode Section - Prominent at Top for Admins */}
             {isAdmin && item.barcodeData && (
               <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
@@ -1023,7 +1023,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                 {isCartActionProcessing(`cart-action-${item.id}`) ? (
                   <span>Processing...</span>
                 ) : isInCart(item.id) ? (
-                  <span>Remove from Cart</span>
+                  <span>Remove</span>
                 ) : (
                   <span>Add to Cart - ${item.price}</span>
                 )}

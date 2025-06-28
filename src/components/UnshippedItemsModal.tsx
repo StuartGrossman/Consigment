@@ -3,6 +3,8 @@ import { collection, query, where, getDocs, orderBy, doc, updateDoc } from 'fire
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
+import { apiService } from '../services/apiService';
+import NotificationModal from './NotificationModal';
 
 interface UnshippedItemsModalProps {
     isOpen: boolean;
@@ -16,6 +18,18 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
     const [loading, setLoading] = useState(false);
     const [unshippedItems, setUnshippedItems] = useState<ConsignmentItem[]>([]);
     const [isMarkingShipped, setIsMarkingShipped] = useState(false);
+    const [showNotification, setShowNotification] = useState(false);
+    const [notificationData, setNotificationData] = useState({
+        title: '',
+        message: '',
+        type: 'info' as 'success' | 'error' | 'info' | 'warning'
+    });
+
+    // Helper function to show notifications
+    const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
+        setNotificationData({ title, message, type });
+        setShowNotification(true);
+    };
 
     useEffect(() => {
         if (isOpen) {
@@ -132,21 +146,26 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
         
         setIsMarkingShipped(true);
         try {
-            const trackingNumber = `TRK${Date.now()}${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+            // Check if user is authenticated and not a phone user
+            if (!user || ('isPhoneUser' in user && user.isPhoneUser)) {
+                throw new Error('Admin access required - please sign in with Google');
+            }
+
+            // Use apiService to mark item as shipped
+            const result = await apiService.markItemShipped(item.id);
             
-            const itemRef = doc(db, 'items', item.id);
-            await updateDoc(itemRef, {
-                shippedAt: new Date(),
-                trackingNumber: trackingNumber,
-                shippingLabelGenerated: true
-            });
+            // Log the shipping action for user tracking
+            await logUserAction(user, 'item_shipped', `Item marked as shipped with tracking ${result.trackingNumber}`, item.id, item.title);
 
-            await logUserAction(user, 'item_shipped', `Item marked as shipped with tracking ${trackingNumber}`, item.id, item.title);
-
+            // Remove item from unshipped list
             setUnshippedItems(prev => prev.filter(unshippedItem => unshippedItem.id !== item.id));
+
+            console.log(`✅ Item ${item.id} marked as shipped successfully`);
 
         } catch (error) {
             console.error('Error marking item as shipped:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            showNotificationModal('Shipping Error', `Failed to mark item as shipped: ${errorMessage}`, 'error');
         } finally {
             setIsMarkingShipped(false);
         }
@@ -290,6 +309,15 @@ const UnshippedItemsModal: React.FC<UnshippedItemsModalProps> = ({ isOpen, onClo
                         </div>
                     )}
                 </div>
+
+                {/* Notification Modal */}
+                <NotificationModal
+                    isOpen={showNotification}
+                    onClose={() => setShowNotification(false)}
+                    title={notificationData.title}
+                    message={notificationData.message}
+                    type={notificationData.type}
+                />
             </div>
         </div>
     );

@@ -6,6 +6,7 @@ import { AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
+import NotificationModal from './NotificationModal';
 
 interface InventoryDashboardProps {
   user: AuthUser | null;
@@ -46,7 +47,19 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   const [showBulkDiscountModal, setShowBulkDiscountModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showNotification, setShowNotification] = useState(false);
+  const [notificationData, setNotificationData] = useState({
+    title: '',
+    message: '',
+    type: 'info' as 'success' | 'error' | 'info' | 'warning'
+  });
   const { user } = useAuth();
+
+  // Helper function to show notifications
+  const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
+    setNotificationData({ title, message, type });
+    setShowNotification(true);
+  };
 
   // Get unique values for filters
   const [categories, setCategories] = useState<string[]>([]);
@@ -99,8 +112,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   const updateFilterOptions = () => {
     const uniqueCategories = [...new Set(items.map(item => item.category).filter((cat): cat is string => Boolean(cat) && cat !== ''))].sort();
     const uniqueBrands = [...new Set(items.map(item => item.brand).filter((brand): brand is string => Boolean(brand) && brand !== ''))].sort();
-    const uniqueConditions = [...new Set(items.map(item => item.condition).filter(Boolean).filter((cond): cond is Exclude<typeof cond, ''> => cond !== ''))].sort();
-    const uniqueGenders = [...new Set(items.map(item => item.gender).filter(Boolean).filter((gender): gender is Exclude<typeof gender, ''> => gender !== ''))].sort();
+    const uniqueConditions = [...new Set(items.map(item => item.condition).filter(Boolean))].sort();
+    const uniqueGenders = [...new Set(items.map(item => item.gender).filter(Boolean))].sort();
     
     setCategories(uniqueCategories);
     setBrands(uniqueBrands);
@@ -176,7 +189,6 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         item.category?.toLowerCase().includes(searchLower) ||
         item.sellerName?.toLowerCase().includes(searchLower) ||
         item.material?.toLowerCase().includes(searchLower) ||
-        item.color?.toLowerCase().includes(searchLower) ||
         item.id.toLowerCase().includes(searchLower) ||
         item.saleTransactionId?.toLowerCase().includes(searchLower)
       );
@@ -993,8 +1005,18 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           filteredItems={filteredItems}
           onClose={() => setShowExportModal(false)}
           user={user}
+          showNotification={showNotificationModal}
         />
       )}
+
+      {/* Notification Modal */}
+      <NotificationModal
+        isOpen={showNotification}
+        onClose={() => setShowNotification(false)}
+        title={notificationData.title}
+        message={notificationData.message}
+        type={notificationData.type}
+      />
     </div>
   );
 };
@@ -1560,9 +1582,10 @@ interface ExportDataModalProps {
   filteredItems: ConsignmentItem[];
   onClose: () => void;
   user: AuthUser | null;
+  showNotification: (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => void;
 }
 
-const ExportDataModal: React.FC<ExportDataModalProps> = ({ items, filteredItems, onClose, user }) => {
+const ExportDataModal: React.FC<ExportDataModalProps> = ({ items, filteredItems, onClose, user, showNotification }) => {
   const [exportType, setExportType] = useState<'csv' | 'json' | 'excel'>('csv');
   const [dataScope, setDataScope] = useState<'all' | 'filtered' | 'custom'>('filtered');
   const [selectedFields, setSelectedFields] = useState<string[]>([
@@ -1749,7 +1772,7 @@ const ExportDataModal: React.FC<ExportDataModalProps> = ({ items, filteredItems,
       const data = getDataToExport();
       
       if (data.length === 0) {
-        alert('No data to export with current filters');
+        showNotification('No Data', 'No data to export with current filters', 'warning');
         setIsExporting(false);
         return;
       }
@@ -1783,7 +1806,7 @@ const ExportDataModal: React.FC<ExportDataModalProps> = ({ items, filteredItems,
       onClose();
     } catch (error) {
       console.error('Export failed:', error);
-      alert('Export failed. Please try again.');
+      showNotification('Export Failed', 'Export failed. Please try again.', 'error');
     } finally {
       setIsExporting(false);
     }

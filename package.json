@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
-    "start:server": "cd server && python main.py",
+    "start:server": "cd server && source venv/bin/activate && python3 main.py",
     "dev:all": "concurrently \"npm run dev\" \"npm run start:server\"",
     "test": "vitest",
     "test:ui": "vitest --ui",

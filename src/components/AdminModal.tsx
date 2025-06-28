@@ -17,6 +17,10 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
   
+  // Multi-select state
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [showBulkActions, setShowBulkActions] = useState(false);
+  
   // Button throttling hook
   const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   
@@ -26,6 +30,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
+  const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
 
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -69,6 +74,93 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Multi-select functions
+  const toggleSelectItem = (itemId: string) => {
+    const newSelected = new Set(selectedItems);
+    if (newSelected.has(itemId)) {
+      newSelected.delete(itemId);
+    } else {
+      newSelected.add(itemId);
+    }
+    setSelectedItems(newSelected);
+    setShowBulkActions(newSelected.size > 0);
+  };
+
+  const selectAllItems = () => {
+    const allIds = new Set(pendingItems.map(item => item.id));
+    setSelectedItems(allIds);
+    setShowBulkActions(true);
+  };
+
+  const clearSelection = () => {
+    setSelectedItems(new Set());
+    setShowBulkActions(false);
+  };
+
+  // Bulk actions
+  const handleBulkApprove = async () => {
+    if (selectedItems.size === 0) return;
+    
+    await throttledAction('bulk-approve', async () => {
+      setProcessingItemId('bulk');
+      let successCount = 0;
+      let failCount = 0;
+      
+      try {
+        await apiService.bulkApproveItems(Array.from(selectedItems));
+        successCount = selectedItems.size;
+      } catch (error) {
+        console.error('Failed to bulk approve items:', error);
+        failCount = selectedItems.size;
+      }
+      
+      // Remove successful items from the list
+      if (successCount > 0) {
+        setPendingItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+      }
+      
+      setModalMessage(`${successCount} items approved successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
+      setShowSuccessModal(true);
+      clearSelection();
+      setProcessingItemId(null);
+    });
+  };
+
+  const handleBulkReject = async () => {
+    if (selectedItems.size === 0) return;
+    setShowBulkRejectModal(true);
+  };
+
+  const confirmBulkReject = async () => {
+    if (selectedItems.size === 0) return;
+    
+    await throttledAction('bulk-reject', async () => {
+      setShowBulkRejectModal(false);
+      setProcessingItemId('bulk');
+      let successCount = 0;
+      let failCount = 0;
+      
+      try {
+        await apiService.bulkRejectItems(Array.from(selectedItems), rejectionReason || 'No reason provided');
+        successCount = selectedItems.size;
+      } catch (error) {
+        console.error('Failed to bulk reject items:', error);
+        failCount = selectedItems.size;
+      }
+      
+      // Remove successful items from the list
+      if (successCount > 0) {
+        setPendingItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+      }
+      
+      setModalMessage(`${successCount} items rejected successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
+      setShowSuccessModal(true);
+      clearSelection();
+      setRejectionReason('');
+      setProcessingItemId(null);
+    });
   };
 
   const handleApproveClick = async (item: ConsignmentItem) => {
@@ -191,6 +283,50 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               </svg>
             </button>
           </div>
+          
+          {/* Bulk Actions Header */}
+          {pendingItems.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2 items-center">
+              <button
+                onClick={selectedItems.size === pendingItems.length ? clearSelection : selectAllItems}
+                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {selectedItems.size === pendingItems.length ? 'Deselect All' : 'Select All'}
+              </button>
+              
+              {selectedItems.size > 0 && (
+                <span className="text-sm text-gray-600">
+                  {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
+                </span>
+              )}
+            </div>
+          )}
+          
+          {/* Bulk Action Buttons */}
+          {showBulkActions && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={handleBulkApprove}
+                disabled={processingItemId === 'bulk' || isActionDisabled('bulk-approve')}
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                {processingItemId === 'bulk' ? 'Processing...' : `Approve ${selectedItems.size} Item${selectedItems.size > 1 ? 's' : ''}`}
+              </button>
+              <button
+                onClick={handleBulkReject}
+                disabled={processingItemId === 'bulk' || isActionDisabled('bulk-reject')}
+                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                {`Reject ${selectedItems.size} Item${selectedItems.size > 1 ? 's' : ''}`}
+              </button>
+              <button
+                onClick={clearSelection}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="mobile-admin-modal-body">
@@ -213,6 +349,16 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               {pendingItems.map((item) => (
                 <div key={item.id} className="mobile-admin-item-card">
                   <div className="mobile-admin-item-layout">
+                    {/* Selection Checkbox */}
+                    <div className="flex items-start">
+                      <input
+                        type="checkbox"
+                        checked={selectedItems.has(item.id)}
+                        onChange={() => toggleSelectItem(item.id)}
+                        className="mt-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                      />
+                    </div>
+                    
                     {/* Images */}
                     <div className="mobile-admin-item-image">
                       {item.images.length > 0 ? (
@@ -239,31 +385,41 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
 
                     {/* Content */}
                     <div className="mobile-admin-item-content">
-                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 sm:gap-4">
-                        <h3 className="mobile-admin-item-title">{item.title}</h3>
-                        <div className="text-xl sm:text-2xl font-bold text-green-600 text-center sm:text-right">
-                          ${item.price.toFixed(2)}
-                        </div>
-                      </div>
-                      
+                      <h3 className="mobile-admin-item-title">{item.title}</h3>
                       <p className="mobile-admin-item-description">{item.description}</p>
                       
                       <div className="mobile-admin-item-details">
                         <div>
-                          <strong>Seller:</strong> {item.sellerName}
+                          <span className="font-medium text-gray-900">${item.price}</span>
                         </div>
                         <div>
-                          <strong>Email:</strong> {item.sellerEmail}
+                          <span className="text-gray-500">By: </span>
+                          <span className="text-gray-700">{item.sellerName}</span>
                         </div>
+                        {item.category && (
+                          <div>
+                            <span className="text-gray-500">Category: </span>
+                            <span className="text-gray-700">{item.category}</span>
+                          </div>
+                        )}
+                        {item.size && (
+                          <div>
+                            <span className="text-gray-500">Size: </span>
+                            <span className="text-gray-700">{item.size}</span>
+                          </div>
+                        )}
+                        {item.brand && (
+                          <div>
+                            <span className="text-gray-500">Brand: </span>
+                            <span className="text-gray-700">{item.brand}</span>
+                          </div>
+                        )}
                         <div>
-                          <strong>Submitted:</strong> {item.createdAt.toLocaleDateString()}
-                        </div>
-                        <div>
-                          <strong>Images:</strong> {item.images.length}
+                          <span className="text-gray-500">Submitted: </span>
+                          <span className="text-gray-700">{item.createdAt.toLocaleDateString()}</span>
                         </div>
                       </div>
 
-                      {/* Action Buttons */}
                       <div className="mobile-admin-item-actions">
                         <button
                           onClick={() => handleEdit(item)}
@@ -298,6 +454,45 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
         </div>
       </div>
 
+      {/* Bulk Reject Modal */}
+      {showBulkRejectModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-red-600 text-xl">⚠️</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Reject {selectedItems.size} Items</h3>
+            </div>
+            <p className="text-gray-600 mb-4">
+              Please provide a reason for rejecting these {selectedItems.size} items. This reason will be visible to the item owners.
+            </p>
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Enter rejection reason..."
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 resize-none"
+              rows={4}
+            />
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                onClick={() => setShowBulkRejectModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkReject}
+                disabled={isActionDisabled('bulk-reject')}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isActionProcessing('bulk-reject') ? 'Processing...' : 'Reject Items'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Approve Confirmation Modal */}
       {showApproveModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -319,7 +514,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
               >
                 Cancel
               </button>
-                                            <button
+              <button
                 onClick={confirmApprove}
                 disabled={selectedItem ? isActionDisabled(`confirm-approve-${selectedItem.id}`) : false}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -440,8 +635,6 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           onConfirmPrint={handleBarcodeConfirmed}
         />
       )}
-
-
     </div>
   );
 };

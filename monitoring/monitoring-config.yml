@@ -1,0 +1,171 @@
+# Monitoring Configuration for Consignment Store API
+# Can be used with Google Cloud Monitoring, Datadog, New Relic, etc.
+
+service:
+  name: "consignment-api"
+  version: "1.0.0"
+  environment: "production"
+
+# Health check endpoints
+health_checks:
+  basic:
+    endpoint: "/api/health"
+    method: "GET"
+    timeout: 5s
+    interval: 30s
+    expected_status: 200
+    
+  detailed:
+    endpoint: "/api/status"
+    method: "GET"
+    timeout: 10s
+    interval: 60s
+    expected_status: 200
+    expected_fields:
+      - "status"
+      - "checks.database"
+      - "checks.stripe"
+
+# Performance thresholds
+performance:
+  response_time:
+    warning: 2000ms  # 2 seconds
+    critical: 5000ms # 5 seconds
+  
+  memory_usage:
+    warning: 70%
+    critical: 85%
+  
+  cpu_usage:
+    warning: 70%
+    critical: 85%
+  
+  error_rate:
+    warning: 5%   # 5% error rate
+    critical: 10% # 10% error rate
+
+# Database monitoring
+database:
+  connection_timeout:
+    warning: 5s
+    critical: 10s
+  
+  query_performance:
+    warning: 1000ms
+    critical: 3000ms
+
+# Custom metrics to track
+metrics:
+  business:
+    - name: "orders_per_minute"
+      type: "gauge"
+      description: "Number of orders processed per minute"
+      
+    - name: "payment_success_rate"
+      type: "gauge"
+      description: "Percentage of successful payments"
+      
+    - name: "items_added_per_hour"
+      type: "gauge"
+      description: "Number of items added to the system per hour"
+      
+    - name: "active_users"
+      type: "gauge"
+      description: "Number of active users in the last 5 minutes"
+
+  technical:
+    - name: "api_request_duration"
+      type: "histogram"
+      description: "API request duration in milliseconds"
+      
+    - name: "database_connection_pool"
+      type: "gauge"
+      description: "Number of active database connections"
+      
+    - name: "error_count_by_endpoint"
+      type: "counter"
+      description: "Number of errors by API endpoint"
+
+# Alert rules
+alerts:
+  critical:
+    - name: "service_down"
+      condition: "health_check_failure > 2 consecutive checks"
+      notification: ["slack", "email", "pagerduty"]
+      
+    - name: "database_connection_failed"
+      condition: "database.status != 'healthy'"
+      notification: ["slack", "email"]
+      
+    - name: "high_error_rate"
+      condition: "error_rate > 10% for 5 minutes"
+      notification: ["slack", "email"]
+      
+    - name: "very_slow_response"
+      condition: "response_time > 5000ms for 3 consecutive requests"
+      notification: ["slack", "email"]
+
+  warning:
+    - name: "slow_response_time"
+      condition: "response_time > 2000ms for 5 minutes"
+      notification: ["slack"]
+      
+    - name: "high_memory_usage"
+      condition: "memory_usage > 70%"
+      notification: ["slack"]
+      
+    - name: "payment_processing_errors"
+      condition: "payment_error_rate > 5% for 10 minutes"
+      notification: ["slack"]
+
+# Notification channels
+notifications:
+  slack:
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    channel: "#alerts"
+    
+  email:
+    smtp_server: "${SMTP_SERVER}"
+    from: "alerts@consignment-store.com"
+    to: ["${ALERT_EMAIL}"]
+    
+  pagerduty:
+    service_key: "${PAGERDUTY_SERVICE_KEY}"
+
+# Log aggregation
+logging:
+  level: "INFO"
+  format: "json"
+  fields:
+    - timestamp
+    - level
+    - message
+    - user_id
+    - request_id
+    - endpoint
+    - response_time
+    - status_code
+
+# Uptime monitoring (external services)
+uptime_monitors:
+  - name: "main_health_check"
+    url: "${SERVICE_URL}/api/health"
+    interval: "1m"
+    timeout: "10s"
+    
+  - name: "payment_processing"
+    url: "${SERVICE_URL}/api/test-status"
+    interval: "5m"
+    timeout: "30s"
+
+# Backup monitoring
+backup_checks:
+  firestore:
+    schedule: "daily"
+    retention: "30 days"
+    alert_on_failure: true
+    
+  configuration:
+    schedule: "weekly"
+    retention: "90 days"
+    alert_on_failure: true 
