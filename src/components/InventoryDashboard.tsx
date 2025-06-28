@@ -1229,9 +1229,10 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [useAI, setUseAI] = useState(true);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [aiProgress, setAiProgress] = useState(0);
   const [aiResults, setAiResults] = useState<any>(null);
+  const [selectedItemsForImport, setSelectedItemsForImport] = useState<string[]>([]);
   const { user } = useAuth();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1256,11 +1257,11 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       
-      if (useAI && (type === 'csv' || type === 'json')) {
-        // Use AI analysis for intelligent data processing
+      // Always use AI analysis for intelligent data processing
+      if (type === 'csv' || type === 'json') {
         await handleAIAnalysis(text, type);
       } else {
-        // Use traditional preview method
+        // Use traditional preview method for SQL files
         if (type === 'csv') {
           const lines = text.split('\n').filter(line => line.trim());
           const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
@@ -1313,27 +1314,36 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
         let importedData: any[] = [];
 
         try {
-          if (importType === 'csv') {
-            const lines = text.split('\n').filter(line => line.trim());
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            importedData = lines.slice(1).map(line => {
-              const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-              const obj: any = {};
-              headers.forEach((header, index) => {
-                obj[header] = values[index] || '';
+          // Check if we have AI-processed data with selections
+          if (aiResults?.success && selectedItemsForImport.length > 0) {
+            // Use only selected AI-processed items
+            importedData = previewData.filter((item: any) => 
+              selectedItemsForImport.includes(item.id)
+            );
+          } else {
+            // Traditional parsing for non-AI or fallback
+            if (importType === 'csv') {
+              const lines = text.split('\n').filter(line => line.trim());
+              const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+              importedData = lines.slice(1).map(line => {
+                const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+                const obj: any = {};
+                headers.forEach((header, index) => {
+                  obj[header] = values[index] || '';
+                });
+                return obj;
               });
-              return obj;
-            });
-          } else if (importType === 'json') {
-            const data = JSON.parse(text);
-            importedData = Array.isArray(data) ? data : [data];
+            } else if (importType === 'json') {
+              const data = JSON.parse(text);
+              importedData = Array.isArray(data) ? data : [data];
+            }
           }
 
           // Log the import action
           await logUserAction(
             user,
             'data_import',
-            `Imported ${importedData.length} items from ${importType.toUpperCase()} file`,
+            `Imported ${importedData.length} items from ${importType.toUpperCase()} file${aiResults?.success ? ' (AI-processed)' : ''}`,
             selectedFile.name,
             `${importedData.length} items`
           );
@@ -1386,7 +1396,18 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     if (!user) return;
 
     setAiProcessing(true);
+    setAiProgress(0);
+    setAiResults(null);
+    
     try {
+      // Simulate progress increments
+      const progressInterval = setInterval(() => {
+        setAiProgress(prev => {
+          if (prev < 90) return prev + 10;
+          return prev;
+        });
+      }, 300);
+
       // Create a manual fetch request to the analyze-data endpoint
       const response = await fetch('http://localhost:8080/api/admin/analyze-data', {
         method: 'POST',
@@ -1399,6 +1420,9 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
         })
       });
 
+      clearInterval(progressInterval);
+      setAiProgress(100);
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -1408,6 +1432,8 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
       
       if (result.success) {
         setPreviewData(result.items);
+        // Select all items by default
+        setSelectedItemsForImport(result.items.map((item: any) => item.id));
         setShowPreview(true);
       }
     } catch (error) {
@@ -1417,8 +1443,27 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
         message: 'AI analysis failed. Please try manual import.',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+      setAiProgress(0);
     } finally {
-      setAiProcessing(false);
+      setTimeout(() => {
+        setAiProcessing(false);
+      }, 500);
+    }
+  };
+
+  const handleItemSelection = (itemId: string) => {
+    setSelectedItemsForImport(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+
+  const handleSelectAllItems = () => {
+    if (selectedItemsForImport.length === previewData.length) {
+      setSelectedItemsForImport([]);
+    } else {
+      setSelectedItemsForImport(previewData.map((item: any) => item.id));
     }
   };
 
@@ -1514,37 +1559,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                   </button>
                 </div>
                 
-                {/* AI Processing Toggle */}
-                <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-semibold text-gray-800 flex items-center">
-                        <svg className="w-5 h-5 text-purple-500 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                        </svg>
-                        AI-Powered Data Analysis
-                      </h4>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Use DeepSeek AI to automatically analyze and format your data into our structure
-                      </p>
-                    </div>
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={useAI}
-                        onChange={(e) => setUseAI(e.target.checked)}
-                        className="sr-only"
-                      />
-                      <div className={`relative inline-block w-12 h-6 rounded-full transition-colors ${
-                        useAI ? 'bg-purple-500' : 'bg-gray-300'
-                      }`}>
-                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
-                          useAI ? 'transform translate-x-6' : ''
-                        }`} />
-                      </div>
-                    </label>
-                  </div>
-                </div>
+
 
                 {/* File Drop Zone */}
                 <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-gray-400 transition-colors">
@@ -1594,16 +1609,30 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                 )}
               </div>
 
-              {/* AI Analysis Results */}
+              {/* AI Analysis Progress */}
               {aiProcessing && (
-                <div className="mb-6 p-6 bg-purple-50 rounded-lg border border-purple-200">
-                  <div className="flex items-center">
-                    <svg className="w-6 h-6 text-purple-500 mr-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-800">AI Analysis in Progress...</h3>
-                      <p className="text-sm text-gray-600">DeepSeek is analyzing and formatting your data</p>
+                <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <svg className="w-8 h-8 text-purple-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">AI Analysis in Progress</h3>
+                      <p className="text-sm text-gray-600 mb-4">DeepSeek is analyzing and formatting your data structure...</p>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                        <div 
+                          className="bg-gradient-to-r from-purple-500 to-indigo-500 h-3 rounded-full transition-all duration-300 ease-out"
+                          style={{ width: `${aiProgress}%` }}
+                        ></div>
+                      </div>
+                      <div className="flex justify-between text-xs text-gray-500">
+                        <span>Processing...</span>
+                        <span>{aiProgress}%</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1649,40 +1678,121 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                 </div>
               )}
 
-              {/* Data Preview */}
+              {/* Data Preview with Selection */}
               {showPreview && previewData.length > 0 && (
                 <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                    {useAI && aiResults?.success ? 'AI-Processed Data Preview' : 'Data Preview'}
-                  </h3>
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            {Object.keys(previewData[0] || {}).map((key) => (
-                              <th key={key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                {key}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {previewData.map((row, index) => (
-                            <tr key={index}>
-                              {Object.values(row).map((value: any, cellIndex) => (
-                                <td key={cellIndex} className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
-                                  {String(value).substring(0, 50)}{String(value).length > 50 ? '...' : ''}
-                                </td>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800">
+                      {aiResults?.success ? 'AI-Processed Data Review' : 'Data Preview'}
+                    </h3>
+                    {aiResults?.success && (
+                      <div className="flex items-center space-x-4">
+                        <span className="text-sm text-gray-600">
+                          {selectedItemsForImport.length} of {previewData.length} items selected
+                        </span>
+                        <button
+                          onClick={handleSelectAllItems}
+                          className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition-colors"
+                        >
+                          {selectedItemsForImport.length === previewData.length ? 'Deselect All' : 'Select All'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {aiResults?.success ? (
+                    /* AI-Processed Item Cards */
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {previewData.map((item: any, index) => (
+                        <div 
+                          key={item.id || index}
+                          className={`border rounded-lg p-4 transition-all duration-200 ${
+                            selectedItemsForImport.includes(item.id)
+                              ? 'border-purple-300 bg-purple-50 shadow-md'
+                              : 'border-gray-200 bg-white hover:border-gray-300'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-gray-900 text-sm mb-1">
+                                {item.title || 'Untitled Item'}
+                              </h4>
+                              <p className="text-xs text-gray-500 mb-2">
+                                {item.brand} • {item.category}
+                              </p>
+                            </div>
+                            <label className="flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedItemsForImport.includes(item.id)}
+                                onChange={() => handleItemSelection(item.id)}
+                                className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                              />
+                            </label>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">Price:</span>
+                              <span className="font-medium text-green-600">
+                                ${item.price || item.originalPrice || 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">Condition:</span>
+                              <span className="font-medium">{item.condition || 'Not specified'}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">Size:</span>
+                              <span className="font-medium">{item.size || 'Not specified'}</span>
+                            </div>
+                            {item.description && (
+                              <div className="mt-2">
+                                <p className="text-xs text-gray-600 line-clamp-2">
+                                  {item.description.substring(0, 100)}
+                                  {item.description.length > 100 ? '...' : ''}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    /* Traditional Table View */
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {Object.keys(previewData[0] || {}).map((key) => (
+                                <th key={key} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                  {key}
+                                </th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {previewData.slice(0, 5).map((row, index) => (
+                              <tr key={index}>
+                                {Object.values(row).map((value: any, cellIndex) => (
+                                  <td key={cellIndex} className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">
+                                    {String(value).substring(0, 50)}{String(value).length > 50 ? '...' : ''}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-sm text-gray-500 mt-2">
-                    Showing first {previewData.length} rows
+                  )}
+                  
+                  <div className="text-sm text-gray-500 mt-3">
+                    {aiResults?.success 
+                      ? `Showing ${previewData.length} AI-processed items ready for import`
+                      : `Showing first ${Math.min(5, previewData.length)} of ${previewData.length} rows`
+                    }
                   </div>
                 </div>
               )}
@@ -1743,13 +1853,16 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
               </button>
               <button
                 onClick={handleImport}
-                disabled={!selectedFile}
+                disabled={!selectedFile || (aiResults?.success && selectedItemsForImport.length === 0)}
                 className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
                 </svg>
-                Import Data
+                {aiResults?.success && selectedItemsForImport.length > 0
+                  ? `Import ${selectedItemsForImport.length} Selected Items`
+                  : 'Import Data'
+                }
               </button>
             </div>
           </div>
