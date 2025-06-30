@@ -213,6 +213,69 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
     return `${diffDays}d ago`;
   };
 
+  // Function to generate engagement chart data
+  const generateEngagementData = () => {
+    const timeSlots: { [key: string]: { admin: number; user: number; time: string } } = {};
+    let interval = 1; // hours
+    let formatPattern = 'hour';
+    
+    switch (timeFilter) {
+      case '1h':
+        interval = 0.1; // 6 minutes
+        formatPattern = 'minute';
+        break;
+      case '24h':
+        interval = 1; // 1 hour
+        formatPattern = 'hour';
+        break;
+      case '7d':
+        interval = 24; // 1 day
+        formatPattern = 'day';
+        break;
+      case '30d':
+        interval = 24 * 3; // 3 days
+        formatPattern = 'day';
+        break;
+    }
+
+    const now = new Date();
+    const timeThreshold = getTimeThreshold();
+    
+    // Create time slots
+    for (let i = 0; i <= (now.getTime() - timeThreshold) / (1000 * 60 * 60 * interval); i++) {
+      const slotTime = new Date(timeThreshold + (i * 1000 * 60 * 60 * interval));
+      let timeKey: string;
+      
+      if (formatPattern === 'minute') {
+        timeKey = slotTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else if (formatPattern === 'hour') {
+        timeKey = slotTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else {
+        timeKey = slotTime.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      }
+      
+      timeSlots[slotTime.getTime()] = { admin: 0, user: 0, time: timeKey };
+    }
+
+    // Count actions in each time slot
+    actions.forEach(action => {
+      const actionTime = action.timestamp.getTime();
+      const slotKey = Math.floor((actionTime - timeThreshold) / (1000 * 60 * 60 * interval)) * (1000 * 60 * 60 * interval) + timeThreshold;
+      
+      if (timeSlots[slotKey]) {
+        if (action.isAdmin) {
+          timeSlots[slotKey].admin++;
+        } else {
+          timeSlots[slotKey].user++;
+        }
+      }
+    });
+
+    return Object.values(timeSlots).slice(-12); // Show last 12 time points
+  };
+
+  const engagementData = generateEngagementData();
+
   if (loading) {
     return (
       <div className="flex justify-center items-center py-12">
@@ -391,6 +454,111 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
             >
               Export CSV
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* User Engagement Chart */}
+      <div className="bg-white rounded-lg border p-6">
+        <div className="mb-6">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">User Engagement Over Time</h3>
+          <p className="text-sm text-gray-600">Activity levels for admin and regular users</p>
+        </div>
+        
+        <div className="space-y-4">
+          {/* Legend */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-red-500 rounded"></div>
+              <span className="text-sm text-gray-700">Admin Actions</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 bg-blue-500 rounded"></div>
+              <span className="text-sm text-gray-700">User Actions</span>
+            </div>
+          </div>
+
+          {/* Simple Line Chart */}
+          <div className="relative h-64 border border-gray-200 rounded-lg p-4">
+            {engagementData.length > 0 ? (
+              <div className="h-full flex items-end justify-between gap-1">
+                {engagementData.map((dataPoint, index) => {
+                  const maxValue = Math.max(...engagementData.map(d => Math.max(d.admin, d.user))) || 1;
+                  const adminHeight = (dataPoint.admin / maxValue) * 100;
+                  const userHeight = (dataPoint.user / maxValue) * 100;
+                  
+                  return (
+                    <div key={index} className="flex-1 flex flex-col items-center gap-1">
+                      {/* Bars */}
+                      <div className="relative w-full flex justify-center items-end h-40 gap-1">
+                        {/* Admin bar */}
+                        <div 
+                          className="bg-red-500 rounded-t w-3 transition-all duration-300 hover:bg-red-600"
+                          style={{ height: `${adminHeight}%` }}
+                          title={`Admin: ${dataPoint.admin} actions`}
+                        ></div>
+                        {/* User bar */}
+                        <div 
+                          className="bg-blue-500 rounded-t w-3 transition-all duration-300 hover:bg-blue-600"
+                          style={{ height: `${userHeight}%` }}
+                          title={`Users: ${dataPoint.user} actions`}
+                        ></div>
+                      </div>
+                      
+                      {/* Time label */}
+                      <div className="text-xs text-gray-500 transform -rotate-45 whitespace-nowrap">
+                        {dataPoint.time}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="h-full flex items-center justify-center text-gray-500">
+                <div className="text-center">
+                  <div className="text-4xl mb-2">📊</div>
+                  <div>No engagement data available</div>
+                  <div className="text-sm">Actions will appear here as users interact with the system</div>
+                </div>
+              </div>
+            )}
+            
+            {/* Y-axis labels */}
+            {engagementData.length > 0 && (
+              <div className="absolute left-0 top-0 h-full flex flex-col justify-between text-xs text-gray-500 -ml-8">
+                <span>{Math.max(...engagementData.map(d => Math.max(d.admin, d.user)))}</span>
+                <span>{Math.floor(Math.max(...engagementData.map(d => Math.max(d.admin, d.user))) / 2)}</span>
+                <span>0</span>
+              </div>
+            )}
+          </div>
+
+          {/* Summary Stats for Chart */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
+            <div className="text-center">
+              <div className="text-lg font-bold text-red-600">
+                {engagementData.reduce((sum, d) => sum + d.admin, 0)}
+              </div>
+              <div className="text-xs text-gray-600">Total Admin Actions</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-blue-600">
+                {engagementData.reduce((sum, d) => sum + d.user, 0)}
+              </div>
+              <div className="text-xs text-gray-600">Total User Actions</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-green-600">
+                {engagementData.length > 0 ? Math.round(engagementData.reduce((sum, d) => sum + d.admin + d.user, 0) / engagementData.length) : 0}
+              </div>
+              <div className="text-xs text-gray-600">Avg Actions/Period</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold text-purple-600">
+                {Math.max(...engagementData.map(d => d.admin + d.user), 0)}
+              </div>
+              <div className="text-xs text-gray-600">Peak Activity</div>
+            </div>
           </div>
         </div>
       </div>

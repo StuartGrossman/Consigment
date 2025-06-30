@@ -827,15 +827,21 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                             className="h-10 w-10 rounded-lg object-cover mr-3"
                           />
                         )}
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">{item.title}</div>
-                          <div className="text-sm text-gray-500">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-gray-900 truncate">{item.title}</div>
+                          <div className="text-sm text-gray-500 truncate">
                             {item.category && `${item.category} • `}
                             {item.brand && `${item.brand} • `}
                             {item.condition && `${item.condition}`}
                             {item.gender && ` • ${item.gender}`}
                             {item.size && ` • Size ${item.size}`}
                           </div>
+                          {/* Description with proper truncation */}
+                          {item.description && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <p className="line-clamp-2 break-words">{item.description}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

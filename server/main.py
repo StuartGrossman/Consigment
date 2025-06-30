@@ -2905,6 +2905,18 @@ async def generate_test_data(request: Request):
         
         logger.info(f"Admin {admin_user_id} generating test data")
         
+        # Sample outdoor gear images
+        outdoor_gear_images = [
+            'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1545558014-8692077e9b5c?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop',
+            'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop'
+        ]
+
         # Sample test items with outdoor gear theme
         test_items = [
             {
@@ -2924,7 +2936,8 @@ async def generate_test_data(request: Request):
                 'sellerId': admin_user_id,
                 'sellerName': 'Store Admin',
                 'sellerEmail': 'admin@store.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[0], outdoor_gear_images[1]]
             },
             {
                 'title': 'Black Diamond Climbing Helmet',
@@ -2943,7 +2956,8 @@ async def generate_test_data(request: Request):
                 'sellerId': 'mygrossman.stewart.gmail.com',
                 'sellerName': 'Test Seller',
                 'sellerEmail': 'mygrossman.stewart.gmail.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[2]]
             },
             {
                 'title': 'Osprey Hiking Backpack - 50L',
@@ -2962,7 +2976,8 @@ async def generate_test_data(request: Request):
                 'sellerId': admin_user_id,
                 'sellerName': 'Store Admin',
                 'sellerEmail': 'admin@store.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[3], outdoor_gear_images[4]]
             },
             {
                 'title': 'Salomon Trail Running Shoes',
@@ -2981,7 +2996,8 @@ async def generate_test_data(request: Request):
                 'sellerId': 'mygrossman.stewart.gmail.com',
                 'sellerName': 'Test Seller',
                 'sellerEmail': 'mygrossman.stewart.gmail.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[5]]
             },
             {
                 'title': 'Arc\'teryx Softshell Jacket',
@@ -3000,7 +3016,8 @@ async def generate_test_data(request: Request):
                 'sellerId': admin_user_id,
                 'sellerName': 'Store Admin',
                 'sellerEmail': 'admin@store.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[6], outdoor_gear_images[7]]
             },
             {
                 'title': 'Mammut Climbing Harness',
@@ -3019,7 +3036,8 @@ async def generate_test_data(request: Request):
                 'sellerId': admin_user_id,
                 'sellerName': 'Store Admin',
                 'sellerEmail': 'admin@store.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[0]]
             },
             {
                 'title': 'The North Face Base Layer',
@@ -3038,7 +3056,8 @@ async def generate_test_data(request: Request):
                 'sellerId': admin_user_id,
                 'sellerName': 'Store Admin',
                 'sellerEmail': 'admin@store.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[1]]
             },
             {
                 'title': 'Smartwool Merino Socks',
@@ -3057,15 +3076,15 @@ async def generate_test_data(request: Request):
                 'sellerId': 'mygrossman.stewart.gmail.com',
                 'sellerName': 'Test Seller',
                 'sellerEmail': 'mygrossman.stewart.gmail.com',
-                'isTestData': True
+                'isTestData': True,
+                'images': [outdoor_gear_images[2]]
             }
         ]
         
         created_items = []
         for item_data in test_items:
-            # Add common fields
+            # Add common fields (images are already included in each item)
             item_data.update({
-                'images': [],  # Empty array for images
                 'createdAt': datetime.now(timezone.utc),
                 'lastUpdated': datetime.now(timezone.utc),
                 'views': 0,
