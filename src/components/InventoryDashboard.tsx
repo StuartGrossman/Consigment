@@ -558,21 +558,53 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         </div>
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white rounded-lg border p-6">
-        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search items, brands, sellers..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+      {/* Enhanced Search Bar */}
+      <div className="bg-white rounded-lg border p-6 mb-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-3">Search Inventory</h3>
+        <div className="relative max-w-2xl">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by title, brand, seller, description, ID, or transaction..."
+            className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+          />
+          {searchQuery && (
+            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+              <button
+                onClick={() => setSearchQuery('')}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                title="Clear search"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+        {searchQuery && (
+          <div className="mt-3 text-sm text-gray-600">
+            <span className="font-medium">Found {filteredItems.length} items</span> matching "{searchQuery}"
+            {filteredItems.length !== items.length && (
+              <span className="ml-2 text-orange-600">
+                ({items.length - filteredItems.length} filtered out)
+              </span>
+            )}
+          </div>
+        )}
+      </div>
 
+      {/* Filters */}
+      <div className="bg-white rounded-lg border p-6">
+        <h4 className="text-base font-medium text-gray-900 mb-4">Filter Results</h4>
+        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
+          
           {/* Status Filter */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
@@ -708,6 +740,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
             </button>
           </div>
         </div>
+
+
 
         {/* Bulk Actions Panel */}
         {showBulkActions && selectedItems.length > 0 && (
@@ -1229,9 +1263,8 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
   const [uploadProgress, setUploadProgress] = useState(0);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [aiProcessing, setAiProcessing] = useState(false);
-  const [aiProgress, setAiProgress] = useState(0);
   const [aiResults, setAiResults] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedItemsForImport, setSelectedItemsForImport] = useState<string[]>([]);
   const { user } = useAuth();
 
@@ -1245,53 +1278,39 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
       else if (extension === 'json') setImportType('json');
       else if (extension === 'sql') setImportType('sql');
       
-      // Show preview for supported formats
-      if (extension === 'csv' || extension === 'json') {
-        handlePreview(file, extension as 'csv' | 'json');
-      }
+      // Reset preview state when new file is selected
+      setShowPreview(false);
+      setPreviewData([]);
+      setAiResults(null);
+      setSelectedItemsForImport([]);
     }
   };
 
-  const handlePreview = async (file: File, type: 'csv' | 'json') => {
+
+
+  const handleAnalyze = async () => {
+    if (!selectedFile || !user) return;
+
+    // Read and analyze the file
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       
       // Always use AI analysis for intelligent data processing
-      if (type === 'csv' || type === 'json') {
-        await handleAIAnalysis(text, type);
+      if (importType === 'csv' || importType === 'json') {
+        await handleAIAnalysis(text, importType as 'csv' | 'json');
       } else {
         // Use traditional preview method for SQL files
-        if (type === 'csv') {
-          const lines = text.split('\n').filter(line => line.trim());
-          const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-          const rows = lines.slice(1, 6).map(line => {
-            const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
-            const obj: any = {};
-            headers.forEach((header, index) => {
-              obj[header] = values[index] || '';
-            });
-            return obj;
-          });
-          setPreviewData(rows);
-        } else if (type === 'json') {
-          try {
-            const data = JSON.parse(text);
-            setPreviewData(Array.isArray(data) ? data.slice(0, 5) : [data]);
-          } catch (error) {
-            console.error('Invalid JSON format');
-          }
-        }
-        
-        setShowPreview(true);
+        console.log('SQL import not yet implemented');
+        setShowPreview(false);
       }
     };
-    reader.readAsText(file);
+    reader.readAsText(selectedFile);
   };
 
-  const handleImport = async () => {
+  const startImportProcess = async () => {
     if (!selectedFile || !user) return;
-
+    
     setIsUploading(true);
     setUploadProgress(0);
 
@@ -1320,6 +1339,11 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
             importedData = previewData.filter((item: any) => 
               selectedItemsForImport.includes(item.id)
             );
+          } else if (showPreview && selectedItemsForImport.length > 0) {
+            // Use selected fallback-parsed items
+            importedData = previewData.filter((item: any) => 
+              selectedItemsForImport.includes(item.id || `item-${previewData.indexOf(item)}`)
+            );
           } else {
             // Traditional parsing for non-AI or fallback
             if (importType === 'csv') {
@@ -1339,22 +1363,61 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
             }
           }
 
-          // Log the import action
-          await logUserAction(
-            user,
-            'data_import',
-            `Imported ${importedData.length} items from ${importType.toUpperCase()} file${aiResults?.success ? ' (AI-processed)' : ''}`,
-            selectedFile.name,
-            `${importedData.length} items`
-          );
+          // Now actually import the items to the database with barcode generation
+          setUploadProgress(50);
+          
+          try {
+            const importResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:6330'}/api/admin/import-processed-items`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                items: importedData,
+                import_source: aiResults?.success ? 'deepseek_ai' : (showPreview ? 'fallback_parser' : 'manual_import')
+              })
+            });
 
-          clearInterval(progressInterval);
-          setUploadProgress(100);
+            if (!importResponse.ok) {
+              throw new Error(`Failed to import items: ${importResponse.status}`);
+            }
 
-          // Show success message
-          setTimeout(() => {
-            onImportComplete();
-          }, 1000);
+            const importResult = await importResponse.json();
+            
+            if (importResult.success) {
+              // Log the import action
+              await logUserAction(
+                user,
+                'data_import',
+                `Successfully imported ${importResult.imported_count} items to database with barcode generation from ${importType.toUpperCase()} file${aiResults?.success ? ' (AI-processed)' : ''}`,
+                selectedFile.name,
+                `${importResult.imported_count} items with barcodes`
+              );
+
+              clearInterval(progressInterval);
+              setUploadProgress(100);
+
+              // Show success message with barcode info
+              setTimeout(() => {
+                onImportComplete();
+              }, 1000);
+            } else {
+              throw new Error(importResult.message || 'Import failed');
+            }
+          } catch (importError) {
+            console.error('Database import failed:', importError);
+            
+            // Log the failed import
+            await logUserAction(
+              user,
+              'data_import_failed',
+              `Failed to import ${importedData.length} items to database: ${importError instanceof Error ? importError.message : 'Unknown error'}`,
+              selectedFile.name,
+              `Failed import`
+            );
+            
+            throw importError;
+          }
 
         } catch (error) {
           console.error('Import error:', error);
@@ -1379,7 +1442,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
-  const handleDownloadTestData = (type: 'csv' | 'json') => {
+  const handleDownloadTestData = (type: 'csv' | 'json' | 'sql') => {
     const testData = testDataFiles[type];
     const blob = new Blob([testData.content], { type: testData.mimeType });
     const url = URL.createObjectURL(blob);
@@ -1392,24 +1455,15 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     URL.revokeObjectURL(url);
   };
 
-  const handleAIAnalysis = async (fileContent: string, fileType: 'csv' | 'json') => {
+  const handleAIAnalysis = async (fileContent: string, fileType: 'csv' | 'json' | 'sql') => {
     if (!user) return;
 
-    setAiProcessing(true);
-    setAiProgress(0);
+    setIsAnalyzing(true);
     setAiResults(null);
     
     try {
-      // Simulate progress increments
-      const progressInterval = setInterval(() => {
-        setAiProgress(prev => {
-          if (prev < 90) return prev + 10;
-          return prev;
-        });
-      }, 300);
-
       // Create a manual fetch request to the analyze-data endpoint
-      const response = await fetch('http://localhost:8080/api/admin/analyze-data', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:6330'}/api/admin/analyze-data`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1419,9 +1473,6 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
           data_type: fileType
         })
       });
-
-      clearInterval(progressInterval);
-      setAiProgress(100);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -1437,18 +1488,80 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
         setShowPreview(true);
       }
     } catch (error) {
-      console.error('AI analysis failed:', error);
-      setAiResults({
-        success: false,
-        message: 'AI analysis failed. Please try manual import.',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      setAiProgress(0);
+      console.error('AI Analysis failed, falling back to basic preview:', error);
+      
+      // Fall back to basic CSV/JSON parsing when AI analysis fails
+      try {
+        const fallbackData = await handleBasicParsing(fileContent, fileType);
+        setPreviewData(fallbackData);
+        setShowPreview(true);
+        // Select all items by default for fallback data too
+        setSelectedItemsForImport(fallbackData.map(item => item.id));
+        setAiResults({
+          success: false,
+          message: 'AI analysis timed out. Showing basic data preview instead.',
+          error: 'Server timeout - using fallback parsing'
+        });
+      } catch (fallbackError) {
+        setAiResults({
+          success: false,
+          message: 'Both AI analysis and basic parsing failed. Please check your file format.',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+      }
     } finally {
-      setTimeout(() => {
-        setAiProcessing(false);
-      }, 500);
+      setIsAnalyzing(false);
     }
+  };
+
+  const handleBasicParsing = async (fileContent: string, fileType: 'csv' | 'json' | 'sql'): Promise<any[]> => {
+    if (fileType === 'csv') {
+      const lines = fileContent.split('\n').filter(line => line.trim());
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const rows = lines.slice(1).map((line, index) => {
+        const values = line.split(',').map(v => v.trim().replace(/"/g, ''));
+        const obj: any = { id: `csv-item-${index}` };
+        headers.forEach((header, idx) => {
+          obj[header] = values[idx] || '';
+        });
+        return obj;
+      }).filter(row => Object.keys(row).length > 1); // Filter out empty rows
+      return rows;
+    } else if (fileType === 'json') {
+      const data = JSON.parse(fileContent);
+      const items = Array.isArray(data) ? data : [data];
+      return items.map((item, index) => ({
+        id: item.id || `json-item-${index}`,
+        ...item
+      }));
+    } else if (fileType === 'sql') {
+      // Basic SQL parsing for fallback - extract values from INSERT statements
+      const insertPattern = /INSERT\s+INTO\s+\w+\s*\([^)]+\)\s*VALUES\s*\(([^)]+)\)/gi;
+      const items: any[] = [];
+      let match;
+      let index = 0;
+      
+      while ((match = insertPattern.exec(fileContent)) !== null) {
+        const valuesStr = match[1];
+        const values = valuesStr.split(',').map(v => v.trim().replace(/^['"]|['"]$/g, ''));
+        
+        // Create a basic item structure for SQL data
+        const obj: any = {
+          id: `sql-item-${index}`,
+          title: values[0] || 'SQL Import Item',
+          brand: values[1] || 'Unknown',
+          category: values[2] || 'Accessories',
+          price: parseFloat(values[3]) || 0,
+          condition: values[4] || 'Good'
+        };
+        
+        items.push(obj);
+        index++;
+      }
+      
+      return items;
+    }
+    return [];
   };
 
   const handleItemSelection = (itemId: string) => {
@@ -1463,7 +1576,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     if (selectedItemsForImport.length === previewData.length) {
       setSelectedItemsForImport([]);
     } else {
-      setSelectedItemsForImport(previewData.map((item: any) => item.id));
+      setSelectedItemsForImport(previewData.map((item: any, index) => item.id || `item-${index}`));
     }
   };
 
@@ -1514,6 +1627,15 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Sample JSON
+                  </button>
+                  <button
+                    onClick={() => handleDownloadTestData('sql')}
+                    className="bg-purple-500 text-white px-4 py-2 rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Sample SQL
                   </button>
                 </div>
               </div>
@@ -1609,65 +1731,74 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                 )}
               </div>
 
-              {/* AI Analysis Progress */}
-              {aiProcessing && (
-                <div className="mb-6 p-6 bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200">
-                  <div className="flex items-start space-x-4">
+              {/* Analysis Loading State */}
+              {isAnalyzing && (
+                <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center space-x-4">
                     <div className="flex-shrink-0">
-                      <svg className="w-8 h-8 text-purple-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      <svg className="w-8 h-8 text-blue-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">AI Analysis in Progress</h3>
-                      <p className="text-sm text-gray-600 mb-4">DeepSeek is analyzing and formatting your data structure...</p>
-                      
-                      {/* Progress Bar */}
-                      <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
-                        <div 
-                          className="bg-gradient-to-r from-purple-500 to-indigo-500 h-3 rounded-full transition-all duration-300 ease-out"
-                          style={{ width: `${aiProgress}%` }}
-                        ></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Processing...</span>
-                        <span>{aiProgress}%</span>
-                      </div>
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">Analyzing Data</h3>
+                      <p className="text-sm text-gray-600">Processing and formatting your data structure...</p>
                     </div>
                   </div>
                 </div>
               )}
 
-              {aiResults && !aiProcessing && (
+              {aiResults && !isAnalyzing && (
                 <div className="mb-6">
                   <div className={`p-4 rounded-lg border ${
                     aiResults.success 
                       ? 'bg-green-50 border-green-200' 
-                      : 'bg-red-50 border-red-200'
+                      : showPreview && previewData.length > 0
+                        ? 'bg-yellow-50 border-yellow-200'
+                        : 'bg-red-50 border-red-200'
                   }`}>
                     <div className="flex items-start">
                       <svg className={`w-5 h-5 mt-0.5 mr-2 ${
-                        aiResults.success ? 'text-green-500' : 'text-red-500'
+                        aiResults.success 
+                          ? 'text-green-500' 
+                          : showPreview && previewData.length > 0
+                            ? 'text-yellow-500'
+                            : 'text-red-500'
                       }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                           d={aiResults.success 
                             ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                            : "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                            : showPreview && previewData.length > 0
+                              ? "M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                              : "M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                           } 
                         />
                       </svg>
                       <div>
                         <h4 className={`font-semibold ${
-                          aiResults.success ? 'text-green-800' : 'text-red-800'
+                          aiResults.success 
+                            ? 'text-green-800' 
+                            : showPreview && previewData.length > 0
+                              ? 'text-yellow-800'
+                              : 'text-red-800'
                         }`}>
-                          AI Analysis {aiResults.success ? 'Complete' : 'Failed'}
+                          {aiResults.success 
+                            ? 'AI Analysis Complete' 
+                            : showPreview && previewData.length > 0
+                              ? 'Using Fallback Parsing'
+                              : 'Analysis Failed'
+                          }
                         </h4>
                         <p className={`text-sm ${
-                          aiResults.success ? 'text-green-700' : 'text-red-700'
+                          aiResults.success 
+                            ? 'text-green-700' 
+                            : showPreview && previewData.length > 0
+                              ? 'text-yellow-700'
+                              : 'text-red-700'
                         }`}>
                           {aiResults.message}
                         </p>
-                        {!aiResults.success && aiResults.error && (
+                        {!aiResults.success && aiResults.error && !(showPreview && previewData.length > 0) && (
                           <p className="text-xs text-red-600 mt-1">
                             Error: {aiResults.error}
                           </p>
@@ -1683,80 +1814,103 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-gray-800">
-                      {aiResults?.success ? 'AI-Processed Data Review' : 'Data Preview'}
+                      {aiResults?.success 
+                        ? 'Review and Select Items' 
+                        : showPreview && previewData.length > 0
+                          ? 'Review and Select Items (Basic Parsing)'
+                          : 'Data Preview'
+                      }
                     </h3>
-                    {aiResults?.success && (
-                      <div className="flex items-center space-x-4">
-                        <span className="text-sm text-gray-600">
-                          {selectedItemsForImport.length} of {previewData.length} items selected
-                        </span>
-                        <button
-                          onClick={handleSelectAllItems}
-                          className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition-colors"
-                        >
-                          {selectedItemsForImport.length === previewData.length ? 'Deselect All' : 'Select All'}
-                        </button>
-                      </div>
-                    )}
+                                          {(aiResults?.success || (showPreview && previewData.length > 0)) && (
+                        <div className="flex items-center space-x-4">
+                          <span className="text-sm text-gray-600">
+                            {selectedItemsForImport.length} of {previewData.length} items selected
+                          </span>
+                          <button
+                            onClick={handleSelectAllItems}
+                            className="text-sm bg-purple-100 text-purple-700 px-3 py-1 rounded-lg hover:bg-purple-200 transition-colors"
+                          >
+                            {selectedItemsForImport.length === previewData.length ? 'Deselect All' : 'Select All'}
+                          </button>
+                        </div>
+                      )}
                   </div>
 
-                  {aiResults?.success ? (
-                    /* AI-Processed Item Cards */
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {previewData.map((item: any, index) => (
-                        <div 
-                          key={item.id || index}
-                          className={`border rounded-lg p-4 transition-all duration-200 ${
-                            selectedItemsForImport.includes(item.id)
-                              ? 'border-purple-300 bg-purple-50 shadow-md'
-                              : 'border-gray-200 bg-white hover:border-gray-300'
-                          }`}
-                        >
-                          <div className="flex items-start justify-between mb-3">
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-gray-900 text-sm mb-1">
-                                {item.title || 'Untitled Item'}
-                              </h4>
-                              <p className="text-xs text-gray-500 mb-2">
-                                {item.brand} • {item.category}
-                              </p>
-                            </div>
-                            <label className="flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={selectedItemsForImport.includes(item.id)}
-                                onChange={() => handleItemSelection(item.id)}
-                                className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
-                              />
-                            </label>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-500">Price:</span>
-                              <span className="font-medium text-green-600">
-                                ${item.price || item.originalPrice || 'N/A'}
-                              </span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-500">Condition:</span>
-                              <span className="font-medium">{item.condition || 'Not specified'}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                              <span className="text-gray-500">Size:</span>
-                              <span className="font-medium">{item.size || 'Not specified'}</span>
-                            </div>
-                            {item.description && (
-                              <div className="mt-2">
-                                <p className="text-xs text-gray-600 line-clamp-2">
-                                  {item.description.substring(0, 100)}
-                                  {item.description.length > 100 ? '...' : ''}
+                  {(aiResults?.success || (showPreview && previewData.length > 0)) ? (
+                    /* Processed Item Cards - Works for both AI and fallback data */
+                    <div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                        {previewData.map((item: any, index) => (
+                          <div 
+                            key={item.id || index}
+                            className={`border rounded-lg p-4 transition-all duration-200 ${
+                              selectedItemsForImport.includes(item.id || `item-${index}`)
+                                ? 'border-purple-300 bg-purple-50 shadow-md'
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-gray-900 text-sm mb-1">
+                                  {item.title || item['Product Name'] || item.name || item['item_title'] || 'Untitled Item'}
+                                </h4>
+                                <p className="text-xs text-gray-500 mb-2">
+                                  {item.brand || item.Brand || item.manufacturer || 'Unknown'} • {item.category || item.Category || item.type || 'Unknown'}
                                 </p>
                               </div>
-                            )}
+                              <label className="flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedItemsForImport.includes(item.id || `item-${index}`)}
+                                  onChange={() => handleItemSelection(item.id || `item-${index}`)}
+                                  className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
+                                />
+                              </label>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Price:</span>
+                                <span className="font-medium text-green-600">
+                                  ${item.price || item['Listing Price'] || item.originalPrice || item['Original Price'] || 'N/A'}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Condition:</span>
+                                <span className="font-medium">{item.condition || item.Condition || 'Not specified'}</span>
+                              </div>
+                              <div className="flex justify-between text-xs">
+                                <span className="text-gray-500">Size:</span>
+                                <span className="font-medium">{item.size || item.Size || 'Not specified'}</span>
+                              </div>
+                              {(item.description || item.Description) && (
+                                <div className="mt-2">
+                                  <p className="text-xs text-gray-600 line-clamp-2">
+                                    {(item.description || item.Description).substring(0, 100)}
+                                    {(item.description || item.Description).length > 100 ? '...' : ''}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
                           </div>
+                        ))}
+                      </div>
+                      
+                      {/* Import to Database Button */}
+                      {selectedItemsForImport.length > 0 && (
+                        <div className="flex justify-center">
+                          <button
+                            onClick={startImportProcess}
+                            disabled={isUploading}
+                            className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2 text-lg"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                            </svg>
+                            {isUploading ? 'Importing...' : `Import ${selectedItemsForImport.length} Items to Database`}
+                          </button>
                         </div>
-                      ))}
+                      )}
                     </div>
                   ) : (
                     /* Traditional Table View */
@@ -1788,12 +1942,14 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                     </div>
                   )}
                   
-                  <div className="text-sm text-gray-500 mt-3">
-                    {aiResults?.success 
-                      ? `Showing ${previewData.length} AI-processed items ready for import`
+                                  <div className="text-sm text-gray-500 mt-3">
+                  {aiResults?.success 
+                    ? `Showing ${previewData.length} AI-processed items ready for review`
+                    : showPreview && previewData.length > 0
+                      ? `Showing ${previewData.length} items parsed with basic formatting`
                       : `Showing first ${Math.min(5, previewData.length)} of ${previewData.length} rows`
-                    }
-                  </div>
+                  }
+                </div>
                 </div>
               )}
 
@@ -1852,17 +2008,14 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
                 Cancel
               </button>
               <button
-                onClick={handleImport}
-                disabled={!selectedFile || (aiResults?.success && selectedItemsForImport.length === 0)}
-                className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                onClick={handleAnalyze}
+                disabled={!selectedFile || isAnalyzing}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                {aiResults?.success && selectedItemsForImport.length > 0
-                  ? `Import ${selectedItemsForImport.length} Selected Items`
-                  : 'Import Data'
-                }
+                {isAnalyzing ? 'Analyzing Data...' : 'Analyze Data'}
               </button>
             </div>
           </div>

@@ -33,10 +33,31 @@ export const logUserAction = async (
     if (!user) return;
 
     try {
+        // Enhanced user identification for phone users
+        let userName = 'Anonymous';
+        let userEmail = '';
+        
+        if (user.displayName) {
+            userName = user.displayName;
+        } else if (user.phoneNumber) {
+            // For phone users, use their phone number as display name
+            userName = user.phoneNumber;
+        } else if (user.email) {
+            // For email users without display name, use email prefix
+            userName = user.email.split('@')[0];
+        }
+        
+        if (user.email) {
+            userEmail = user.email;
+        } else if (user.phoneNumber) {
+            // For phone-only users, use phone number as identifier
+            userEmail = user.phoneNumber;
+        }
+
         const actionLog: Omit<ActionLog, 'id'> = {
             userId: user.uid,
-            userName: user.displayName || 'Anonymous',
-            userEmail: user.email || '',
+            userName: userName,
+            userEmail: userEmail,
             action,
             details,
             timestamp: serverTimestamp(),

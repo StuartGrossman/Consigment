@@ -77,18 +77,8 @@ export interface User {
   storeCredit?: number; // Store credit balance
 }
 
-// Custom user type for phone number authentication
-export interface PhoneUser {
-  uid: string;
-  phoneNumber: string;
-  displayName: string;
-  email?: string;
-  photoURL?: string;
-  isPhoneUser: boolean;
-}
-
-// Union type for authentication  
-export type AuthUser = import('firebase/auth').User | PhoneUser;
+// Union type for authentication using Firebase Auth User
+export type AuthUser = import('firebase/auth').User;
 
 export interface UploadProgress {
   url: string;

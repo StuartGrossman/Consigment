@@ -28,8 +28,19 @@ import { bannerImages } from '../assets/banner-images';
 
 
 const Home: React.FC = () => {
-    const { user, loading, signInWithGoogle, signInWithPhone, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin } = useAuth();
+    const { user, loading, signInWithGoogle, signInWithPhone, verifyOTP, resendOTP, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin, switchingAdminMode, verificationId } = useAuth();
     const { getCartItemCount, getBookmarkCount, cleanupBookmarks, switchUser } = useCart();
+    
+    // Handle redirecting away from admin-only pages when exiting admin mode
+    const handleExitAdmin = () => {
+        // If user is on admin-only pages, redirect them back to the store
+        if (showActionsPage || showInventoryPage) {
+            setShowActionsPage(false);
+            setShowInventoryPage(false);
+            setShowAnalyticsPage(false);
+            console.log('🔄 Redirected from admin-only page back to store');
+        }
+    };
     const [items, setItems] = useState<ConsignmentItem[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
@@ -818,16 +829,23 @@ const Home: React.FC = () => {
                 </div>
 
                 {/* LoginModal for unauthenticated users */}
-                <LoginModal 
-                    isOpen={isLoginModalOpen}
-                    onClose={() => setIsLoginModalOpen(false)}
-                    onGoogleLogin={async () => {
-                        await signInWithGoogle();
-                    }}
-                    onPhoneLogin={async (phoneNumber: string) => {
-                        await signInWithPhone(phoneNumber);
-                    }}
-                />
+                            <LoginModal 
+                isOpen={isLoginModalOpen}
+                onClose={() => setIsLoginModalOpen(false)}
+                onGoogleLogin={async () => {
+                    await signInWithGoogle();
+                }}
+                onPhoneLogin={async (phoneNumber: string, recaptchaContainer?: string) => {
+                    return await signInWithPhone(phoneNumber, recaptchaContainer);
+                }}
+                onVerifyOTP={async (code: string) => {
+                    await verifyOTP(code);
+                }}
+                onResendOTP={async () => {
+                    return await resendOTP();
+                }}
+                verificationId={verificationId}
+            />
             </div>
         );
     }
@@ -1322,16 +1340,26 @@ const Home: React.FC = () => {
                                             
                                                         <div className="border-t border-gray-200 my-3 sm:my-2"></div>
                                                         
-                                                        {/* Swap Admin Button */}
-                                                        <button
-                                                            onClick={() => {
-                                                                toggleAdmin();
-                                                                setUserMenuOpen(false);
-                                                            }}
-                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
-                                                        >
-                                                            🔄 {isAdmin ? 'Exit Admin Mode' : 'Enter Admin Mode'}
-                                                        </button>
+                                                                                                {/* Swap Admin Button */}
+                                        <button
+                                            onClick={() => {
+                                                if (!switchingAdminMode) {
+                                                    toggleAdmin();
+                                                    setUserMenuOpen(false);
+                                                }
+                                            }}
+                                            disabled={switchingAdminMode}
+                                            className={`mobile-user-menu-item ${switchingAdminMode ? 'mobile-user-menu-item-loading' : 'mobile-user-menu-item-default'}`}
+                                        >
+                                            {switchingAdminMode ? (
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin"></div>
+                                                    Switching...
+                                                </div>
+                                            ) : (
+                                                <>🔄 {isAdmin ? 'Exit Admin Mode' : 'Enter Admin Mode'}</>
+                                            )}
+                                        </button>
                                                         
                                                 <button
                                                     onClick={() => {
@@ -1361,6 +1389,54 @@ const Home: React.FC = () => {
                             height="h-96 sm:h-[500px]"
                         />
                     )}
+
+                    {/* Search Section - Prominent search bar below banner */}
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                        <div className="bg-white rounded-xl shadow-lg border p-6 sm:p-8">
+                            <div className="max-w-2xl mx-auto">
+                                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">
+                                    Find Your Perfect Gear
+                                </h2>
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                        <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={filters.searchQuery}
+                                        onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
+                                        placeholder="Search for outdoor gear, brands, categories..."
+                                        className="w-full pl-12 pr-12 py-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
+                                    />
+                                    {filters.searchQuery && (
+                                        <button
+                                            onClick={() => handleFilterChange('searchQuery', '')}
+                                            className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                                        >
+                                            <svg className="h-6 w-6 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                    )}
+                                </div>
+                                {filters.searchQuery && (
+                                    <div className="mt-3 text-center">
+                                        <p className="text-sm text-gray-600">
+                                            Searching through titles, descriptions, brands, categories, and more
+                                        </p>
+                                        <button
+                                            onClick={() => handleFilterChange('searchQuery', '')}
+                                            className="mt-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
+                                        >
+                                            Clear search
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </>
             )}
 
@@ -1379,7 +1455,7 @@ const Home: React.FC = () => {
                                     <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-1.414.924l-2-1A1 1 0 0110 17.414V13.414a1 1 0 00-.293-.707L3.293 6.293A1 1 0 013 5.586V4z" />
                                     </svg>
-                                    <span className="font-medium text-gray-900">Filters & Search</span>
+                                    <span className="font-medium text-gray-900">Filters</span>
                                     {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery) && (
                                         <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">Active</span>
                                     )}
@@ -1403,39 +1479,7 @@ const Home: React.FC = () => {
                                     </button>
                                 </div>
 
-                                {/* Search */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                            <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                            </svg>
-                                        </div>
-                                        <input
-                                            type="text"
-                                            value={filters.searchQuery}
-                                            onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
-                                            placeholder="Search items..."
-                                            className="w-full pl-10 border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                        />
-                                        {filters.searchQuery && (
-                                            <button
-                                                onClick={() => handleFilterChange('searchQuery', '')}
-                                                className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                                            >
-                                                <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                </svg>
-                                            </button>
-                                        )}
-                                    </div>
-                                    {filters.searchQuery && (
-                                        <p className="text-xs text-gray-500 mt-1">
-                                            Searching in titles, descriptions, brands, categories, and more
-                                        </p>
-                                    )}
-                                </div>
+
 
                                 {/* Sort By */}
                                 <div className="mb-6">
@@ -2021,12 +2065,26 @@ const Home: React.FC = () => {
                                                         {/* Swap Admin Button */}
                                                         <button
                                                             onClick={() => {
-                                                                toggleAdmin();
-                                                                setUserMenuOpen(false);
+                                                                if (!switchingAdminMode) {
+                                                                    toggleAdmin();
+                                                                    setUserMenuOpen(false);
+                                                                }
                                                             }}
-                                                            className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                                                            disabled={switchingAdminMode}
+                                                            className={`w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation ${
+                                                                switchingAdminMode 
+                                                                    ? 'text-gray-600 cursor-not-allowed bg-orange-50 border border-orange-100' 
+                                                                    : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'
+                                                            }`}
                                                         >
-                                                            🔄 {isAdmin ? 'Exit Admin Mode' : 'Enter Admin Mode'}
+                                                            {switchingAdminMode ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin"></div>
+                                                                    Switching...
+                                                                </div>
+                                                            ) : (
+                                                                <>🔄 {isAdmin ? 'Exit Admin Mode' : 'Enter Admin Mode'}</>
+                                                            )}
                                                         </button>
                                                         
                                                         <button
@@ -2094,7 +2152,16 @@ const Home: React.FC = () => {
                 isOpen={isLoginModalOpen}
                 onClose={() => setIsLoginModalOpen(false)}
                 onGoogleLogin={async () => { await signInWithGoogle(); }}
-                onPhoneLogin={async (phoneNumber: string) => { await signInWithPhone(phoneNumber); }}
+                onPhoneLogin={async (phoneNumber: string, recaptchaContainer?: string) => {
+                    return await signInWithPhone(phoneNumber, recaptchaContainer);
+                }}
+                onVerifyOTP={async (code: string) => {
+                    await verifyOTP(code);
+                }}
+                onResendOTP={async () => {
+                    return await resendOTP();
+                }}
+                verificationId={verificationId}
             />
 
             <ItemDetailModal 

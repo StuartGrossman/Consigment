@@ -1,5 +1,6 @@
 import { auth, db } from '../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import { logUserAction } from './firebaseService';
 
 // Detect environment and use appropriate API URL
 const getApiBaseUrl = () => {
@@ -15,12 +16,12 @@ const getApiBaseUrl = () => {
     
     // Production - check if we're on Firebase hosting
     if (window.location.hostname.includes('web.app') || window.location.hostname.includes('firebaseapp.com')) {
-        // For Firebase hosting, try relative URLs first, but gracefully fallback
-        return '';  // Use relative URLs
+        // Use production API server
+        return 'https://consignment-api-caua3ttntq-uc.a.run.app';
     }
     
-    // Default to relative URLs for other production environments
-    return '';
+    // Default to production API for other environments
+    return 'https://consignment-api-caua3ttntq-uc.a.run.app';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -182,9 +183,38 @@ class ApiService {
 
             const result = await response.json();
             console.log('✅ Payment processed successfully:', result);
+            
+            // Log the purchase action
+            const user = auth.currentUser;
+            if (user) {
+                const itemTitles = paymentData.cart_items.map(item => item.title).join(', ');
+                const totalAmount = paymentData.cart_items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                await logUserAction(
+                    user, 
+                    'purchase_completed', 
+                    `Purchased ${paymentData.cart_items.length} items (${itemTitles}) for $${totalAmount.toFixed(2)} via ${paymentData.payment_type}`,
+                    result.order_id,
+                    itemTitles
+                );
+            }
+            
             return result;
         } catch (error) {
             console.error('❌ Payment processing failed:', error);
+            
+            // Log failed purchase attempt
+            const user = auth.currentUser;
+            if (user) {
+                const itemTitles = paymentData.cart_items.map(item => item.title).join(', ');
+                await logUserAction(
+                    user, 
+                    'purchase_failed', 
+                    `Failed to purchase ${paymentData.cart_items.length} items: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    '',
+                    itemTitles
+                );
+            }
+            
             throw error;
         }
     }
@@ -276,6 +306,17 @@ class ApiService {
                     reason
                 }),
             });
+            
+            // Log the rejection action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'item_rejected', 
+                    `Rejected item with reason: ${reason}`,
+                    itemId
+                );
+            }
         } catch (error) {
             console.error('❌ Failed to reject item:', error);
             throw error;
@@ -290,6 +331,17 @@ class ApiService {
                     itemId,
                 }),
             });
+            
+            // Log the approval action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'item_approved', 
+                    `Approved item for sale`,
+                    itemId
+                );
+            }
         } catch (error) {
             console.error('❌ Failed to approve item:', error);
             throw error;
@@ -304,6 +356,18 @@ class ApiService {
                     itemIds,
                 }),
             });
+            
+            // Log the bulk approval action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'bulk_approve', 
+                    `Bulk approved ${itemIds.length} items`,
+                    itemIds[0],
+                    `${itemIds.length} items`
+                );
+            }
         } catch (error) {
             console.error('❌ Failed to bulk approve items:', error);
             throw error;
@@ -383,7 +447,21 @@ class ApiService {
                     trackingNumber,
                 }),
             });
-            return await response.json();
+            
+            const result = await response.json();
+            
+            // Log the shipping action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'item_shipped', 
+                    `Marked item as shipped${trackingNumber ? ` with tracking: ${trackingNumber}` : ''}`,
+                    itemId
+                );
+            }
+            
+            return result;
         } catch (error) {
             console.error('❌ Failed to mark item as shipped:', error);
             throw error;
@@ -401,7 +479,22 @@ class ApiService {
                 method: 'POST',
                 body: JSON.stringify(itemData),
             });
-            return await response.json();
+            
+            const result = await response.json();
+            
+            // Log the item creation action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'item_created', 
+                    `Created new item: ${itemData.title || 'Untitled'} - Status: ${result.status}`,
+                    result.itemId,
+                    itemData.title
+                );
+            }
+            
+            return result;
         } catch (error) {
             console.error('❌ Failed to create item:', error);
             throw error;
@@ -447,6 +540,17 @@ class ApiService {
                     durationHours,
                 }),
             });
+            
+            // Log the ban action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'user_banned', 
+                    `Banned user (${email}) for ${durationHours} hours. Reason: ${reason}`,
+                    userId
+                );
+            }
         } catch (error) {
             console.error('❌ Failed to ban user:', error);
             throw error;
@@ -458,6 +562,17 @@ class ApiService {
             await this.makeRequest(`/api/user/remove-item/${itemId}`, {
                 method: 'DELETE',
             });
+            
+            // Log the item deletion action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'item_deleted', 
+                    `Deleted own item`,
+                    itemId
+                );
+            }
         } catch (error) {
             console.error('❌ Failed to remove user item:', error);
             throw error;
@@ -495,6 +610,125 @@ class ApiService {
             return await response.json();
         } catch (error) {
             console.error('❌ Failed to issue refund:', error);
+            throw error;
+        }
+    }
+
+    async generateTestData(): Promise<{
+        success: boolean;
+        message: string;
+        itemCount: number;
+        items: any[];
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/generate-test-data', {
+                method: 'POST',
+            });
+            
+            const result = await response.json();
+            
+            // Log the test data generation action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'test_data_generated', 
+                    `Generated ${result.itemCount} test items for testing`,
+                    '',
+                    `${result.itemCount} test items`
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to generate test data:', error);
+            throw error;
+        }
+    }
+
+    async removeTestData(): Promise<{
+        success: boolean;
+        message: string;
+        deletedCount: number;
+        deletedItems: any[];
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/remove-test-data', {
+                method: 'POST',
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to remove test data:', error);
+            throw error;
+        }
+    }
+
+    async clearAllData(password: string): Promise<{
+        success: boolean;
+        message: string;
+        totalDeleted: number;
+        summary: any;
+        warning: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/clear-all-data', {
+                method: 'POST',
+                body: JSON.stringify({ password }),
+            });
+            
+            const result = await response.json();
+            
+            // Log the data clearing action (CRITICAL)
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'database_cleared', 
+                    `🚨 CLEARED ALL DATABASE DATA - ${result.totalDeleted} items deleted`,
+                    '',
+                    `ALL DATA (${result.totalDeleted} items)`
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to clear all data:', error);
+            throw error;
+        }
+    }
+
+    async getUserPurchases(): Promise<{
+        success: boolean;
+        orders: any[];
+        totalOrders: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/user/purchases', {
+                method: 'GET',
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get user purchases:', error);
+            throw error;
+        }
+    }
+
+    async createSampleData(): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        orderId: string;
+        transactionId: string;
+        customerEmail: string;
+        details: any;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/create-sample-data', {
+                method: 'POST',
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to create sample data:', error);
             throw error;
         }
     }

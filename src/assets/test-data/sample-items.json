@@ -74,9 +74,234 @@
         "email_address": "winter.camper@cold.mountains",
         "phone_number": "555-7890"
       }
+    },
+    {
+      "product_name": "Fjällräven Kånken 16L Daypack",
+      "brand_name": "Fjällräven",
+      "gear_type": "day_packs",
+      "size_spec": "16L",
+      "color_way": "ox_red",
+      "condition_rating": "excellent",
+      "original_price": 80.00,
+      "sale_price": 55.00,
+      "description": "Classic Swedish daypack with laptop compartment. Minimal use, all zippers work perfectly.",
+      "seller_info": {
+        "contact_email": "urban.adventurer@city.trails",
+        "phone": "555-4321"
+      }
+    },
+    {
+      "name": "Patagonia R1 Daily Jacket",
+      "company": "Patagonia",
+      "type": "fleece_jackets",
+      "fit": "mens_large",
+      "hue": "forge_grey",
+      "state": "good",
+      "msrp": 199.00,
+      "price": 125.00,
+      "details": "Polartec Power Grid fleece with excellent breathability. Some pilling but very functional.",
+      "contact": {
+        "email": "fleece.lover@warm.layers",
+        "tel": "555-8765"
+      }
+    },
+    {
+      "gear_name": "Arc'teryx Cerium LT Hoody",
+      "make": "Arc'teryx",
+      "category": "insulated_jackets",
+      "garment_size": "medium",
+      "shade": "black",
+      "usage_level": "minimal",
+      "retail_cost": 399.00,
+      "offered_at": 285.00,
+      "notes": "850-fill down hoody with Coreloft synthetic in moisture-prone areas. Used twice.",
+      "seller_contact": {
+        "email_addr": "down.specialist@warmth.experts",
+        "phone_num": "555-2468"
+      }
+    },
+    {
+      "item_description": "Salomon Quest 4D 3 GTX Hiking Boots",
+      "manufacturer_name": "Salomon",
+      "equipment_type": "hiking_footwear",
+      "boot_size": "US 10.5",
+      "colorway": "wren_bungee_cord",
+      "wear_status": "moderate",
+      "list_price": 230.00,
+      "asking_amount": 145.00,
+      "condition_notes": "Waterproof hiking boots with Contagrip sole. Moderate wear but good tread remaining.",
+      "owner_details": {
+        "email_contact": "boot.tester@trail.miles",
+        "phone_contact": "555-1357"
+      }
+    },
+    {
+      "title": "MSR Hubba Hubba NX 2-Person Tent",
+      "brand": "MSR",
+      "classification": "backpacking_shelters",
+      "capacity": "2_person",
+      "tent_color": "green",
+      "condition": "very_good",
+      "original_value": 450.00,
+      "current_price": 295.00,
+      "item_description": "Freestanding 3-season tent with dual vestibules. Minor wear on floor but no leaks.",
+      "seller_data": {
+        "email_address": "tent.collector@sheltered.nights",
+        "phone_number": "555-9753"
+      }
+    },
+    {
+      "equipment_name": "Black Diamond Momentum Climbing Harness",
+      "producer": "Black Diamond",
+      "gear_category": "climbing_harnesses",
+      "harness_size": "large",
+      "primary_hue": "slate_blue",
+      "condition_grade": "excellent",
+      "recommended_price": 60.00,
+      "selling_price": 38.00,
+      "product_info": "Comfort-focused climbing harness with trakFIT adjustment. Used less than 20 times.",
+      "contact_information": {
+        "email": "harness.user@vertical.routes",
+        "telephone": "555-8642"
+      }
+    },
+    {
+      "item_name": "Osprey Farpoint 40 Travel Pack",
+      "company_name": "Osprey",
+      "product_type": "travel_backpacks",
+      "pack_size": "40L",
+      "pack_color": "volcanic_grey",
+      "item_condition": "like_new",
+      "retail_price": 160.00,
+      "offer_price": 115.00,
+      "product_notes": "Carry-on sized travel pack with panel loading. Used on one trip, excellent condition.",
+      "vendor_info": {
+        "email_id": "travel.packer@global.adventures",
+        "contact_number": "555-7531"
+      }
+    },
+    {
+      "article_title": "Patagonia Baggies Shorts 5-inch",
+      "brand_manufacturer": "Patagonia",
+      "item_category": "hiking_shorts",
+      "waist_size": "32",
+      "fabric_color": "navy_blue",
+      "current_condition": "good",
+      "original_cost": 55.00,
+      "listed_price": 32.00,
+      "condition_details": "Quick-dry nylon shorts perfect for hiking and swimming. Some fading but no damage.",
+      "owner_contact_info": {
+        "electronic_mail": "shorts.enthusiast@summer.hikes",
+        "phone_line": "555-4826"
+      }
+    },
+    {
+      "product_title": "Smartwool PhD Outdoor Light Crew Socks",
+      "maker": "Smartwool",
+      "item_type": "hiking_socks",
+      "sock_size": "large",
+      "sock_color": "charcoal",
+      "wear_grade": "excellent",
+      "store_price": 21.95,
+      "sale_amount": 14.00,
+      "item_info": "Merino wool hiking socks with reinforced heel and toe. Lifetime warranty intact.",
+      "seller_details": {
+        "mail_address": "wool.sock.fan@comfy.trails",
+        "phone_digits": "555-3951"
+      }
+    },
+    {
+      "gear_title": "Therm-a-Rest Z Lite Sol Sleeping Pad",
+      "brand_label": "Therm-a-Rest",
+      "equipment_class": "sleeping_pads",
+      "pad_length": "regular",
+      "surface_color": "silver_lemon",
+      "usage_condition": "good",
+      "factory_price": 50.00,
+      "market_price": 32.00,
+      "usage_notes": "Closed-cell foam pad that never fails. Some compression but still provides good insulation.",
+      "contact_details": {
+        "email_string": "foam.pad.user@ground.comfort",
+        "number": "555-6284"
+      }
+    },
+    {
+      "merchandise_name": "REI Co-op Merino Wool Long-Sleeve Base Layer",
+      "manufacturer_brand": "REI",
+      "goods_category": "base_layers",
+      "garment_fit": "women_medium",
+      "textile_color": "deep_purple",
+      "item_state": "very_good",
+      "suggested_price": 65.00,
+      "asking_rate": 42.00,
+      "product_description": "Soft merino wool base layer with flatlock seams. Minimal pilling, very comfortable.",
+      "vendor_contact": {
+        "digital_mail": "base.layer.collector@warm.starts",
+        "cellular": "555-1739"
+      }
+    },
+    {
+      "object_name": "Nalgene Wide Mouth Water Bottle",
+      "creator": "Nalgene",
+      "object_type": "hydration_bottles",
+      "bottle_capacity": "32oz",
+      "bottle_tint": "clear_blue",
+      "physical_condition": "good",
+      "initial_cost": 12.00,
+      "current_asking": 7.00,
+      "wear_description": "BPA-free Tritan bottle with measurements. Some scratches but no cracks or leaks.",
+      "owner_info": {
+        "internet_mail": "hydration.simple@clear.drinks",
+        "voice_line": "555-8426"
+      }
+    },
+    {
+      "equipment_title": "Petzl Tikka Headlamp",
+      "manufacturing_brand": "Petzl",
+      "device_category": "headlamps",
+      "light_model": "standard",
+      "unit_color": "blue",
+      "operating_condition": "excellent",
+      "purchase_price": 30.00,
+      "negotiable_price": 20.00,
+      "functional_notes": "Compact 300-lumen headlamp with red light mode. Barely used, includes original case.",
+      "seller_contact_data": {
+        "web_mail": "night.light.user@dark.trails",
+        "mobile_number": "555-5173"
+      }
+    },
+    {
+      "article_name": "Darn Tough Vermont Boot Socks",
+      "production_company": "Darn Tough",
+      "merchandise_type": "boot_socks",
+      "sock_dimensions": "medium",
+      "yarn_color": "brown_heather",
+      "preservation_state": "like_new",
+      "manufacturer_cost": 24.00,
+      "discount_price": 16.00,
+      "quality_summary": "Cushioned merino wool boot socks. Worn twice, lifetime warranty still valid.",
+      "proprietor_contact": {
+        "online_mail": "boot.sock.enthusiast@cushioned.steps",
+        "telephone_line": "555-9517"
+      }
+    },
+    {
+      "item_identifier": "Patagonia Houdini Pants",
+      "originator": "Patagonia",
+      "product_class": "wind_pants",
+      "pant_size": "medium",
+      "fabric_hue": "black",
+      "durability_rating": "excellent",
+      "base_price": 99.00,
+      "reduced_price": 68.00,
+      "condition_summary": "Ultralight packable wind pants. Used on a few windy hikes, excellent condition.",
+      "merchant_info": {
+        "address_electronic": "wind.pants.lover@breezy.protection",
+        "communication_number": "555-2840"
+      }
     }
   ],
-  "data_format_version": "2.1",
-  "export_timestamp": "2024-12-30T15:30:00Z",
-  "total_items": 5
+  "data_format_version": "3.2",
+  "export_timestamp": "2024-12-30T18:45:00Z",
+  "total_items": 20
 } 

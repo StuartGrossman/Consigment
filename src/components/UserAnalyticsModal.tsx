@@ -3,6 +3,7 @@ import { collection, query, where, getDocs, orderBy, doc, updateDoc, deleteDoc, 
 import { db } from '../config/firebase';
 import { ConsignmentItem, UserAnalytics, PaymentRecord, User, StoreCreditTransaction, AuthUser } from '../types';
 import { subscribeToUserActions, UserActionLog } from '../services/userService';
+import { subscribeToActionLogs, ActionLog } from '../services/firebaseService';
 
 interface UserAnalyticsModalProps {
     isOpen: boolean;
@@ -36,15 +37,24 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const [soldPrice, setSoldPrice] = useState('');
     const [sortField, setSortField] = useState<SortField>('totalEarnings');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-    const [userActions, setUserActions] = useState<UserActionLog[]>([]);
+    const [userActions, setUserActions] = useState<ActionLog[]>([]);
+    const [filteredUserActions, setFilteredUserActions] = useState<ActionLog[]>([]);
     const [showUserDetail, setShowUserDetail] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedUserAnalytics, setSelectedUserAnalytics] = useState<UserAnalytics | null>(null);
+    
+    // New filtering states for user actions
+    const [actionSearchQuery, setActionSearchQuery] = useState('');
+    const [actionTypeFilter, setActionTypeFilter] = useState('all');
+    const [actionTimeFilter, setActionTimeFilter] = useState('all');
 
     useEffect(() => {
         if (isOpen) {
             if (isAdmin) {
-                fetchAllUserAnalytics();
+                // Ensure admin setup before fetching analytics
+                ensureAdminSetup().then(() => {
+                    fetchAllUserAnalytics();
+                });
             } else if (user) {
                 fetchUserAnalytics(user.uid);
             }
@@ -57,6 +67,11 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             fetchPaymentHistory(selectedUser);
         }
     }, [selectedUser, isAdmin]);
+
+    // Filter user actions when filters change
+    useEffect(() => {
+        filterUserActions();
+    }, [userActions, actionSearchQuery, actionTypeFilter, actionTimeFilter]);
 
     const fetchAllUserAnalytics = async () => {
         setLoading(true);
@@ -109,101 +124,71 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 const analytics = userMap.get(userId)!;
                 analytics.totalItemsListed++;
 
+                // Categorize items by status
                 switch (item.status) {
-                    case 'pending':
-                        analytics.pendingItems.push(item);
-                        break;
-                    case 'approved':
-                        analytics.approvedItems.push(item);
-                        break;
                     case 'live':
                         analytics.activeItems.push(item);
                         break;
                     case 'sold':
                         analytics.soldItems.push(item);
                         analytics.totalItemsSold++;
-                        // User gets 75% of the sold price
-                        const soldPrice = item.soldPrice || item.price;
-                        const userEarnings = item.userEarnings || (soldPrice * 0.75);
-                        analytics.totalEarnings += userEarnings;
+                        analytics.totalEarnings += item.userEarnings || 0;
                         break;
-                    case 'archived':
-                        // Initialize archivedItems array if it doesn't exist
-                        if (!analytics.archivedItems) {
-                            analytics.archivedItems = [];
-                        }
-                        analytics.archivedItems.push(item);
+                    case 'pending':
+                        analytics.pendingItems.push(item);
+                        break;
+                    case 'approved':
+                        analytics.approvedItems.push(item);
                         break;
                 }
             });
 
-            // Try to get additional users from the users collection (if it exists)
-            try {
-                const usersRef = collection(db, 'users');
-                const usersSnapshot = await getDocs(usersRef);
-                
-                usersSnapshot.forEach((doc) => {
-                    const userData = doc.data();
-                    const userId = doc.id;
-                    
-                    // If we don't already have this user, add them
-                    if (!userMap.has(userId)) {
-                        const user: User = {
-                            uid: userId,
-                            email: userData.email || '',
-                            displayName: userData.displayName || userData.name || 'Unknown User',
-                            photoURL: userData.photoURL || ''
-                        };
-                        allUsers.push(user);
+            // Get payment history for all users
+            const paymentsRef = collection(db, 'payments');
+            const paymentsSnapshot = await getDocs(paymentsRef);
+            
+            paymentsSnapshot.forEach((doc) => {
+                const payment = doc.data() as PaymentRecord;
+                const analytics = userMap.get(payment.userId);
+                if (analytics) {
+                    analytics.totalPaid += payment.amount;
+                }
+            });
 
-                        userMap.set(userId, {
-                            userId,
-                            userName: user.displayName,
-                            userEmail: user.email || userData.phoneNumber || '',
-                            totalItemsListed: 0,
-                            totalItemsSold: 0,
-                            totalEarnings: 0,
-                            totalPaid: 0,
-                            outstandingBalance: 0,
-                            storeCredit: Math.random() * 100, // Simulate store credit for demo
-                            activeItems: [],
-                            soldItems: [],
-                            pendingItems: [],
-                            approvedItems: []
-                        });
-                    }
-                });
-            } catch (error) {
-                console.warn('Users collection not found, using only item sellers');
-            }
-
-            // Get payment records to calculate outstanding balances
-            try {
-                const paymentsRef = collection(db, 'payments');
-                const paymentsSnapshot = await getDocs(paymentsRef);
-                
-                paymentsSnapshot.forEach((doc) => {
-                    const payment = doc.data() as PaymentRecord;
-                    const analytics = userMap.get(payment.userId);
-                    if (analytics) {
-                        analytics.totalPaid += payment.amount;
-                    }
-                });
-            } catch (error) {
-                console.warn('Error fetching payments:', error);
-            }
+            // Get store credit for all users
+            const storeCreditRef = collection(db, 'storeCredit');
+            const storeCreditSnapshot = await getDocs(storeCreditRef);
+            
+            storeCreditSnapshot.forEach((doc) => {
+                const credit = doc.data() as StoreCreditTransaction;
+                const analytics = userMap.get(credit.userId);
+                if (analytics) {
+                    analytics.storeCredit += credit.amount;
+                }
+            });
 
             // Calculate outstanding balances
             userMap.forEach((analytics) => {
                 analytics.outstandingBalance = Math.max(0, analytics.totalEarnings - analytics.totalPaid);
             });
 
-            const analyticsArray = Array.from(userMap.values());
-            
-            setUserAnalytics(analyticsArray);
             setAllUsers(allUsers);
-        } catch (error) {
-            console.error('Error fetching user analytics:', error);
+            setUserAnalytics(Array.from(userMap.values()));
+        } catch (error: any) {
+            console.error('Error fetching all user analytics:', error);
+            
+            // Handle specific Firebase permission errors
+            if (error?.code === 'permission-denied') {
+                console.warn('📍 User analytics access denied - insufficient permissions');
+                // Set empty data for graceful degradation
+                setAllUsers([]);
+                setUserAnalytics([]);
+            } else {
+                // Other errors - still log but don't crash
+                console.error('Unexpected error in user analytics:', error.message || error);
+                setAllUsers([]);
+                setUserAnalytics([]);
+            }
         } finally {
             setLoading(false);
         }
@@ -212,12 +197,6 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
     const fetchUserAnalytics = async (userId: string) => {
         setLoading(true);
         try {
-            
-            // Get all items for this user
-            const itemsRef = collection(db, 'items');
-            const q = query(itemsRef, where('sellerId', '==', userId));
-            const querySnapshot = await getDocs(q);
-            
             const userAnalytics: UserAnalytics = {
                 userId,
                 userName: user?.displayName || 'Unknown User',
@@ -234,51 +213,60 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 approvedItems: []
             };
 
+            // Get user's items
+            const itemsRef = collection(db, 'items');
+            const q = query(itemsRef, where('sellerId', '==', userId));
+            const querySnapshot = await getDocs(q);
+
             querySnapshot.forEach((doc) => {
-                const item = {
-                    id: doc.id,
+                const item = { 
+                    id: doc.id, 
                     ...doc.data(),
                     createdAt: doc.data().createdAt?.toDate() || new Date(),
                     approvedAt: doc.data().approvedAt?.toDate(),
                     liveAt: doc.data().liveAt?.toDate(),
                     soldAt: doc.data().soldAt?.toDate()
                 } as ConsignmentItem;
-
+                
                 userAnalytics.totalItemsListed++;
-
+                
                 switch (item.status) {
-                    case 'pending':
-                        userAnalytics.pendingItems.push(item);
-                        break;
-                    case 'approved':
-                        userAnalytics.approvedItems.push(item);
-                        break;
                     case 'live':
                         userAnalytics.activeItems.push(item);
                         break;
                     case 'sold':
                         userAnalytics.soldItems.push(item);
                         userAnalytics.totalItemsSold++;
-                        const soldPrice = item.soldPrice || item.price;
-                        const userEarnings = item.userEarnings || (soldPrice * 0.75);
-                        userAnalytics.totalEarnings += userEarnings;
+                        userAnalytics.totalEarnings += item.userEarnings || 0;
+                        break;
+                    case 'pending':
+                        userAnalytics.pendingItems.push(item);
+                        break;
+                    case 'approved':
+                        userAnalytics.approvedItems.push(item);
                         break;
                 }
             });
 
-            // Get payment records for this user
-            try {
-                const paymentsRef = collection(db, 'payments');
-                const paymentsQuery = query(paymentsRef, where('userId', '==', userId));
-                const paymentsSnapshot = await getDocs(paymentsQuery);
-                
-                paymentsSnapshot.forEach((doc) => {
-                    const payment = doc.data() as PaymentRecord;
-                    userAnalytics.totalPaid += payment.amount;
-                });
-            } catch (error) {
-                console.warn('Error fetching user payments:', error);
-            }
+            // Get user's payments
+            const paymentsRef = collection(db, 'payments');
+            const paymentsQuery = query(paymentsRef, where('userId', '==', userId));
+            const paymentsSnapshot = await getDocs(paymentsQuery);
+            
+            paymentsSnapshot.forEach((doc) => {
+                const payment = doc.data() as PaymentRecord;
+                userAnalytics.totalPaid += payment.amount;
+            });
+
+            // Get user's store credit
+            const storeCreditRef = collection(db, 'storeCredit');
+            const storeCreditQuery = query(storeCreditRef, where('userId', '==', userId));
+            const storeCreditSnapshot = await getDocs(storeCreditQuery);
+            
+            storeCreditSnapshot.forEach((doc) => {
+                const credit = doc.data() as StoreCreditTransaction;
+                userAnalytics.storeCredit += credit.amount;
+            });
 
             userAnalytics.outstandingBalance = Math.max(0, userAnalytics.totalEarnings - userAnalytics.totalPaid);
             
@@ -421,98 +409,73 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
 
     const handleCashPayment = async () => {
         if (!selectedUser || !paymentAmount || parseFloat(paymentAmount) <= 0) return;
-        
+
         setLoading(true);
         try {
             const amount = parseFloat(paymentAmount);
+            const selectedUserAnalytic = userAnalytics.find(u => u.userId === selectedUser);
             
-            // Create payment record
-            const userData = userAnalytics.find(u => u.userId === selectedUser);
-            const paymentData: Omit<PaymentRecord, 'id'> = {
+            const payment: PaymentRecord = {
+                id: '', // Will be set by Firestore
                 userId: selectedUser,
-                userName: userData?.userName || 'Unknown User',
-                userEmail: userData?.userEmail || '',
+                userName: selectedUserAnalytic?.userName || 'Unknown User',
+                userEmail: selectedUserAnalytic?.userEmail || 'No email',
                 amount,
                 type: 'cash',
                 itemsSold: [],
                 paidAt: new Date(),
-                notes: paymentNotes || `Cash payment of $${amount.toFixed(2)}`
+                paymentMethod: 'cash',
+                notes: paymentNotes || `Cash payment of $${amount.toFixed(2)} by ${user?.displayName || 'Admin'}`
             };
-            
-            await addDoc(collection(db, 'payments'), paymentData);
-            
-            // Refresh analytics and payment history
-            await fetchAllUserAnalytics();
-            await fetchPaymentHistory(selectedUser);
-            
-            // Reset form
+
+            const paymentRef = await addDoc(collection(db, 'payments'), payment);
+            console.log('Payment recorded:', paymentRef.id);
+
+            setShowCashPaymentModal(false);
             setPaymentAmount('');
             setPaymentNotes('');
-            setShowCashPaymentModal(false);
+            
+            // Refresh analytics
+            if (isAdmin) {
+                fetchAllUserAnalytics();
+            }
+            
+            fetchPaymentHistory(selectedUser);
         } catch (error) {
-            console.error('Error recording cash payment:', error);
+            console.error('Error recording payment:', error);
         } finally {
             setLoading(false);
         }
     };
 
     const handleUserRedeemStoreCredit = async () => {
-        if (!user || !redeemAmount || parseFloat(redeemAmount) <= 0) return;
-        
+        if (!selectedUser || !redeemAmount || parseFloat(redeemAmount) <= 0) return;
+
         setLoading(true);
         try {
-            const amount = parseFloat(redeemAmount);
+            const amount = -parseFloat(redeemAmount); // Negative amount for redemption
+            const selectedUserAnalytic = userAnalytics.find(u => u.userId === selectedUser);
             
-            // Create store credit transaction
-            const creditTransaction: Omit<StoreCreditTransaction, 'id'> = {
-                userId: user.uid,
-                userName: user.displayName || 'Unknown User',
-                userEmail: user.email || 'no-email@example.com',
+            const transaction: StoreCreditTransaction = {
+                id: '', // Will be set by Firestore
+                userId: selectedUser,
+                userName: selectedUserAnalytic?.userName || 'Unknown User',
+                userEmail: selectedUserAnalytic?.userEmail || 'No email',
                 amount,
-                type: 'earned',
-                description: 'Redeemed from earnings',
+                type: 'used',
+                description: `Store credit redeemed by admin: ${user?.displayName || 'Admin'}`,
                 createdAt: new Date()
             };
-            
-            await addDoc(collection(db, 'store_credit_transactions'), creditTransaction);
-            
-            // Update user's store credit balance
-            const userRef = doc(db, 'users', user.uid);
-            const userDoc = await getDoc(userRef);
-            
-            if (userDoc.exists()) {
-                const currentCredit = userDoc.data().storeCredit || 0;
-                await updateDoc(userRef, {
-                    storeCredit: currentCredit + amount
-                });
-            } else {
-                await setDoc(userRef, {
-                    storeCredit: amount,
-                    email: user.email,
-                    displayName: user.displayName
-                });
-            }
-            
-            // Create payment record to reduce outstanding balance
-            const paymentData: Omit<PaymentRecord, 'id'> = {
-                userId: user.uid,
-                userName: user.displayName || 'Unknown User',
-                userEmail: user.email || 'no-email@example.com',
-                amount,
-                type: 'store_credit',
-                itemsSold: [],
-                paidAt: new Date(),
-                notes: 'Converted to store credit'
-            };
-            
-            await addDoc(collection(db, 'payments'), paymentData);
+
+            await addDoc(collection(db, 'storeCredit'), transaction);
+
+            setShowUserRedeemModal(false);
+            setRedeemAmount('');
             
             // Refresh analytics
-            await fetchUserAnalytics(user.uid);
-            
-            // Reset form
-            setRedeemAmount('');
-            setShowUserRedeemModal(false);
+            if (isAdmin) {
+                fetchAllUserAnalytics();
+            }
         } catch (error) {
             console.error('Error redeeming store credit:', error);
         } finally {
@@ -533,14 +496,18 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
         setSelectedUserAnalytics(userAnalytic);
         setShowUserDetail(true);
         
+        // Reset action filters
+        setActionSearchQuery('');
+        setActionTypeFilter('all');
+        setActionTimeFilter('all');
+        
         // Check if this is a phone user - handle undefined userId
         const userId = userAnalytic.userId || '';
         const isPhoneUser = userId.startsWith('phone_');
         
-        // Fetch user's action history using appropriate subscription
+        console.log('Loading actions for user:', userId, isPhoneUser ? '(phone user)' : '(regular user)');
+        
         try {
-            console.log('Setting up user actions subscription for:', userId, isPhoneUser ? '(phone user)' : '(regular user)');
-            
             if (isPhoneUser) {
                 // For phone users, show a placeholder message since they may not have user-specific action logs
                 console.log('Phone user detected - limited action history available');
@@ -559,15 +526,24 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                 // Return empty unsubscribe function for phone users
                 (window as any).userActionsUnsubscribe = () => {};
             } else {
-                // For regular users, use the user-specific subscription
-                const unsubscribe = subscribeToUserActions(userId, (actions) => {
-                    console.log('Received user actions:', actions.length);
-                    const processedActions = actions.map(action => ({
-                        ...action,
-                        timestamp: action.timestamp?.toDate ? action.timestamp.toDate() : new Date()
-                    }));
+                // For regular users, get all action logs and filter by userId
+                console.log('Setting up comprehensive action subscription for user:', userId);
+                
+                // Use the general action logs subscription and filter for this user
+                const unsubscribe = subscribeToActionLogs((allActions) => {
+                    console.log('Received all action logs:', allActions.length);
                     
-                    setUserActions(processedActions);
+                    // Filter actions for this specific user
+                    const userSpecificActions = allActions
+                        .filter(action => action.userId === userId)
+                        .map(action => ({
+                            ...action,
+                            timestamp: action.timestamp?.toDate ? action.timestamp.toDate() : new Date()
+                        }))
+                        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+                    
+                    console.log('Filtered actions for user:', userSpecificActions.length);
+                    setUserActions(userSpecificActions);
                 });
                 
                 // Store unsubscribe function for cleanup
@@ -577,6 +553,59 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             console.error('Error fetching user actions:', error);
             setUserActions([]); // Set empty array on error
         }
+    };
+
+    const filterUserActions = () => {
+        let filtered = [...userActions];
+
+        // Apply search filter
+        if (actionSearchQuery) {
+            const searchLower = actionSearchQuery.toLowerCase();
+            filtered = filtered.filter(action => 
+                (action.action && action.action.toLowerCase().includes(searchLower)) ||
+                (action.details && action.details.toLowerCase().includes(searchLower)) ||
+                (action.itemTitle && action.itemTitle.toLowerCase().includes(searchLower))
+            );
+        }
+
+        // Apply action type filter
+        if (actionTypeFilter !== 'all') {
+            filtered = filtered.filter(action => action.action === actionTypeFilter);
+        }
+
+        // Apply time filter
+        if (actionTimeFilter !== 'all') {
+            const now = new Date();
+            let timeThreshold = 0;
+            
+            switch (actionTimeFilter) {
+                case '1h':
+                    timeThreshold = now.getTime() - (1000 * 60 * 60);
+                    break;
+                case '24h':
+                    timeThreshold = now.getTime() - (1000 * 60 * 60 * 24);
+                    break;
+                case '7d':
+                    timeThreshold = now.getTime() - (1000 * 60 * 60 * 24 * 7);
+                    break;
+                case '30d':
+                    timeThreshold = now.getTime() - (1000 * 60 * 60 * 24 * 30);
+                    break;
+            }
+            
+            if (timeThreshold > 0) {
+                filtered = filtered.filter(action => 
+                    action.timestamp.getTime() >= timeThreshold
+                );
+            }
+        }
+
+        setFilteredUserActions(filtered);
+    };
+
+    const getUniqueActionTypes = () => {
+        const types = new Set(userActions.map(action => action.action));
+        return Array.from(types).sort();
     };
 
     const filteredAndSortedUsers = userAnalytics
@@ -615,36 +644,7 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
 
     const getActionIcon = (action: string) => {
         switch (action) {
-            case 'item_listed': 
-                return (
-                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                );
-            case 'item_approved': 
-                return (
-                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                );
-            case 'item_purchased': 
-                return (
-                    <svg className="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
-                    </svg>
-                );
-            case 'item_sold': 
-                return (
-                    <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                    </svg>
-                );
-            case 'item_archived': 
-                return (
-                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                );
+            // User Authentication
             case 'user_login': 
                 return (
                     <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -657,6 +657,121 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                     </svg>
                 );
+            
+            // Item Management
+            case 'item_created':
+            case 'item_listed': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                );
+            case 'item_deleted': 
+                return (
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                );
+            case 'user_item_updated':
+            case 'item_edited': 
+                return (
+                    <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                );
+            
+            // Admin Actions
+            case 'item_approved': 
+                return (
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                );
+            case 'item_rejected': 
+                return (
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                );
+            case 'bulk_approve': 
+                return (
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                    </svg>
+                );
+            case 'bulk_reject': 
+                return (
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                );
+            case 'item_made_live': 
+                return (
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.636 18.364a9 9 0 010-12.728m12.728 0a9 9 0 010 12.728m-9.9-2.829a5 5 0 010-7.07m7.072 0a5 5 0 010 7.07M13 12a1 1 0 11-2 0 1 1 0 012 0z" />
+                    </svg>
+                );
+            case 'item_sent_to_pending': 
+                return (
+                    <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                );
+            case 'item_status_updated': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                );
+            case 'bulk_status_update': 
+                return (
+                    <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                    </svg>
+                );
+
+            // Commerce Actions
+            case 'purchase_completed':
+            case 'item_purchased': 
+                return (
+                    <svg className="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                    </svg>
+                );
+            case 'purchase_failed': 
+                return (
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                );
+            case 'item_sold': 
+                return (
+                    <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                    </svg>
+                );
+            case 'refund_issued': 
+                return (
+                    <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                    </svg>
+                );
+
+            // Shipping & Logistics
+            case 'item_shipped': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                );
+            case 'barcode_generated': 
+                return (
+                    <svg className="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0-3h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V6a1 1 0 00-1-1H5a1 1 0 00-1 1v1a1 1 0 001 1zm12 0h2a1 1 0 001-1V6a1 1 0 00-1-1h-2a1 1 0 00-1 1v1a1 1 0 001 1zM5 20h2a1 1 0 001-1v-1a1 1 0 00-1-1H5a1 1 0 00-1 1v1a1 1 0 001 1z" />
+                    </svg>
+                );
+
+            // User Interactions
             case 'item_bookmarked': 
                 return (
                     <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -666,7 +781,55 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             case 'cart_updated': 
                 return (
                     <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17M17 13v4a2 2 0 01-2 2H9a2 2 0 01-2-2v-4m8 0V9a2 2 0 00-2-2H9a2 2 0 00-2 2v4.01" />
+                    </svg>
+                );
+
+            // Admin Management
+            case 'user_banned': 
+                return (
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
+                    </svg>
+                );
+            case 'admin_status_toggled': 
+                return (
+                    <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                );
+
+            // Testing & Data Management
+            case 'test_data_generated': 
+                return (
+                    <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                );
+            case 'test_data_removed': 
+                return (
+                    <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                );
+            case 'sample_data_created': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                );
+            case 'database_cleared': 
+                return (
+                    <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                );
+
+            // Dashboard & Views
+            case 'dashboard_viewed': 
+                return (
+                    <svg className="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                     </svg>
                 );
             case 'phone_user_activity': 
@@ -675,6 +838,15 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
                     </svg>
                 );
+
+            // Legacy/Other
+            case 'item_archived': 
+                return (
+                    <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                );
+            
             default: 
                 return (
                     <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -718,6 +890,46 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
             const itemDate = item.createdAt || new Date(0);
             return itemDate > latest ? itemDate : latest;
         }, new Date(0));
+    };
+
+    // Function to ensure admin status is properly set up
+    const ensureAdminSetup = async (): Promise<boolean> => {
+        if (!user || !isAdmin) return false;
+        
+        try {
+            const userRef = doc(db, 'users', user.uid);
+            const userDoc = await getDoc(userRef);
+            
+            if (!userDoc.exists()) {
+                // Create admin user document
+                await setDoc(userRef, {
+                    isAdmin: true,
+                    email: user.email || '',
+                    displayName: user.displayName || '',
+                    photoURL: user.photoURL || '',
+                    phoneNumber: user.phoneNumber || '',
+                    lastSignIn: new Date(),
+                    createdAt: new Date(),
+                });
+                console.log('✅ Created admin user document');
+                return true;
+            } else if (!userDoc.data()?.isAdmin) {
+                // Update existing document to add admin status
+                await setDoc(userRef, {
+                    isAdmin: true,
+                    lastSignIn: new Date(),
+                }, { merge: true });
+                console.log('✅ Updated admin status in user document');
+                return true;
+            }
+            
+            // Admin status already properly set
+            return true;
+        } catch (error: any) {
+            console.warn('⚠️ Could not verify/set admin status:', error?.code || 'unknown error');
+            // Continue with analytics fetch even if admin setup fails
+            return true;
+        }
     };
 
     if (!isOpen) return null;
@@ -968,20 +1180,73 @@ const UserAnalyticsModal: React.FC<UserAnalyticsModalProps> = ({ isOpen, onClose
                                 <div className="p-4 border-b border-gray-200">
                                     <h3 className="text-lg font-semibold text-gray-900">Recent Activity</h3>
                                     <p className="text-sm text-gray-600">All actions performed by this user</p>
+                                    
+                                    {/* Action Filters */}
+                                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        {/* Search Filter */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Search Actions</label>
+                                            <input
+                                                type="text"
+                                                value={actionSearchQuery}
+                                                onChange={(e) => setActionSearchQuery(e.target.value)}
+                                                placeholder="Search actions, details, items..."
+                                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            />
+                                        </div>
+
+                                        {/* Action Type Filter */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Action Type</label>
+                                            <select
+                                                value={actionTypeFilter}
+                                                onChange={(e) => setActionTypeFilter(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            >
+                                                <option value="all">All Actions</option>
+                                                {getUniqueActionTypes().map(type => (
+                                                    <option key={type} value={type}>
+                                                        {type.replace('_', ' ').charAt(0).toUpperCase() + type.replace('_', ' ').slice(1)}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Time Filter */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Time Range</label>
+                                            <select
+                                                value={actionTimeFilter}
+                                                onChange={(e) => setActionTimeFilter(e.target.value)}
+                                                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            >
+                                                <option value="all">All Time</option>
+                                                <option value="1h">Last Hour</option>
+                                                <option value="24h">Last 24 Hours</option>
+                                                <option value="7d">Last 7 Days</option>
+                                                <option value="30d">Last 30 Days</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Filter Results Summary */}
+                                    <div className="mt-3 text-sm text-gray-600">
+                                        Showing {filteredUserActions.length} of {userActions.length} actions
+                                    </div>
                                 </div>
                                 <div className="max-h-96 overflow-y-auto">
-                                    {userActions.length === 0 ? (
+                                    {filteredUserActions.length === 0 ? (
                                         <div className="p-8 text-center text-gray-500">
                                             <div className="mb-4">
                                                 <svg className="w-16 h-16 mx-auto text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                                                 </svg>
                                             </div>
-                                            <p>No activity found for this user</p>
+                                            <p>{userActions.length === 0 ? 'No activity found for this user' : 'No actions match your filters'}</p>
                                         </div>
                                     ) : (
                                         <div className="divide-y divide-gray-200">
-                                            {userActions.map((action, index) => (
+                                            {filteredUserActions.map((action, index) => (
                                                 <div key={action.id || `${action.userId}-${action.action}-${action.timestamp.getTime()}-${index}`} className="p-4 hover:bg-gray-50">
                                                     <div className="flex items-start space-x-3">
                                                         <div className="flex-shrink-0 mt-0.5">{getActionIcon(action.action)}</div>

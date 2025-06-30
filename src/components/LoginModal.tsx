@@ -5,19 +5,28 @@ interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
   onGoogleLogin: () => Promise<void>;
-  onPhoneLogin: (phoneNumber: string) => Promise<void>;
+  onPhoneLogin: (phoneNumber: string, recaptchaContainer?: string) => Promise<string>;
+  onVerifyOTP: (code: string) => Promise<void>;
+  onResendOTP: () => Promise<string>;
+  verificationId: string | null;
 }
 
 const LoginModal: React.FC<LoginModalProps> = ({ 
   isOpen, 
   onClose, 
   onGoogleLogin, 
-  onPhoneLogin 
+  onPhoneLogin,
+  onVerifyOTP,
+  onResendOTP,
+  verificationId
 }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [otpCode, setOtpCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [loginMethod, setLoginMethod] = useState<'selection' | 'phone'>('selection');
+  const [loginMethod, setLoginMethod] = useState<'selection' | 'phone' | 'otp'>('selection');
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(0);
   
   // Rate limiting hook
   const { executeWithRateLimit } = useRateLimiter();
@@ -53,29 +62,109 @@ const LoginModal: React.FC<LoginModalProps> = ({
     }
     
     setError(null);
+    setSuccess(null);
     
     const result = await executeWithRateLimit('login', async () => {
       setLoading(true);
       console.log('Starting phone login with:', phoneNumber);
-      await onPhoneLogin(phoneNumber);
-      console.log('Phone login successful');
-      return true;
+      
+      // Store phone number for potential resend
+      localStorage.setItem('lastPhoneNumber', `+1${cleanPhone}`);
+      
+      const verificationId = await onPhoneLogin(phoneNumber, 'recaptcha-container');
+      console.log('SMS sent, verification ID:', verificationId);
+      return verificationId;
     });
 
     if (result.success) {
-      onClose();
-      resetForm();
+      setSuccess('📱 SMS verification code sent! Please check your phone.');
+      setLoginMethod('otp');
+      startCountdown(60); // 60 second countdown for resend
     } else {
-      setError(result.error || 'Phone login failed. Please try again.');
+      setError(result.error || 'Failed to send SMS. Please try again.');
     }
     setLoading(false);
   };
 
+  const handleOTPVerification = async () => {
+    if (!otpCode.trim()) {
+      setError('Please enter the verification code');
+      return;
+    }
+
+    if (otpCode.length !== 6) {
+      setError('Please enter the complete 6-digit code');
+      return;
+    }
+    
+    setError(null);
+    
+    const result = await executeWithRateLimit('verify', async () => {
+      setLoading(true);
+      console.log('Verifying OTP code:', otpCode);
+      await onVerifyOTP(otpCode);
+      console.log('OTP verification successful');
+      return true;
+    });
+
+    if (result.success) {
+      setSuccess('✅ Phone verification successful! Welcome!');
+      setTimeout(() => {
+        onClose();
+        resetForm();
+      }, 1500);
+    } else {
+      setError(result.error || 'Invalid verification code. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const handleResendOTP = async () => {
+    if (countdown > 0) {
+      return;
+    }
+
+    setError(null);
+    setSuccess(null);
+    
+    const result = await executeWithRateLimit('resend', async () => {
+      setLoading(true);
+      console.log('Resending OTP...');
+      await onResendOTP();
+      return true;
+    });
+
+    if (result.success) {
+      setSuccess('📱 New verification code sent!');
+      startCountdown(60); // Reset countdown
+    } else {
+      setError(result.error || 'Failed to resend code. Please try again.');
+    }
+    setLoading(false);
+  };
+
+  const startCountdown = (seconds: number) => {
+    setCountdown(seconds);
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const resetForm = () => {
     setPhoneNumber('');
+    setOtpCode('');
     setLoginMethod('selection');
     setLoading(false);
     setError(null);
+    setSuccess(null);
+    setCountdown(0);
+    localStorage.removeItem('lastPhoneNumber');
   };
 
   const handleClose = () => {
@@ -102,13 +191,36 @@ const LoginModal: React.FC<LoginModalProps> = ({
     setPhoneNumber(formatted);
   };
 
+  const handleOTPChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.replace(/\D/g, ''); // Only allow digits
+    if (value.length <= 6) {
+      setOtpCode(value);
+    }
+  };
+
+  const goBack = () => {
+    if (loginMethod === 'otp') {
+      setLoginMethod('phone');
+      setOtpCode('');
+      setError(null);
+      setSuccess(null);
+    } else if (loginMethod === 'phone') {
+      setLoginMethod('selection');
+      setPhoneNumber('');
+      setError(null);
+      setSuccess(null);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[70] backdrop-blur-sm p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
         <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-gray-800">
-              {loginMethod === 'selection' ? 'Welcome to Summit Gear Exchange' : 'Sign In with Phone'}
+              {loginMethod === 'selection' && 'Welcome to Summit Gear Exchange'}
+              {loginMethod === 'phone' && 'Sign In with Phone'}
+              {loginMethod === 'otp' && 'Enter Verification Code'}
             </h2>
             <button
               onClick={handleClose}
@@ -122,7 +234,8 @@ const LoginModal: React.FC<LoginModalProps> = ({
         </div>
 
         <div className="p-6">
-          {loginMethod === 'selection' ? (
+          {/* Selection Screen */}
+          {loginMethod === 'selection' && (
             <div className="space-y-4">
               <p className="text-gray-600 text-center mb-6">
                 Choose how you'd like to sign in
@@ -168,10 +281,13 @@ const LoginModal: React.FC<LoginModalProps> = ({
                 By continuing, you agree to our terms and conditions
               </p>
             </div>
-          ) : (
+          )}
+
+          {/* Phone Number Entry Screen */}
+          {loginMethod === 'phone' && (
             <div className="space-y-4">
               <button
-                onClick={() => setLoginMethod('selection')}
+                onClick={goBack}
                 className="flex items-center text-gray-600 hover:text-gray-800 text-sm mb-4"
               >
                 <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -193,11 +309,6 @@ const LoginModal: React.FC<LoginModalProps> = ({
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   maxLength={14}
                 />
-                {error && (
-                  <div className="mt-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-                    {error}
-                  </div>
-                )}
               </div>
 
               <button
@@ -208,19 +319,107 @@ const LoginModal: React.FC<LoginModalProps> = ({
                 {loading ? (
                   <div className="flex items-center justify-center">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Signing In...
+                    Sending SMS...
                   </div>
                 ) : (
-                  'Sign In'
+                  'Send Verification Code'
                 )}
               </button>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
                 <p className="text-sm text-blue-800">
-                  <strong>Quick & Simple:</strong> No verification needed! 
-                  Just enter your phone number and you're ready to start buying and selling gear.
+                  <strong>🔐 Secure SMS Verification:</strong> We'll send you a 6-digit code to verify your phone number. 
+                  Standard message rates may apply.
                 </p>
               </div>
+
+              {/* Hidden reCAPTCHA container */}
+              <div id="recaptcha-container"></div>
+            </div>
+          )}
+
+          {/* OTP Verification Screen */}
+          {loginMethod === 'otp' && (
+            <div className="space-y-4">
+              <button
+                onClick={goBack}
+                className="flex items-center text-gray-600 hover:text-gray-800 text-sm mb-4"
+              >
+                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                Back to phone number
+              </button>
+
+              <div className="text-center mb-4">
+                <div className="text-3xl mb-2">📱</div>
+                <p className="text-gray-600">
+                  Enter the 6-digit code sent to<br />
+                  <strong>{phoneNumber}</strong>
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-2">
+                  Verification Code
+                </label>
+                <input
+                  type="text"
+                  id="otp"
+                  value={otpCode}
+                  onChange={handleOTPChange}
+                  placeholder="123456"
+                  className="w-full px-4 py-3 text-center text-2xl font-mono border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent tracking-widest"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                />
+              </div>
+
+              <button
+                onClick={handleOTPVerification}
+                disabled={loading || otpCode.length !== 6}
+                className="w-full px-6 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                    Verifying...
+                  </div>
+                ) : (
+                  'Verify Code'
+                )}
+              </button>
+
+              <div className="text-center">
+                <button
+                  onClick={handleResendOTP}
+                  disabled={countdown > 0 || loading}
+                  className="text-orange-600 hover:text-orange-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {countdown > 0 ? `Resend code in ${countdown}s` : 'Resend verification code'}
+                </button>
+              </div>
+
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
+                <p className="text-sm text-green-800">
+                  <strong>📨 Check your messages:</strong> The verification code should arrive within 30 seconds. 
+                  If you don't receive it, check your spam folder or try resending.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {success && (
+            <div className="mt-4 text-sm text-green-600 bg-green-50 border border-green-200 rounded-lg p-3">
+              {success}
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+              {error}
             </div>
           )}
         </div>

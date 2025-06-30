@@ -131,14 +131,29 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Legacy store credit collection (for UserAnalyticsModal compatibility)
+    match /storeCredit/{creditId} {
+      // Users can read their own credits
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Admins can read all credits
+      allow read: if isAdmin();
+      // Admins can create/update credits for user management
+      allow write: if isAdmin();
+    }
+
     // Refunds - ADMIN ONLY
     match /refunds/{refundId} {
       allow read, write: if isAdmin();
     }
 
-    // Payments - ADMIN ONLY
+    // Payments - ADMIN and USER ACCESS
     match /payments/{paymentId} {
-      allow read, write: if isAdmin();
+      // Users can read their own payments
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      // Admins can read all payments
+      allow read: if isAdmin();
+      // Admins can create/update payments for user management
+      allow write: if isAdmin();
     }
 
     // ======================================

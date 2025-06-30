@@ -10,6 +10,7 @@ import { storage } from '../config/firebase';
 import TestPerformanceService, { TestPerformanceRun, FeatureTestResult } from '../services/testPerformanceService';
 import { logUserAction } from '../services/firebaseService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
+import { apiService } from '../services/apiService';
 
 // Import the local asset images
 import image1 from '../assets/outlet images/s-l500.webp';
@@ -64,7 +65,7 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
   const { addToCart, removeFromCart, getCartItemCount } = useCart();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'features' | 'tests' | 'firebase' | 'performance'>('features');
+  const [activeTab, setActiveTab] = useState<'features' | 'tests' | 'dataManagement' | 'firebase' | 'performance'>('features');
   const [testSuites, setTestSuites] = useState<TestSuite[]>([]);
   const [runningTests, setRunningTests] = useState(false);
   const [testResults, setTestResults] = useState<Map<string, TestResult>>(new Map());
@@ -79,6 +80,10 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
   
   // State for admin verification
   const [adminStatusVerified, setAdminStatusVerified] = useState(false);
+  
+  // State for clear data modal
+  const [showClearDataModal, setShowClearDataModal] = useState(false);
+  const [clearDataPassword, setClearDataPassword] = useState('');
 
   // Test Performance Hook - conditionally loaded after admin verification
   const {
@@ -1238,200 +1243,26 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
     return uploadedUrls;
   };
 
-  // Generate fake outdoor gear data
+  // Generate fake outdoor gear data via server
   const generateFakeData = async () => {
     if (!user) return;
     
     try {
-      addTestLog('🎯 Starting fake data generation with barcodes and local images...');
+      addTestLog('🚀 Starting test data generation via server...');
       
-      // First, upload the local asset images to Firebase Storage
-      const imageUrls = await uploadAssetImages();
+      const response = await apiService.generateTestData();
       
-      const fakeItems = [
-        {
-          title: "Patagonia Down Sweater Jacket",
-          description: "Lightweight, compressible down insulation perfect for alpine adventures. 800-fill European goose down provides exceptional warmth-to-weight ratio. Features a windproof shell and DWR finish.",
-          price: 229.99,
-          brand: "Patagonia",
-          category: "Apparel",
-          condition: "Excellent",
-          size: "M",
-          gender: "Men",
-          color: "Navy Blue",
-          material: "100% Recycled Polyester Shell, 800-fill Down",
-          images: [imageUrls[0]],
-          sellerUid: "mygrossman.stewart.gmail.com",
-          sellerName: "Stuart Grossman",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "Black Diamond Half Dome Climbing Helmet",
-          description: "Versatile climbing helmet designed for multi-pitch routes and alpine climbing. Lightweight construction with excellent ventilation. Meets CE and UIAA safety standards.",
-          price: 65.99,
-          brand: "Black Diamond",
-          category: "Climbing",
-          condition: "Very Good",
-          size: "M/L",
-          gender: "Unisex",
-          color: "Orange",
-          material: "Polycarbonate Shell, EPS Foam",
-          images: [imageUrls[1]],
-          sellerUid: "mygrossman.stewart.gmail.com",
-          sellerName: "Stuart Grossman",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "Osprey Atmos AG 65L Backpack",
-          description: "Award-winning backpack with Anti-Gravity suspension system. Perfect for multi-day hiking and backpacking trips. Features advanced ventilation and load distribution.",
-          price: 189.99,
-          brand: "Osprey",
-          category: "Hiking",
-          condition: "Good",
-          size: "M",
-          gender: "Men",
-          color: "Graphite Grey",
-          material: "210D Nylon, Aluminum Frame",
-          images: [imageUrls[2]],
-          sellerUid: user.uid,
-          sellerName: user.displayName || "Store Admin",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "Salomon Speedcross 5 Trail Running Shoes",
-          description: "Aggressive grip and precise foothold for technical trail running. Updated outsole pattern and SensiFit technology for secure foot wrap. Perfect for muddy conditions.",
-          price: 119.99,
-          brand: "Salomon",
-          category: "Footwear",
-          condition: "Very Good",
-          size: "10.5",
-          gender: "Men",
-          color: "Black/Red",
-          material: "Synthetic/Textile Upper, Contagrip Outsole",
-          images: [imageUrls[3]],
-          sellerUid: user.uid,
-          sellerName: user.displayName || "Store Admin",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "Arc'teryx Beta AR Jacket",
-          description: "Premium GORE-TEX Pro hardshell for extreme alpine conditions. Durable, waterproof, and breathable protection. Helmet-compatible hood and pit zip ventilation.",
-          price: 399.99,
-          brand: "Arc'teryx",
-          category: "Apparel",
-          condition: "Excellent",
-          size: "L",
-          gender: "Men",
-          color: "Dynasty",
-          material: "GORE-TEX Pro, N80p-X face fabric",
-          images: [imageUrls[4]],
-          sellerUid: user.uid,
-          sellerName: user.displayName || "Store Admin",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "Mammut Zephir Alpine Climbing Harness",
-          description: "Lightweight alpine harness designed for mountaineering and multi-pitch climbing. Minimalist design with four gear loops and adjustable leg loops.",
-          price: 79.99,
-          brand: "Mammut",
-          category: "Climbing",
-          condition: "Good",
-          size: "L",
-          gender: "Unisex",
-          color: "Black/Orange",
-          material: "Polyamide, Polyester",
-          images: [imageUrls[5]],
-          sellerUid: user.uid,
-          sellerName: user.displayName || "Store Admin",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "The North Face Base Layer Top",
-          description: "Merino wool base layer for temperature regulation and odor resistance. Perfect for multi-day adventures. Flatlock seams prevent chafing during high-output activities.",
-          price: 45.99,
-          brand: "The North Face",
-          category: "Apparel",
-          condition: "Very Good",
-          size: "M",
-          gender: "Women",
-          color: "Heather Grey",
-          material: "87% Merino Wool, 13% Nylon",
-          images: [imageUrls[6]],
-          sellerUid: user.uid,
-          sellerName: user.displayName || "Store Admin",
-          status: "live",
-          isTestData: true
-        },
-        {
-          title: "Smartwool PhD Outdoor Hiking Socks",
-          description: "Premium merino wool hiking socks with targeted cushioning and moisture management. Virtually odor-free and naturally temperature regulating.",
-          price: 18.99,
-          brand: "Smartwool",
-          category: "Apparel",
-          condition: "Good",
-          size: "L",
-          gender: "Unisex",
-          color: "Charcoal",
-          material: "56% Merino Wool, 39% Nylon, 5% Elastane",
-          images: [imageUrls[7]],
-          sellerUid: user.uid,
-          sellerName: user.displayName || "Store Admin",
-          status: "live",
-          isTestData: true
-        }
-      ];
-
-      // Helper function to generate barcode data
-      const generateBarcodeData = (itemIndex: number) => {
-        const now = new Date();
-        const timestamp = now.getTime().toString();
-        const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
-        const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
-        const itemIndexStr = itemIndex.toString().padStart(3, '0');
+      if (response.success) {
+        addTestLog(`🎉 Successfully generated ${response.itemCount} test items!`);
+        addTestLog(`📊 All items include realistic outdoor gear data`);
+        addTestLog(`📧 Items distributed between test sellers and admin`);
         
-        // Create a unique barcode combining test prefix, date, time, and item index
-        const barcodeValue = `TEST${dateStr}${timeStr}${itemIndexStr}`.slice(0, 12);
-        return barcodeValue;
-      };
-
-      // Add items to Firebase with barcode data
-      for (let i = 0; i < fakeItems.length; i++) {
-        const item = fakeItems[i];
-        const barcodeData = generateBarcodeData(i);
-        const currentTime = new Date();
-        
-        const itemData = {
-          ...item,
-          createdAt: currentTime,
-          liveAt: currentTime,
-          approvedAt: currentTime,
-          // Barcode fields
-          barcodeData: barcodeData,
-          barcodeGeneratedAt: currentTime,
-          printConfirmedAt: currentTime,
-          // Additional fields
-          sku: `TEST-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          weight: Math.random() * 5 + 0.5, // Random weight between 0.5-5.5 lbs
-          dimensions: `${Math.floor(Math.random() * 20 + 10)}" x ${Math.floor(Math.random() * 15 + 8)}" x ${Math.floor(Math.random() * 8 + 3)}"`,
-          tags: ['test-data', 'outdoor-gear', item.category.toLowerCase()],
-          isTestData: true
-        };
-
-        await addDoc(collection(db, 'items'), itemData);
-        addTestLog(`✅ Created: ${item.title} (${item.brand}) - Barcode: ${barcodeData}`);
+        response.items.forEach((item: any) => {
+          addTestLog(`✅ Created: ${item.title} (${item.brand})`);
+        });
+      } else {
+        addTestLog(`❌ Error: ${response.message}`);
       }
-
-      addTestLog(`🎉 Successfully generated ${fakeItems.length} test items with barcodes and images!`);
-      addTestLog(`📊 All items include your local asset images and generated barcode labels`);
-      addTestLog(`🖼️ Images uploaded to Firebase Storage "Test Images" - visible on live version`);
-      addTestLog(`📧 2 items assigned to: mygrossman.stewart.gmail.com`);
-      addTestLog(`🏪 6 items assigned to: Store Admin (${user.displayName})`);
       
     } catch (error) {
       console.error('Error generating fake data:', error);
@@ -1439,35 +1270,95 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
     }
   };
 
-  // Remove all test data
+  // Remove all test data via server
   const removeTestData = async () => {
     if (!user) return;
     
     try {
-      addTestLog('🗑️ Starting test data removal...');
+      addTestLog('🗑️ Starting test data removal via server...');
       
-      const itemsRef = collection(db, 'items');
-      const testDataQuery = query(itemsRef, where('isTestData', '==', true));
-      const snapshot = await getDocs(testDataQuery);
+      const response = await apiService.removeTestData();
       
-      let deletedCount = 0;
-      const deletePromises = snapshot.docs.map(async (document) => {
-        const itemData = document.data();
-        await deleteDoc(doc(db, 'items', document.id));
-        addTestLog(`🗑️ Deleted: ${itemData.title} (${itemData.brand || 'Unknown Brand'})`);
-        deletedCount++;
-      });
-      
-      await Promise.all(deletePromises);
-      addTestLog(`✅ Successfully removed ${deletedCount} test items from database`);
-      
-      if (deletedCount === 0) {
-        addTestLog('ℹ️ No test data found to remove');
+      if (response.success) {
+        addTestLog(`✅ Successfully removed ${response.deletedCount} test items from database`);
+        
+        response.deletedItems.forEach((item: any) => {
+          addTestLog(`🗑️ Deleted: ${item.title} (${item.brand})`);
+        });
+        
+        if (response.deletedCount === 0) {
+          addTestLog('ℹ️ No test data found to remove');
+        }
+      } else {
+        addTestLog(`❌ Error: ${response.message}`);
       }
       
     } catch (error) {
       console.error('Error removing test data:', error);
       addTestLog(`❌ Error removing test data: ${error}`);
+    }
+  };
+
+  // Clear all data with password protection
+  const clearAllData = async () => {
+    if (!user || !clearDataPassword) return;
+    
+    try {
+      addTestLog('🚨 Starting CLEAR ALL DATA operation...');
+      addTestLog('⚠️ WARNING: This will delete ALL data from the database!');
+      
+      const response = await apiService.clearAllData(clearDataPassword);
+      
+      if (response.success) {
+        addTestLog(`🗑️ CLEARED ALL DATA: ${response.totalDeleted} documents deleted`);
+        addTestLog(`⚠️ ${response.warning}`);
+        
+        Object.entries(response.summary).forEach(([collection, count]) => {
+          addTestLog(`📋 ${collection}: ${count} documents deleted`);
+        });
+        
+        setShowClearDataModal(false);
+        setClearDataPassword('');
+      } else {
+        addTestLog(`❌ Error: ${response.message}`);
+      }
+      
+    } catch (error) {
+      console.error('Error clearing all data:', error);
+      addTestLog(`❌ Error clearing all data: ${error}`);
+    }
+  };
+
+  // Create sample purchase data for Mary
+  const createSampleData = async () => {
+    if (!user) return;
+    
+    try {
+      addTestLog('🛍️ Creating sample purchase data for Mary...');
+      addTestLog('📦 Item: Outdoor Research Bug Out Mosquito Magnet Hat');
+      addTestLog('👤 Customer: mary.pittmancasa@gmail.com');
+      
+      const response = await apiService.createSampleData();
+      
+      if (response.success) {
+        addTestLog(`✅ Sample data created successfully!`);
+        addTestLog(`📋 Order ID: ${response.orderId}`);
+        addTestLog(`💳 Transaction ID: ${response.transactionId}`);
+        addTestLog(`📧 Customer: ${response.customerEmail}`);
+        addTestLog(`🎯 Item: ${response.details.item}`);
+        addTestLog(`💰 Price: $${response.details.price}`);
+        addTestLog(`🚚 Shipping: $${response.details.shippingCost}`);
+        addTestLog(`💵 Total: $${response.details.totalAmount}`);
+        addTestLog(`📦 Tracking: ${response.details.trackingNumber}`);
+        addTestLog(`📊 Status: ${response.details.status}`);
+        addTestLog(`🎉 Mary can now see this purchase in her account!`);
+      } else {
+        addTestLog(`❌ Error: ${response.message}`);
+      }
+      
+    } catch (error) {
+      console.error('Error creating sample data:', error);
+      addTestLog(`❌ Error creating sample data: ${error}`);
     }
   };
 
@@ -1679,6 +1570,16 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
               }`}
             >
               🧪 Live Tests ({testSuites.length} suites)
+            </button>
+            <button
+              onClick={() => setActiveTab('dataManagement')}
+              className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'dataManagement'
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              📊 Data Management
             </button>
             <button
               onClick={() => setActiveTab('firebase')}
@@ -2126,8 +2027,8 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
             </div>
           )}
 
-          {/* Firebase Rules Tab */}
-          {activeTab === 'firebase' && (
+          {/* Data Management Tab */}
+          {activeTab === 'dataManagement' && (
             <div className="p-6">
               {/* Test Data Management Section */}
               <div className="mb-8 bg-gradient-to-r from-blue-50 to-green-50 rounded-xl border border-blue-200 p-6">
@@ -2211,6 +2112,64 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
                       )}
                     </button>
                   </div>
+
+                  {/* Create Sample Purchase Data */}
+                  <div className="bg-white rounded-lg p-4 border border-blue-300">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                      </svg>
+                      <h4 className="font-semibold text-blue-900">🛍️ Create Mary's Purchase Data</h4>
+                    </div>
+                    <p className="text-sm text-blue-700 mb-4">
+                      Creates a sample purchase record for <strong>mary.pittmancasa@gmail.com</strong> of a mosquito magnet hat 
+                      with complete order details, tracking info, and shipping status. This creates real database records 
+                      that will persist and be viewable in the user's purchase history.
+                    </p>
+                    <button
+                      onClick={() => throttledAction('create_sample_data', createSampleData)}
+                      disabled={isActionDisabled('create_sample_data') || !user}
+                      className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg hover:from-blue-600 hover:to-blue-700 disabled:bg-gray-400 transition-all font-medium flex items-center justify-center gap-2"
+                    >
+                      {isActionDisabled('create_sample_data') ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                          </svg>
+                          Create Mary's Purchase
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Clear All Data */}
+                  <div className="bg-white rounded-lg p-4 border-2 border-red-300">
+                    <div className="flex items-center gap-2 mb-3">
+                      <svg className="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 15c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      <h4 className="font-semibold text-red-900">⚠️ DANGER ZONE - Clear All Data</h4>
+                    </div>
+                    <p className="text-sm text-red-700 mb-4">
+                      <strong>PERMANENTLY DELETES ALL DATABASE CONTENT</strong> including items, payments, refunds, and logs. 
+                      This action is <strong>IRREVERSIBLE</strong> and requires password "123" for safety.
+                    </p>
+                    <button
+                      onClick={() => setShowClearDataModal(true)}
+                      disabled={!user}
+                      className="w-full px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 disabled:bg-gray-400 transition-all font-medium flex items-center justify-center gap-2 border-2 border-red-800"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 15c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      🚨 CLEAR ALL DATABASE DATA
+                    </button>
+                  </div>
                 </div>
 
                 {/* Test Data Info */}
@@ -2239,7 +2198,12 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
                   </div>
                 </div>
               </div>
+            </div>
+          )}
 
+          {/* Firebase Rules Tab */}
+          {activeTab === 'firebase' && (
+            <div className="p-6">
               <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900">Firebase Security Rules</h3>
                 <p className="text-gray-600">Current security rules configuration for Firestore database</p>
@@ -2937,6 +2901,74 @@ const ApplicationTestModal: React.FC<ApplicationTestModalProps> = ({ isOpen, onC
           </div>
         </div>
       )}
+
+      {/* Clear All Data Confirmation Modal */}
+      {showClearDataModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[90] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <svg className="w-6 h-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 15c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-red-900">⚠️ DANGER: Clear All Data</h3>
+                  <p className="text-sm text-red-700">This action cannot be undone!</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <h4 className="font-semibold text-red-900 mb-2">This will permanently delete:</h4>
+                <ul className="text-sm text-red-800 space-y-1">
+                  <li>• All consignment items</li>
+                  <li>• All payment records</li>
+                  <li>• All refund transactions</li>
+                  <li>• All admin actions</li>
+                  <li>• All user activity logs</li>
+                  <li>• All store credit transactions</li>
+                </ul>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Enter password "123" to confirm:
+                </label>
+                <input
+                  type="password"
+                  value={clearDataPassword}
+                  onChange={(e) => setClearDataPassword(e.target.value)}
+                  placeholder="Enter password..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowClearDataModal(false);
+                    setClearDataPassword('');
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => throttledAction('clear_all_data', clearAllData)}
+                  disabled={clearDataPassword !== '123' || isActionDisabled('clear_all_data')}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isActionDisabled('clear_all_data') ? 'Clearing...' : 'DELETE ALL DATA'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3015,5 +3047,7 @@ const getTestCriteria = (feature: Feature): string[] => {
     'Security requirements are satisfied'
   ];
 };
+
+
 
 export default ApplicationTestModal;

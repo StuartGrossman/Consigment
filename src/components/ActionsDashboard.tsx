@@ -143,10 +143,10 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
     if (searchQuery) {
       const searchLower = searchQuery.toLowerCase();
       filtered = filtered.filter(action => 
-        action.userName.toLowerCase().includes(searchLower) ||
-        action.userEmail.toLowerCase().includes(searchLower) ||
-        action.action.toLowerCase().includes(searchLower) ||
-        action.details.toLowerCase().includes(searchLower) ||
+        (action.userName && action.userName.toLowerCase().includes(searchLower)) ||
+        (action.userEmail && action.userEmail.toLowerCase().includes(searchLower)) ||
+        (action.action && action.action.toLowerCase().includes(searchLower)) ||
+        (action.details && action.details.toLowerCase().includes(searchLower)) ||
         (action.itemTitle && action.itemTitle.toLowerCase().includes(searchLower))
       );
     }
@@ -234,7 +234,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
             <>
               <button
                 onClick={() => setShowBanModal(true)}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728" />
@@ -243,7 +243,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
               </button>
               <button
                 onClick={() => setShowAdminManageModal(true)}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />

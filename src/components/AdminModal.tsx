@@ -3,6 +3,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import BarcodeGenerationModal from './BarcodeGenerationModal';
+import BulkBarcodeGenerationModal from './BulkBarcodeGenerationModal';
 import { apiService } from '../services/apiService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 
@@ -31,6 +32,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
+  const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
+  const [showBulkBarcodeModal, setShowBulkBarcodeModal] = useState(false);
 
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -102,30 +105,14 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   // Bulk actions
   const handleBulkApprove = async () => {
     if (selectedItems.size === 0) return;
+    setShowBulkApproveModal(true);
+  };
+
+  const confirmBulkApprove = async () => {
+    if (selectedItems.size === 0) return;
     
-    await throttledAction('bulk-approve', async () => {
-      setProcessingItemId('bulk');
-      let successCount = 0;
-      let failCount = 0;
-      
-      try {
-        await apiService.bulkApproveItems(Array.from(selectedItems));
-        successCount = selectedItems.size;
-      } catch (error) {
-        console.error('Failed to bulk approve items:', error);
-        failCount = selectedItems.size;
-      }
-      
-      // Remove successful items from the list
-      if (successCount > 0) {
-        setPendingItems(prev => prev.filter(item => !selectedItems.has(item.id)));
-      }
-      
-      setModalMessage(`${successCount} items approved successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
-      setShowSuccessModal(true);
-      clearSelection();
-      setProcessingItemId(null);
-    });
+    setShowBulkApproveModal(false);
+    setShowBulkBarcodeModal(true);
   };
 
   const handleBulkReject = async () => {
@@ -361,7 +348,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
                     
                     {/* Images */}
                     <div className="mobile-admin-item-image">
-                      {item.images.length > 0 ? (
+                      {(item.images && item.images.length > 0) ? (
                         <div className="relative">
                           <img
                             src={item.images[0]}
@@ -376,9 +363,12 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
                         </div>
                       ) : (
                         <div className="w-32 h-32 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
+                          <div className="text-center">
+                            <svg className="w-8 h-8 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p className="text-xs text-gray-500">No Image</p>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -633,6 +623,70 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           onClose={handleBarcodeModalClose}
           item={selectedItem}
           onConfirmPrint={handleBarcodeConfirmed}
+        />
+      )}
+
+      {/* Bulk Approve Confirmation Modal */}
+      {showBulkApproveModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex items-center mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <span className="text-green-600 text-xl">📄</span>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900">Bulk Approve Items</h3>
+            </div>
+            <p className="text-gray-600 mb-6">
+              You are about to approve <span className="font-medium">{selectedItems.size} items</span>. 
+              This will generate barcode labels for each item that must be printed.
+              Each item will be available to employees for 3 days before going live to all customers.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-6">
+              <div className="flex">
+                <svg className="w-5 h-5 text-blue-600 mt-0.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-sm text-blue-800">
+                  <strong>Note:</strong> Barcode generation may take a few moments for multiple items.
+                  Please wait for the process to complete before printing.
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowBulkApproveModal(false)}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmBulkApprove}
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+              >
+                Generate {selectedItems.size} Barcode{selectedItems.size > 1 ? 's' : ''} & Approve
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Barcode Generation Modal */}
+      {showBulkBarcodeModal && (
+        <BulkBarcodeGenerationModal
+          isOpen={showBulkBarcodeModal}
+          onClose={() => {
+            setShowBulkBarcodeModal(false);
+            clearSelection();
+          }}
+          items={pendingItems.filter(item => selectedItems.has(item.id))}
+          onComplete={(processedItems: ConsignmentItem[]) => {
+            // Remove approved items from pending list
+            setPendingItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+            clearSelection();
+            setShowBulkBarcodeModal(false);
+            setModalMessage(`Successfully approved ${processedItems.length} items with barcodes generated. Labels are ready for printing.`);
+            setShowSuccessModal(true);
+          }}
         />
       )}
     </div>
