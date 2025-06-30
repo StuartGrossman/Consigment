@@ -230,13 +230,19 @@ export const useAuth = () => {
       if (error.code === 'auth/invalid-phone-number') {
         throw new Error('Please enter a valid phone number');
       } else if (error.code === 'auth/too-many-requests') {
-        throw new Error('Too many requests. Please try again later.');
+        throw new Error('⏰ Too many login attempts. Please wait 15-30 minutes before trying again, or try using Google sign-in instead.');
       } else if (error.code === 'auth/captcha-check-failed') {
         throw new Error('reCAPTCHA verification failed. Please try again.');
       } else if (error.code === 'auth/invalid-app-credential') {
         console.error('🚨 FIREBASE CONFIG ISSUE: Phone authentication may not be enabled in Firebase Console');
         console.error('🔗 Check: https://console.firebase.google.com/project/consignment-store-4a564/authentication/providers');
         throw new Error('Phone authentication not properly configured. Please check Firebase Console.');
+      } else if (error.code === 'auth/quota-exceeded') {
+        throw new Error('🚫 Daily SMS limit reached. Please try again tomorrow or use Google sign-in.');
+      } else if (error.code === 'auth/app-not-authorized') {
+        throw new Error('📱 Phone authentication not authorized for this app. Please use Google sign-in.');
+      } else if (error.code === 'auth/operation-not-allowed') {
+        throw new Error('📵 Phone authentication is temporarily disabled. Please use Google sign-in.');
       } else {
         throw new Error(`Phone sign-in failed: ${error.message}`);
       }
