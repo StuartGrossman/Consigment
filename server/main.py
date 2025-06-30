@@ -3432,6 +3432,7 @@ async def issue_refund(request: Request):
             'processedAt': datetime.now(timezone.utc),
             'originalBuyerId': item_data.get('buyerId', ''),
             'originalBuyerName': item_data.get('buyerName') or item_data.get('buyerInfo', {}).get('name', 'Unknown Buyer'),
+            'originalBuyerEmail': item_data.get('buyerEmail') or item_data.get('buyerInfo', {}).get('email', ''),
             'sellerName': item_data.get('sellerName', 'Unknown Seller'),
             'sellerId': item_data.get('sellerId', 'unknown_seller'),
             'saleType': item_data.get('saleType', 'unknown'),
@@ -3441,9 +3442,41 @@ async def issue_refund(request: Request):
         # Add refund record to Firebase
         db.collection('refunds').add(refund_data)
         
-        # Update item status back to approved and clear sale information
+        # CREATE STORE CREDIT for the buyer
+        buyer_id = item_data.get('buyerId')
+        buyer_email = item_data.get('buyerEmail') or item_data.get('buyerInfo', {}).get('email', '')
+        refund_amount = refund_data['refundAmount']
+        
+        if buyer_id and refund_amount > 0:
+            # Update buyer's store credit
+            buyer_ref = db.collection('users').document(buyer_id)
+            buyer_doc = buyer_ref.get()
+            
+            if buyer_doc.exists:
+                current_store_credit = buyer_doc.to_dict().get('storeCredit', 0)
+                new_store_credit = current_store_credit + refund_amount
+                buyer_ref.update({'storeCredit': new_store_credit})
+                
+                # Create store credit transaction record
+                store_credit_data = {
+                    'userId': buyer_id,
+                    'userName': refund_data['originalBuyerName'],
+                    'userEmail': buyer_email,
+                    'amount': refund_amount,
+                    'type': 'refund',
+                    'description': f'Refund for "{item_data.get("title", "Unknown Item")}" - {refund_reason.strip()}',
+                    'createdAt': datetime.now(timezone.utc),
+                    'relatedItemId': item_id,
+                    'refundReason': refund_reason.strip(),
+                    'processedBy': admin_user_id
+                }
+                db.collection('storeCredit').add(store_credit_data)
+                
+                logger.info(f"Added ${refund_amount} store credit to user {buyer_id}")
+        
+        # Update item status back to PENDING and clear sale information
         item_ref.update({
-            'status': 'approved',
+            'status': 'pending',  # Changed from 'approved' to 'pending'
             'soldAt': None,
             'soldPrice': None,
             'buyerId': None,
@@ -3451,34 +3484,115 @@ async def issue_refund(request: Request):
             'buyerEmail': None,
             'buyerInfo': None,
             'saleType': None,
+            'paymentStatus': None,
+            'trackingNumber': None,
+            'shippedAt': None,
+            'shippingStatus': None,
             'refundedAt': datetime.now(timezone.utc),
             'refundReason': refund_reason.strip(),
+            'returnedToShop': True,  # Flag to indicate item was returned
             'lastUpdated': datetime.now(timezone.utc)
         })
         
-        # Log admin action
+        # NOTIFY SELLER about item return
+        seller_id = item_data.get('sellerId')
+        if seller_id:
+            seller_notification = {
+                'userId': seller_id,
+                'type': 'item_returned',
+                'title': 'Item Returned to Shop',
+                'message': f'Your item "{item_data.get("title", "Unknown")}" has been returned to the shop due to a refund.',
+                'details': f'Reason: {refund_reason.strip()}',
+                'itemId': item_id,
+                'itemTitle': item_data.get('title', 'Unknown'),
+                'createdAt': datetime.now(timezone.utc),
+                'read': False,
+                'priority': 'high'
+            }
+            db.collection('notifications').add(seller_notification)
+        
+        # Log admin action with enhanced details
         admin_action = {
             'adminId': admin_user_id,
             'action': 'item_refunded',
-            'details': f'Issued refund for "{item_data.get("title", "Unknown")}" - Reason: {refund_reason.strip()}',
+            'details': f'Issued refund for "{item_data.get("title", "Unknown")}" - Reason: {refund_reason.strip()}. Item returned to pending status.',
             'itemId': item_id,
             'refundAmount': refund_data['refundAmount'],
+            'buyerId': buyer_id,
+            'sellerId': seller_id,
+            'storeCreditAdded': refund_amount if buyer_id else 0,
             'timestamp': datetime.now(timezone.utc)
         }
         db.collection('adminActions').add(admin_action)
         
-        logger.info(f"Successfully processed refund for item {item_id}")
+        logger.info(f"Successfully processed refund for item {item_id} - ${refund_amount} store credit added to buyer {buyer_id}")
         
         return {
             "success": True,
-            "message": "Refund processed successfully",
+            "message": "Refund processed successfully - item returned to pending status and store credit issued",
             "itemId": item_id,
             "refundAmount": refund_data['refundAmount'],
+            "storeCreditAdded": refund_amount if buyer_id else 0,
+            "buyerNotified": bool(buyer_id),
+            "sellerNotified": bool(seller_id),
+            "itemStatus": "pending",
             "processedAt": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:
         logger.error(f"Error processing refund: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/user/store-credit")
+async def get_user_store_credit(request: Request):
+    """Get store credit balance and transaction history for authenticated user"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        user_email = decoded_token.get('email', '')
+        
+        logger.info(f"Getting store credit for user {user_id} ({user_email})")
+        
+        # Get user's current store credit balance
+        user_doc = db.collection('users').document(user_id).get()
+        current_balance = 0
+        if user_doc.exists:
+            current_balance = user_doc.to_dict().get('storeCredit', 0)
+        
+        # Get store credit transaction history
+        transactions = []
+        transactions_query = db.collection('storeCredit').where('userId', '==', user_id).order_by('createdAt', direction='DESCENDING').get()
+        
+        for transaction_doc in transactions_query:
+            transaction_data = transaction_doc.to_dict()
+            transactions.append({
+                'id': transaction_doc.id,
+                'amount': transaction_data.get('amount', 0),
+                'type': transaction_data.get('type', 'unknown'),
+                'description': transaction_data.get('description', 'No description'),
+                'createdAt': transaction_data.get('createdAt'),
+                'relatedItemId': transaction_data.get('relatedItemId'),
+                'refundReason': transaction_data.get('refundReason')
+            })
+        
+        logger.info(f"Found ${current_balance} store credit balance and {len(transactions)} transactions for user {user_email}")
+        
+        return {
+            "success": True,
+            "currentBalance": current_balance,
+            "transactions": transactions,
+            "totalTransactions": len(transactions)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting user store credit: {e}")
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

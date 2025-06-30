@@ -23,6 +23,7 @@ import UserAnalytics from './UserAnalytics';
 import InventoryDashboard from './InventoryDashboard';
 import ActionsDashboard from './ActionsDashboard';
 import MyPendingItemsModal from './MyPendingItemsModal';
+import StoreCreditModal from './StoreCreditModal';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
 
@@ -49,6 +50,7 @@ const Home: React.FC = () => {
     const [isApplicationTestModalOpen, setIsApplicationTestModalOpen] = useState(false);
     const [isSoldItemsModalOpen, setIsSoldItemsModalOpen] = useState(false);
     const [isMyPendingItemsModalOpen, setIsMyPendingItemsModalOpen] = useState(false);
+    const [isStoreCreditModalOpen, setIsStoreCreditModalOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
@@ -1302,6 +1304,19 @@ const Home: React.FC = () => {
                                                             📊 {isAdmin ? 'Sales Dashboard' : 'My User History'}
                                                 </button>
 
+                                                {/* Store Credit Button - Only for non-admin users */}
+                                                {!isAdmin && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsStoreCreditModalOpen(true);
+                                                            setUserMenuOpen(false);
+                                                        }}
+                                                        className="mobile-user-menu-item mobile-user-menu-item-default"
+                                                    >
+                                                        💳 Store Credit
+                                                    </button>
+                                                )}
+
                                                 {isAdmin && (
                                                     <>
                                                         <button
@@ -2192,6 +2207,11 @@ const Home: React.FC = () => {
                 isOpen={isMyPendingItemsModalOpen}
                 onClose={handleMyPendingItemsModalClose}
                 user={user}
+            />
+
+            <StoreCreditModal 
+                isOpen={isStoreCreditModalOpen}
+                onClose={() => setIsStoreCreditModalOpen(false)}
             />
 
             <Checkout 

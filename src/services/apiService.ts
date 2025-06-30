@@ -596,6 +596,10 @@ class ApiService {
         message: string;
         itemId: string;
         refundAmount: number;
+        storeCreditAdded: number;
+        buyerNotified: boolean;
+        sellerNotified: boolean;
+        itemStatus: string;
         processedAt: string;
     }> {
         try {
@@ -607,7 +611,21 @@ class ApiService {
                     refundPassword,
                 }),
             });
-            return await response.json();
+            
+            const result = await response.json();
+            
+            // Log the refund action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'refund_issued', 
+                    `Issued refund: ${refundReason} - $${result.refundAmount} store credit added, item returned to pending`,
+                    itemId
+                );
+            }
+            
+            return result;
         } catch (error) {
             console.error('❌ Failed to issue refund:', error);
             throw error;
@@ -709,6 +727,23 @@ class ApiService {
             return await response.json();
         } catch (error) {
             console.error('❌ Failed to get user purchases:', error);
+            throw error;
+        }
+    }
+
+    async getUserStoreCredit(): Promise<{
+        success: boolean;
+        currentBalance: number;
+        transactions: any[];
+        totalTransactions: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/user/store-credit', {
+                method: 'GET',
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get user store credit:', error);
             throw error;
         }
     }

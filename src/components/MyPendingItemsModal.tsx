@@ -25,7 +25,7 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
   }, [isOpen, user]);
 
   useEffect(() => {
-    // Filter to show only pending and rejected items
+    // Filter to show pending, rejected, and returned items
     const filtered = myItems.filter(item => 
       item.status === 'pending' || item.status === 'rejected'
     );
@@ -175,6 +175,9 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
   const getStatusDescription = (item: ConsignmentItem) => {
     switch (item.status) {
       case 'pending':
+        if (item.returnedToShop) {
+          return '🔄 Your item has been returned to the shop due to a refund and is now pending re-review.';
+        }
         return 'Your item is waiting for admin review. Please bring the physical item to the front desk.';
       case 'rejected':
         return 'Your item was rejected during review. You can edit and resubmit it.';
@@ -193,7 +196,7 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800">My Pending Items</h2>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                Track your pending and rejected items • Click to edit items
+                Track your pending, rejected, and returned items • Click to edit items
               </p>
             </div>
             <button
@@ -219,7 +222,7 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-6m-10 0h6m0 0L12 18l-4-5" />
                 </svg>
               </div>
-              <p className="text-gray-500 text-lg">No pending or rejected items</p>
+              <p className="text-gray-500 text-lg">No pending, rejected, or returned items</p>
               <p className="text-gray-400 text-sm mt-2">Items that are approved, live, or sold are not shown here</p>
             </div>
           ) : (
@@ -289,6 +292,19 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                             <p className="text-sm text-red-800">{item.rejectionReason}</p>
                             <p className="text-xs text-red-600 mt-2">
                               You can edit and resubmit this item, or contact us if you have questions.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Returned Item Notice */}
+                        {item.returnedToShop && item.refundReason && (
+                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mt-3">
+                            <h5 className="text-sm font-medium text-orange-900 mb-1">🔄 Item Returned to Shop:</h5>
+                            <p className="text-sm text-orange-800 mb-2">
+                              This item was returned due to a customer refund: {item.refundReason}
+                            </p>
+                            <p className="text-xs text-orange-600">
+                              Your item is now back in our inventory for potential re-sale. No action needed from you.
                             </p>
                           </div>
                         )}

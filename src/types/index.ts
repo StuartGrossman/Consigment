@@ -66,6 +66,10 @@ export interface ConsignmentItem {
   discountAppliedAt?: Date; // When discount was applied
   discountReason?: string; // Reason for discount (e.g., "Shelf time over 30 days")
   originalPrice?: number; // Store original price when discount is applied
+  // Refund tracking
+  refundedAt?: Date; // When item was refunded
+  refundReason?: string; // Reason for refund
+  returnedToShop?: boolean; // Flag indicating item was returned to shop due to refund
 }
 
 export interface User {
