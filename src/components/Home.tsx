@@ -24,6 +24,7 @@ import InventoryDashboard from './InventoryDashboard';
 import ActionsDashboard from './ActionsDashboard';
 import MyPendingItemsModal from './MyPendingItemsModal';
 import StoreCreditModal from './StoreCreditModal';
+import POSModal from './POSModal';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
 
@@ -51,6 +52,7 @@ const Home: React.FC = () => {
     const [isSoldItemsModalOpen, setIsSoldItemsModalOpen] = useState(false);
     const [isMyPendingItemsModalOpen, setIsMyPendingItemsModalOpen] = useState(false);
     const [isStoreCreditModalOpen, setIsStoreCreditModalOpen] = useState(false);
+    const [isPOSModalOpen, setIsPOSModalOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
@@ -920,6 +922,32 @@ const Home: React.FC = () => {
                                     {/* Individual buttons for large screens (1100px+) */}
                                     <div className="hidden xl:flex xl:gap-2">
                                         <button
+                                            onClick={() => setIsPOSModalOpen(true)}
+                                            className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
+                                            title="Scan Items (POS)"
+                                        >
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                className="h-6 w-6"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                            >
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                                                />
+                                                <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    strokeWidth={2}
+                                                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                                                />
+                                            </svg>
+                                        </button>
+                                        <button
                                             onClick={handleAdminModal}
                                             className="desktop-button-secondary relative"
                                         >
@@ -966,6 +994,21 @@ const Home: React.FC = () => {
                                                 <div className="py-1">
                                                     <button
                                                         onClick={() => {
+                                                            setIsPOSModalOpen(true);
+                                                            setAdminMenuOpen(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            </svg>
+                                                            <span>Scan Items (POS)</span>
+                                                        </div>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
                                                             handleAdminModal();
                                                             setAdminMenuOpen(false);
                                                         }}
@@ -1009,6 +1052,16 @@ const Home: React.FC = () => {
 
                                     {/* Mobile/small screens - show icons only */}
                                     <div className="flex gap-1 sm:hidden">
+                                        <button
+                                            onClick={() => setIsPOSModalOpen(true)}
+                                            className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
+                                            title="Scan Items (POS)"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            </svg>
+                                        </button>
                                         <button
                                             onClick={handleAdminModal}
                                             className="desktop-button-secondary relative p-2"
@@ -2212,6 +2265,11 @@ const Home: React.FC = () => {
             <StoreCreditModal 
                 isOpen={isStoreCreditModalOpen}
                 onClose={() => setIsStoreCreditModalOpen(false)}
+            />
+
+            <POSModal 
+                isOpen={isPOSModalOpen}
+                onClose={() => setIsPOSModalOpen(false)}
             />
 
             <Checkout 

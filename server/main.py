@@ -3874,6 +3874,355 @@ async def create_sample_data(request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.get("/api/admin/debug-barcodes")
+async def debug_barcodes(admin_data: dict = Depends(verify_admin_access)):
+    """Debug endpoint to check items with barcodes"""
+    try:
+        logger.info("🔍 Debug: Fetching all items with barcode data...")
+        
+        # Get all items (or recent ones)
+        items_ref = db.collection('items').limit(20).stream()
+        items_with_barcodes = []
+        items_without_barcodes = []
+        
+        for doc in items_ref:
+            item = doc.to_dict()
+            item['id'] = doc.id
+            
+            barcode_data = item.get('barcodeData')
+            if barcode_data:
+                items_with_barcodes.append({
+                    'id': item['id'],
+                    'title': item.get('title', 'Unknown'),
+                    'barcodeData': barcode_data,
+                    'status': item.get('status', 'Unknown'),
+                    'createdAt': item.get('createdAt', 'Unknown')
+                })
+            else:
+                items_without_barcodes.append({
+                    'id': item['id'],
+                    'title': item.get('title', 'Unknown'),
+                    'status': item.get('status', 'Unknown'),
+                    'createdAt': item.get('createdAt', 'Unknown')
+                })
+        
+        return {
+            "success": True,
+            "message": f"Found {len(items_with_barcodes)} items with barcodes, {len(items_without_barcodes)} without",
+            "items_with_barcodes": items_with_barcodes,
+            "items_without_barcodes": items_without_barcodes,
+            "total_checked": len(items_with_barcodes) + len(items_without_barcodes)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error in debug endpoint: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Debug failed: {str(e)}"
+        )
+
+@app.get("/api/admin/lookup-item-by-barcode/{barcode_data}")
+async def lookup_item_by_barcode(barcode_data: str, admin_data: dict = Depends(verify_admin_access)):
+    """Lookup item by barcode data for POS system"""
+    try:
+        logger.info(f"🔍 Looking up item by barcode: '{barcode_data}' (length: {len(barcode_data)})")
+        
+        # Debug: Check recent items with barcodes
+        logger.info("🔍 Checking recent items with barcodes...")
+        recent_items = db.collection('items').where('status', 'in', ['approved', 'live']).limit(10).stream()
+        recent_count = 0
+        
+        for doc in recent_items:
+            item = doc.to_dict()
+            recent_count += 1
+            barcode = item.get('barcodeData', 'NO_BARCODE')
+            logger.info(f"  📊 Item {recent_count}: {item.get('title', 'Unknown')[:30]}... | Barcode: {barcode} | Status: {item.get('status')}")
+            
+            # Check if this matches our search (case-insensitive)
+            if barcode.lower() == barcode_data.lower():
+                logger.info(f"  ✅ MATCH FOUND (case-insensitive): {barcode}")
+        
+        logger.info(f"🔍 Found {recent_count} recent approved/live items to check")
+        
+        # Query items collection for the barcode (exact match)
+        items_ref = db.collection('items')
+        query = items_ref.where('barcodeData', '==', barcode_data).limit(1)
+        docs = query.stream()
+        
+        item_data = None
+        for doc in docs:
+            item_data = doc.to_dict()
+            item_data['id'] = doc.id
+            logger.info(f"✅ Exact match found: {item_data.get('title')} | Status: {item_data.get('status')}")
+            break
+        
+        # If no exact match, try case-insensitive search
+        if not item_data:
+            logger.info(f"🔍 No exact match, trying case-insensitive search...")
+            all_items_query = items_ref.where('status', 'in', ['approved', 'live']).stream()
+            
+            for doc in all_items_query:
+                item = doc.to_dict()
+                stored_barcode = item.get('barcodeData', '')
+                if stored_barcode.lower() == barcode_data.lower():
+                    item_data = item
+                    item_data['id'] = doc.id
+                    logger.info(f"✅ Case-insensitive match found: {stored_barcode} -> {item_data.get('title')}")
+                    break
+        
+        if not item_data:
+            logger.warning(f"❌ No item found with barcode: {barcode_data}")
+            
+            # Enhanced debug info
+            logger.info("🔍 Debug: Searching for any items with similar barcodes...")
+            similar_query = items_ref.stream()
+            similar_count = 0
+            
+            for doc in similar_query:
+                item = doc.to_dict()
+                stored_barcode = item.get('barcodeData', '')
+                if stored_barcode and barcode_data.lower() in stored_barcode.lower():
+                    similar_count += 1
+                    logger.info(f"  📋 Similar: {stored_barcode} | {item.get('title', 'Unknown')[:30]}...")
+                    if similar_count >= 5:  # Limit output
+                        break
+            
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No item found with barcode: {barcode_data}. Checked {recent_count} recent items."
+            )
+        
+        # Check if item is available for sale
+        if item_data.get('status') not in ['approved', 'live']:
+            logger.warning(f"Item found but not available: {item_data.get('status')}")
+            return {
+                "success": False,
+                "message": f"Item '{item_data.get('title', 'Unknown')}' is not available for sale (Status: {item_data.get('status', 'Unknown')})",
+                "item": item_data,
+                "available": False
+            }
+        
+        logger.info(f"✅ Found available item: {item_data.get('title')} - ${item_data.get('price')}")
+        
+        return {
+            "success": True,
+            "message": "Item found and available",
+            "item": item_data,
+            "available": True
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error looking up item by barcode: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to lookup item: {str(e)}"
+        )
+
+@app.post("/api/admin/process-inhouse-sale")
+async def process_inhouse_sale(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Process in-house POS sale"""
+    try:
+        logger.info("=== PROCESSING IN-HOUSE POS SALE ===")
+        
+        data = await request.json()
+        cart_items = data.get('cart_items', [])
+        customer_info = data.get('customer_info', {})
+        payment_method = data.get('payment_method', 'cash')  # 'cash' or 'card'
+        payment_amount = data.get('payment_amount', 0)
+        admin_id = admin_data.get('uid')
+        
+        if not cart_items:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No items in cart"
+            )
+        
+        logger.info(f"Processing {len(cart_items)} items for in-house sale")
+        logger.info(f"Payment method: {payment_method}, Amount: ${payment_amount}")
+        
+        # Validate items and calculate total
+        validated_items = []
+        total_amount = 0
+        
+        for cart_item in cart_items:
+            item_id = cart_item.get('item_id')
+            quantity = cart_item.get('quantity', 1)
+            
+            # Get current item data
+            item_ref = db.collection('items').document(item_id)
+            item_doc = item_ref.get()
+            
+            if not item_doc.exists:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Item {item_id} not found"
+                )
+            
+            item_data = item_doc.to_dict()
+            
+            # Check availability
+            if item_data.get('status') not in ['approved', 'live']:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Item '{item_data.get('title', 'Unknown')}' is not available for sale"
+                )
+            
+            validated_items.append({
+                'item_id': item_id,
+                'item_data': item_data,
+                'quantity': quantity,
+                'unit_price': item_data.get('price', 0)
+            })
+            
+            total_amount += item_data.get('price', 0) * quantity
+        
+        # Validate payment amount
+        if abs(payment_amount - total_amount) > 0.01:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Payment amount (${payment_amount}) doesn't match total (${total_amount})"
+            )
+        
+        # Generate transaction identifiers
+        order_id = generate_order_number()
+        transaction_id = generate_transaction_id()
+        sale_timestamp = datetime.now(timezone.utc)
+        
+        # Process sale in batch transaction
+        batch = db.batch()
+        
+        try:
+            for validated_item in validated_items:
+                item_id = validated_item['item_id']
+                item_data = validated_item['item_data']
+                quantity = validated_item['quantity']
+                unit_price = validated_item['unit_price']
+                earnings = calculate_earnings(unit_price)
+                
+                # Update item status to sold
+                item_ref = db.collection('items').document(item_id)
+                batch.update(item_ref, {
+                    'status': 'sold',
+                    'soldAt': sale_timestamp,
+                    'soldPrice': unit_price,
+                    'saleType': 'in_house_pos',
+                    'paymentMethod': payment_method.title(),
+                    'processedBy': admin_id,
+                    'buyerInfo': customer_info,
+                    'saleTransactionId': transaction_id,
+                    'orderNumber': order_id,
+                    'sellerEarnings': earnings['seller_earnings'],
+                    'storeCommission': earnings['store_commission'],
+                    'lastUpdated': sale_timestamp,
+                    'fulfillmentMethod': 'in_store_pickup',
+                    'posProcessedAt': sale_timestamp
+                })
+                
+                # Create sales record
+                sales_ref = db.collection('sales').document()
+                batch.set(sales_ref, {
+                    'itemId': item_id,
+                    'itemTitle': item_data.get('title', 'Unknown'),
+                    'itemCategory': item_data.get('category', 'Unknown'),
+                    'itemBrand': item_data.get('brand', 'N/A'),
+                    'itemSize': item_data.get('size', 'N/A'),
+                    'sellerId': item_data.get('sellerId', 'unknown'),
+                    'sellerName': item_data.get('sellerName', 'Unknown'),
+                    'salePrice': unit_price,
+                    'quantity': quantity,
+                    'sellerEarnings': earnings['seller_earnings'],
+                    'storeCommission': earnings['store_commission'],
+                    'soldAt': sale_timestamp,
+                    'saleType': 'in_house_pos',
+                    'paymentMethod': payment_method.title(),
+                    'processedBy': admin_id,
+                    'buyerInfo': customer_info,
+                    'transactionId': transaction_id,
+                    'orderNumber': order_id,
+                    'fulfillmentMethod': 'in_store_pickup'
+                })
+                
+                # Create store credit for seller (if applicable)
+                seller_id = item_data.get('sellerId')
+                if seller_id and not seller_id.startswith('phone_'):
+                    credit_ref = db.collection('store_credits').document()
+                    batch.set(credit_ref, {
+                        'userId': seller_id,
+                        'amount': earnings['seller_earnings'],
+                        'source': 'item_sale',
+                        'itemId': item_id,
+                        'itemTitle': item_data.get('title', 'Unknown'),
+                        'salePrice': unit_price,
+                        'transactionId': transaction_id,
+                        'createdAt': sale_timestamp,
+                        'description': f"In-house sale of \"{item_data.get('title', 'Unknown')}\""
+                    })
+            
+            # Commit the batch transaction
+            batch.commit()
+            logger.info(f"Successfully processed in-house sale: {order_id}")
+            
+            # Log admin action
+            admin_action = {
+                'adminId': admin_id,
+                'action': 'pos_sale_processed',
+                'details': f'Processed in-house sale of {len(validated_items)} items for ${total_amount}',
+                'orderNumber': order_id,
+                'transactionId': transaction_id,
+                'paymentMethod': payment_method,
+                'totalAmount': total_amount,
+                'timestamp': sale_timestamp,
+                'itemCount': len(validated_items)
+            }
+            db.collection('adminActions').add(admin_action)
+            
+            return {
+                "success": True,
+                "message": "In-house sale processed successfully",
+                "order_id": order_id,
+                "transaction_id": transaction_id,
+                "total_amount": total_amount,
+                "payment_method": payment_method,
+                "items_count": len(validated_items),
+                "processed_at": sale_timestamp.isoformat(),
+                "receipt_data": {
+                    "order_number": order_id,
+                    "transaction_id": transaction_id,
+                    "items": [
+                        {
+                            "title": item['item_data'].get('title', 'Unknown'),
+                            "price": item['unit_price'],
+                            "quantity": item['quantity'],
+                            "total": item['unit_price'] * item['quantity']
+                        }
+                        for item in validated_items
+                    ],
+                    "total_amount": total_amount,
+                    "payment_method": payment_method.title(),
+                    "processed_by": admin_data.get('name', 'Admin'),
+                    "timestamp": sale_timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+                    "customer_info": customer_info
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to commit batch transaction: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to process sale: {str(e)}"
+            )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error in in-house sale processing: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Sale processing failed: {str(e)}"
+        )
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

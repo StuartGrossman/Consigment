@@ -271,6 +271,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
             </button>
           </div>
           
+
           {/* Bulk Actions Header */}
           {pendingItems.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2 items-center">
@@ -689,6 +690,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           }}
         />
       )}
+
+
     </div>
   );
 };

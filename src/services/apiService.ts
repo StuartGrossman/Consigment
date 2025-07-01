@@ -767,6 +767,86 @@ class ApiService {
             throw error;
         }
     }
+
+    // POS System Methods
+    async lookupItemByBarcode(barcodeData: string): Promise<{
+        success: boolean;
+        message: string;
+        item?: any;
+        available: boolean;
+    }> {
+        try {
+            const response = await this.makeRequest(`/api/admin/lookup-item-by-barcode/${barcodeData}`);
+            const result = await response.json();
+            
+            // Log the barcode lookup action
+            const user = auth.currentUser;
+            if (user && result.success) {
+                await logUserAction(
+                    user, 
+                    'barcode_lookup', 
+                    `Looked up item by barcode: ${barcodeData} - ${result.item?.title || 'Unknown'}`,
+                    result.item?.id || '',
+                    barcodeData
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to lookup item by barcode:', error);
+            throw error;
+        }
+    }
+
+    async processInhouseSale(saleData: {
+        cart_items: Array<{
+            item_id: string;
+            quantity: number;
+        }>;
+        customer_info: {
+            name: string;
+            email?: string;
+            phone?: string;
+        };
+        payment_method: 'cash' | 'card';
+        payment_amount: number;
+    }): Promise<{
+        success: boolean;
+        message: string;
+        order_id: string;
+        transaction_id: string;
+        total_amount: number;
+        payment_method: string;
+        items_count: number;
+        processed_at: string;
+        receipt_data: any;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/process-inhouse-sale', {
+                method: 'POST',
+                body: JSON.stringify(saleData),
+            });
+            
+            const result = await response.json();
+            
+            // Log the POS sale action
+            const user = auth.currentUser;
+            if (user && result.success) {
+                await logUserAction(
+                    user, 
+                    'pos_sale_completed', 
+                    `Processed in-house sale: ${result.items_count} items for $${result.total_amount} via ${result.payment_method}`,
+                    result.order_id,
+                    `${result.items_count} items`
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to process in-house sale:', error);
+            throw error;
+        }
+    }
 }
 
 export const apiService = new ApiService();
