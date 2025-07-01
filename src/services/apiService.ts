@@ -1019,6 +1019,44 @@ class ApiService {
         }
     }
 
+    async getOrCreatePosCart(): Promise<{
+        success: boolean;
+        cart_id: string;
+        message: string;
+        created_at: string;
+        access_code: string;
+        items: any[];
+        total_amount: number;
+        item_count: number;
+        is_existing: boolean;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/shared-cart/get-or-create-pos-cart', {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            
+            const result = await response.json();
+            
+            // Log the cart action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'pos_cart_accessed', 
+                    `${result.is_existing ? 'Accessed existing' : 'Created new'} POS cart: ${result.cart_id}`,
+                    result.cart_id,
+                    `${result.item_count} items`
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to get or create POS cart:', error);
+            throw error;
+        }
+    }
+
     async getSharedCart(cartId: string): Promise<{
         success: boolean;
         cart_id: string;

@@ -420,29 +420,63 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
     });
   };
 
-  // Handle "Go to Cart" button click
+  // Handle "Go to Cart" button click - Gets or creates a POS cart
   const handleGoToCart = async () => {
-    await throttledAction('create-shared-cart', async () => {
+    await throttledAction('get-or-create-pos-cart', async () => {
       setIsCreatingSharedCart(true);
       
       try {
-        // Create a new shared cart
-        const result = await apiService.createSharedCart();
+        // Get existing cart or create a new one
+        const result = await apiService.getOrCreatePosCart();
         
         if (result.success) {
           setSharedCartId(result.cart_id);
           setScanError(null);
           
-          // Show success message with access code
-          alert(`✅ Shared cart created successfully!\n\nCart ID: ${result.cart_id}\nAccess Code: ${result.access_code}\n\nYou can now scan items on your phone and they will appear in this cart. The cart will stay active until you complete the sale.`);
+          // If there are items in the existing cart, add them to the local cart
+          if (result.is_existing && result.items && result.items.length > 0) {
+            const cartItems = result.items.map(item => ({
+              item: {
+                id: item.item_id,
+                title: item.title,
+                price: item.price,
+                sellerName: item.seller_name,
+                sellerId: item.seller_id,
+                // Add other necessary fields with defaults
+                brand: 'Unknown',
+                category: 'Accessories',
+                condition: 'Good' as const,
+                size: '',
+                color: '',
+                status: 'live' as const,
+                images: [],
+                barcodeData: item.barcode_data || '',
+                description: 'Item from shared cart',
+                sellerEmail: '',
+                createdAt: new Date()
+              },
+              quantity: item.quantity || 1,
+              total: (item.price || 0) * (item.quantity || 1)
+            }));
+            
+            setPosCart(cartItems);
+            console.log(`🛒 Loaded ${cartItems.length} items from existing cart`);
+          }
           
-          console.log('🛒 Shared cart created:', result);
+          // Show appropriate message
+          const message = result.is_existing 
+            ? `✅ Using existing cart!\n\nCart ID: ${result.cart_id}\nAccess Code: ${result.access_code}\nItems in cart: ${result.item_count}\n\nYou can scan items on your phone and they will appear in this cart.`
+            : `✅ New cart created!\n\nCart ID: ${result.cart_id}\nAccess Code: ${result.access_code}\n\nYou can now scan items on your phone and they will appear in this cart. The cart will stay active until you complete the sale.`;
+          
+          alert(message);
+          
+          console.log('🛒 POS cart ready:', result);
         } else {
-          throw new Error('Failed to create shared cart');
+          throw new Error('Failed to get or create POS cart');
         }
       } catch (error) {
-        console.error('❌ Error creating shared cart:', error);
-        setScanError('Failed to create shared cart. Please try again.');
+        console.error('❌ Error with POS cart:', error);
+        setScanError('Failed to set up POS cart. Please try again.');
       } finally {
         setIsCreatingSharedCart(false);
       }
@@ -675,6 +709,68 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
     onClose();
   };
   
+  // Auto-initialize cart when modal opens
+  useEffect(() => {
+    if (isOpen && !sharedCartId) {
+      // Automatically set up the cart when POS opens
+      handleGoToCart();
+    }
+  }, [isOpen]);
+
+  // Sync with shared cart - check for new items every 5 seconds
+  useEffect(() => {
+    if (!sharedCartId) return;
+
+    const syncInterval = setInterval(async () => {
+      try {
+        const result = await apiService.getSharedCart(sharedCartId);
+        if (result.success && result.items) {
+          // Check if there are new items in the shared cart
+          const currentItemIds = posCart.map(cartItem => cartItem.item.id);
+          const sharedCartItems = result.items;
+          
+          // Find items that are in shared cart but not in local cart
+          const newItems = sharedCartItems.filter(sharedItem => 
+            !currentItemIds.includes(sharedItem.item_id)
+          );
+          
+          if (newItems.length > 0) {
+            // Add new items to local cart
+            const newCartItems = newItems.map(item => ({
+              item: {
+                id: item.item_id,
+                title: item.title,
+                price: item.price,
+                sellerName: item.seller_name,
+                sellerId: item.seller_id,
+                brand: 'Unknown',
+                category: 'Accessories',
+                condition: 'Good' as const,
+                size: '',
+                color: '',
+                status: 'live' as const,
+                images: [],
+                barcodeData: item.barcode_data || '',
+                description: 'Item from mobile scan',
+                sellerEmail: '',
+                createdAt: new Date()
+              },
+              quantity: item.quantity || 1,
+              total: (item.price || 0) * (item.quantity || 1)
+            }));
+            
+            setPosCart(prevCart => [...prevCart, ...newCartItems]);
+            console.log(`📱 Added ${newItems.length} items from mobile scan`);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error syncing with shared cart:', error);
+      }
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(syncInterval);
+  }, [sharedCartId, posCart]);
+
   // Don't render if not open
   if (!isOpen) return null;
   
@@ -726,6 +822,24 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
               <div className="text-center">
                 <h3 className="text-xl font-semibold text-gray-800 mb-2">Scan Item Barcodes</h3>
                 <p className="text-gray-600">Use the camera or enter barcode manually</p>
+                
+                {/* Shared Cart Status */}
+                {sharedCartId && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center justify-center space-x-2 text-green-700 mb-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                      </svg>
+                      <span className="font-medium">📱 Mobile Scanning Active</span>
+                    </div>
+                    <p className="text-sm text-green-600">
+                      Access Code: <span className="font-mono font-bold text-lg">{sharedCartId.substring(0, 8).toUpperCase()}</span>
+                    </p>
+                    <p className="text-xs text-green-500 mt-1">
+                      Use this code on mobile devices to add items to this cart
+                    </p>
+                  </div>
+                )}
               </div>
               
               {/* Camera Toggle and Shared Cart */}
@@ -773,14 +887,14 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                     {isCreatingSharedCart ? (
                       <>
                         <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                        <span>Creating Cart...</span>
+                        <span>Setting up Cart...</span>
                       </>
                     ) : (
                       <>
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13v5m6 0a1 1 0 11-2 0 1 1 0 012 0zm8 0a1 1 0 11-2 0 1 1 0 012 0z" />
                         </svg>
-                        <span>🛒 Go to Cart</span>
+                        <span>🛒 Setup Cart</span>
                       </>
                     )}
                   </div>

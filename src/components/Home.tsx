@@ -1133,10 +1133,24 @@ const Home: React.FC = () => {
 
                                     {/* Mobile/small screens - show icons only */}
                                     <div className="flex gap-1 sm:hidden">
+                                        {/* Mobile POS Scanner Button */}
+                                        <button
+                                            onClick={() => setIsMobileScannerOpen(true)}
+                                            className="p-2 text-green-600 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-green-50 hover:bg-green-100 relative"
+                                            title="📱 Mobile POS Scanner"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                                            </svg>
+                                            {/* Mobile indicator badge */}
+                                            <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">📱</span>
+                                        </button>
+                                        
+                                        {/* Desktop POS Button */}
                                         <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
-                                            title="Scan Items (POS)"
+                                            title="🖥️ Desktop POS System"
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -1588,7 +1602,7 @@ const Home: React.FC = () => {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
                     <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                         {/* Left Sidebar - Filters */}
-                        <div ref={filtersRef} className="w-full lg:w-64 lg:flex-shrink-0">
+                        <div ref={filtersRef} className="w-full lg:w-64 lg:flex-shrink-0 hidden">
                             {/* Filter Toggle Button */}
                             <button
                                 onClick={() => setFiltersOpen(!filtersOpen)}
@@ -2119,18 +2133,7 @@ const Home: React.FC = () => {
                 onClose={() => setIsMobileScannerOpen(false)}
             />
 
-            {/* Floating Action Button for Mobile Scanner */}
-            {isAuthenticated && (
-                <button
-                    onClick={() => setIsMobileScannerOpen(true)}
-                    className="fixed bottom-6 right-6 bg-green-500 hover:bg-green-600 text-white p-4 rounded-full shadow-lg transition-all duration-200 z-40 hover:scale-110"
-                    title="Open Mobile Scanner"
-                >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                    </svg>
-                </button>
-            )}
+
 
             {/* Order Success Toast */}
             {showOrderSuccess && (
