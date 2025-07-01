@@ -37,6 +37,7 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingErrors, setProcessingErrors] = useState<string[]>([]);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   // Constants for retry and timeout handling
@@ -226,6 +227,7 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
     setCurrentItemIndex(0);
     setProcessingErrors([]);
     setShowErrorDetails(false);
+    setIsCancelled(false);
   };
 
   const generateBarcodeData = (item: ConsignmentItem): string => {
@@ -262,9 +264,9 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
     
     try {
       for (let i = 0; i < processedItems.length; i++) {
-        // Check if we should stop processing (modal might be closed)
-        if (!isOpen) {
-          console.warn(`🛑 Modal closed, stopping processing at item ${i + 1}/${processedItems.length}`);
+        // Check if we should stop processing (modal might be closed or cancelled)
+        if (!isOpen || isCancelled) {
+          console.warn(`🛑 ${isCancelled ? 'Processing cancelled' : 'Modal closed'}, stopping processing at item ${i + 1}/${processedItems.length}`);
           break;
         }
         
@@ -307,7 +309,12 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
       console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
     } finally {
       const totalTime = Date.now() - startTime;
-      console.log(`🏁 Bulk processing completed in ${totalTime}ms (${Math.round(totalTime / 1000)}s)`);
+      
+      if (isCancelled) {
+        console.log(`⏹️ Bulk barcode processing cancelled after ${totalTime}ms (${Math.round(totalTime / 1000)}s)`);
+      } else {
+        console.log(`🏁 Bulk barcode processing completed in ${totalTime}ms (${Math.round(totalTime / 1000)}s)`);
+      }
       
       setCurrentStep('completed');
       setIsProcessing(false);
@@ -316,7 +323,8 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
       // Final progress summary
       const finalCompleted = processedItems.filter(item => item.status === 'completed').length;
       const finalErrors = processedItems.filter(item => item.status === 'error').length;
-      console.log(`📈 Final results: ${finalCompleted} completed, ${finalErrors} failed, ${processedItems.length - finalCompleted - finalErrors} remaining`);
+      const statusText = isCancelled ? 'cancelled' : 'completed';
+      console.log(`📈 Final results (${statusText}): ${finalCompleted} completed, ${finalErrors} failed, ${processedItems.length - finalCompleted - finalErrors} remaining`);
     }
   };
 
@@ -601,6 +609,11 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
     });
   };
 
+  const handleCancel = () => {
+    console.log('🛑 User cancelled bulk barcode processing');
+    setIsCancelled(true);
+  };
+
   const handleComplete = () => {
     const completedItems = processedItems
       .filter(item => item.status === 'completed')
@@ -744,55 +757,84 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">Bulk Barcode Generation</h2>
-              <p className="text-gray-600 mt-1">
+          <div className="flex justify-between items-start">
+            <div className="flex-1 mr-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-2xl font-bold text-gray-800">📊 Bulk Barcode Generation</h2>
+                <div className="flex items-center gap-2">
+                  {/* Cancel Button during processing */}
+                  {currentStep === 'processing' && !isCancelled && (
+                    <button
+                      onClick={handleCancel}
+                      className="px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Cancel
+                    </button>
+                  )}
+                  {/* Close Button after completion */}
+                  {currentStep === 'completed' && (
+                    <button
+                      onClick={onClose}
+                      className="text-gray-400 hover:text-gray-600 p-2"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              <p className="text-gray-600 mb-3">
                 {currentStep === 'preparing' && `Ready to process ${items.length} items`}
-                {currentStep === 'processing' && `Processing ${currentItemIndex + 1} of ${items.length} items...`}
-                {currentStep === 'completed' && `Completed: ${completedCount} successful, ${errorCount} failed`}
+                {currentStep === 'processing' && !isCancelled && `Processing ${currentItemIndex + 1} of ${items.length} items...`}
+                {currentStep === 'processing' && isCancelled && `Cancelling... (${currentItemIndex + 1} of ${items.length} processed)`}
+                {currentStep === 'completed' && !isCancelled && `Completed: ${completedCount} successful, ${errorCount} failed`}
+                {currentStep === 'completed' && isCancelled && `Cancelled: ${completedCount} successful, ${errorCount} failed`}
               </p>
-            </div>
-            {currentStep === 'completed' && (
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 p-2"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
 
-          {/* Progress Bar - Now in Header */}
-          {currentStep === 'processing' && (
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Overall Progress</span>
-                <span>{Math.round(progressPercentage)}% ({completedCount + errorCount}/{processedItems.length})</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${progressPercentage}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between text-xs text-gray-500">
-                <span>
-                  {completedCount} completed
-                  {errorCount > 0 && ` • ${errorCount} failed`}
-                  {inProgressCount > 0 && ` • ${inProgressCount} processing`}
-                </span>
-                <span>
-                  Item {currentItemIndex + 1} of {processedItems.length}
-                  {processedItems.length - completedCount - errorCount > 0 && 
-                    ` • Est. ${Math.ceil((processedItems.length - completedCount - errorCount) * 3)}s remaining`
-                  }
-                </span>
-              </div>
+              {/* Progress Bar in Header */}
+              {(currentStep === 'processing' || currentStep === 'completed') && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Overall Progress</span>
+                    <span>{Math.round(progressPercentage)}% ({completedCount + errorCount}/{processedItems.length})</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full transition-all duration-300 ${
+                        isCancelled 
+                          ? 'bg-gradient-to-r from-yellow-400 to-orange-500'
+                          : currentStep === 'completed'
+                          ? 'bg-gradient-to-r from-green-400 to-green-600'
+                          : 'bg-gradient-to-r from-blue-400 to-blue-600'
+                      }`}
+                      style={{ width: `${(completedCount + errorCount) / processedItems.length * 100}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>
+                      {completedCount} completed
+                      {errorCount > 0 && ` • ${errorCount} failed`}
+                      {inProgressCount > 0 && ` • ${inProgressCount} processing`}
+                    </span>
+                    {currentStep === 'processing' && !isCancelled && (
+                      <span>
+                        Item {currentItemIndex + 1} of {processedItems.length}
+                        {processedItems.length - completedCount - errorCount > 0 && 
+                          ` • Est. ${Math.ceil((processedItems.length - completedCount - errorCount) * 3)}s remaining`
+                        }
+                      </span>
+                    )}
+                    {isCancelled && <span className="text-orange-600">Processing cancelled</span>}
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="p-6">
@@ -853,11 +895,13 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
                     </div>
                   )}
                   {['pending', 'generating', 'uploading', 'completing', 'retrying'].includes(processedItem.status) && (
-                    <div className={`w-8 h-8 border-4 rounded-full animate-spin ${
-                      processedItem.status === 'retrying' 
-                        ? 'border-yellow-200 border-t-yellow-500'
-                        : 'border-blue-200 border-t-blue-500'
-                    }`}></div>
+                    <div className={`w-8 h-8 border-4 rounded-full ${
+                      isCancelled 
+                        ? 'border-orange-200 border-t-orange-500'
+                        : processedItem.status === 'retrying' 
+                        ? 'border-yellow-200 border-t-yellow-500 animate-spin'
+                        : 'border-blue-200 border-t-blue-500 animate-spin'
+                    } ${!isCancelled ? 'animate-spin' : ''}`}></div>
                   )}
                 </div>
 
@@ -868,10 +912,26 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
                     ${processedItem.item.price} | Barcode: {processedItem.barcodeData}
                   </p>
                   <div className="text-sm mt-1">
-                    {processedItem.status === 'pending' && <span className="text-gray-500">⏳ Waiting in queue...</span>}
-                    {processedItem.status === 'generating' && <span className="text-blue-600">🔄 Generating barcode...</span>}
-                    {processedItem.status === 'uploading' && <span className="text-blue-600">☁️ Uploading to cloud storage...</span>}
-                    {processedItem.status === 'completing' && <span className="text-blue-600">✅ Updating database...</span>}
+                    {processedItem.status === 'pending' && (
+                      <span className={isCancelled ? "text-orange-500" : "text-gray-500"}>
+                        {isCancelled ? "⏹️ Cancelled" : "⏳ Waiting in queue..."}
+                      </span>
+                    )}
+                    {processedItem.status === 'generating' && (
+                      <span className={isCancelled ? "text-orange-600" : "text-blue-600"}>
+                        {isCancelled ? "⏹️ Cancelling..." : "🔄 Generating barcode..."}
+                      </span>
+                    )}
+                    {processedItem.status === 'uploading' && (
+                      <span className={isCancelled ? "text-orange-600" : "text-blue-600"}>
+                        {isCancelled ? "⏹️ Cancelling..." : "☁️ Uploading to cloud storage..."}
+                      </span>
+                    )}
+                    {processedItem.status === 'completing' && (
+                      <span className={isCancelled ? "text-orange-600" : "text-blue-600"}>
+                        {isCancelled ? "⏹️ Cancelling..." : "✅ Updating database..."}
+                      </span>
+                    )}
                     {processedItem.status === 'retrying' && <span className="text-yellow-600">🔄 Retrying... ({processedItem.retryCount || 0}/{MAX_RETRIES})</span>}
                     {processedItem.status === 'completed' && (
                       <span className="text-green-600">
@@ -942,19 +1002,34 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
               )}
               {currentStep === 'processing' && (
                 <div className="text-sm text-gray-600 flex items-center">
-                  <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Processing barcodes...
+                  {!isCancelled ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Processing barcodes...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-orange-600">Cancelling...</span>
+                    </>
+                  )}
                 </div>
               )}
               {currentStep === 'completed' && (
                 <button
                   onClick={handleComplete}
-                  className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
+                  className={`px-6 py-2 text-white rounded-lg transition-colors ${
+                    isCancelled 
+                      ? 'bg-orange-500 hover:bg-orange-600'
+                      : 'bg-green-500 hover:bg-green-600'
+                  }`}
                 >
-                  Complete ({completedCount} Approved)
+                  {isCancelled ? `Complete (${completedCount} Generated, Cancelled)` : `Complete (${completedCount} Approved)`}
                 </button>
               )}
             </div>

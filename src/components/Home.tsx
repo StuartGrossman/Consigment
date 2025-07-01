@@ -98,6 +98,7 @@ const Home: React.FC = () => {
     // State for new layout
     const [filterCollapsed, setFilterCollapsed] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -648,6 +649,15 @@ const Home: React.FC = () => {
     // Group items by category
     const getItemsByCategory = () => {
         const filteredItems = getFilteredAndSortedItems();
+        
+        // If a specific category filter is active, return only that category
+        if (activeCategoryFilter) {
+            const categoryItems = filteredItems.filter(item => 
+                (item.category || 'Uncategorized') === activeCategoryFilter
+            );
+            return { [activeCategoryFilter]: categoryItems };
+        }
+        
         const categories: { [key: string]: ConsignmentItem[] } = {};
         
         filteredItems.forEach((item: ConsignmentItem) => {
@@ -667,6 +677,20 @@ const Home: React.FC = () => {
             }, {} as { [key: string]: ConsignmentItem[] });
         
         return sortedCategories;
+    };
+
+    const handleCategoryFilter = (category: string) => {
+        if (activeCategoryFilter === category) {
+            // Clear filter if clicking the same category
+            setActiveCategoryFilter(null);
+        } else {
+            // Set new category filter
+            setActiveCategoryFilter(category);
+        }
+    };
+
+    const clearCategoryFilter = () => {
+        setActiveCategoryFilter(null);
     };
 
     if (loading) {
@@ -1818,19 +1842,59 @@ const Home: React.FC = () => {
                                                     </button>
                                                 )}
                                             </div>
+                                            {/* Category Filter Status */}
+                                            {activeCategoryFilter && (
+                                                <div className="mb-6 flex items-center justify-between bg-orange-50 p-4 rounded-lg border border-orange-200">
+                                                    <div className="flex items-center gap-3">
+                                                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z" />
+                                                        </svg>
+                                                        <span className="font-medium text-orange-900">Filtering by: {activeCategoryFilter}</span>
+                                                        <span className="bg-orange-200 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                            {(() => {
+                                                                const categoryData = getItemsByCategory();
+                                                                const count = categoryData[activeCategoryFilter]?.length || 0;
+                                                                return `${count} ${count === 1 ? 'item' : 'items'}`;
+                                                            })()}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={clearCategoryFilter}
+                                                        className="flex items-center gap-1 text-orange-600 hover:text-orange-700 font-medium text-sm transition-colors"
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                        Clear Filter
+                                                    </button>
+                                                </div>
+                                            )}
+
                                             {/* Category-Based Two-Row Horizontal Scrolling Layout */}
                                             <div className="space-y-8">
                                                 {Object.entries(getItemsByCategory()).map(([category, items]) => (
                                                     <div key={category} className="category-section">
-                                                        {/* Category Header */}
-                                                        <div className="flex items-center justify-between mb-4">
-                                                            <div className="flex items-center gap-3">
-                                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
-                                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
+                                                                                                {/* Category Header */}
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
+                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                </span>
+                                            </div>
+                                            
+                                            {/* View All Category Button */}
+                                            <button
+                                                onClick={() => handleCategoryFilter(category)}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                </svg>
+                                                View All
+                                            </button>
+                                        </div>
 
                                                         {/* Two-Row Horizontal Scrolling Container */}
                                                         <div className="relative overflow-hidden">
@@ -1843,18 +1907,26 @@ const Home: React.FC = () => {
                                                                     WebkitOverflowScrolling: 'touch'
                                                                 }}
                                                             >
-                                                                {/* Two-Row Grid */}
-                                                                <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
-                                                                    {items.map((item, index) => (
-                                                                        <div key={item.id} className="w-72">
-                                                                            <ItemCard 
-                                                                                item={item} 
-                                                                                isAdmin={isAdmin}
-                                                                                onClick={handleItemClick}
-                                                                            />
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
+                                                                                                                {/* Two-Row Grid */}
+                                                <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
+                                                    {(() => {
+                                                        // Only show even number of items (pairs for 2-row grid)
+                                                        // Show maximum 16 items (8 pairs) in horizontal scroll for performance
+                                                        const maxItemsToShow = activeCategoryFilter ? items.length : 16;
+                                                        const itemsToShow = items.slice(0, maxItemsToShow);
+                                                        const evenItemsToShow = itemsToShow.length % 2 === 0 ? itemsToShow : itemsToShow.slice(0, -1);
+                                                        
+                                                        return evenItemsToShow.map((item, index) => (
+                                                            <div key={item.id} className="w-72">
+                                                                <ItemCard 
+                                                                    item={item} 
+                                                                    isAdmin={isAdmin}
+                                                                    onClick={handleItemClick}
+                                                                />
+                                                            </div>
+                                                        ));
+                                                    })()}
+                                                </div>
                                                             </div>
                                                             
                                                             {/* Left Scroll Shadow */}

@@ -30,6 +30,7 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingErrors, setProcessingErrors] = useState<string[]>([]);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
+  const [isCancelled, setIsCancelled] = useState(false);
   
   // Constants for retry and timeout handling
   const MAX_RETRIES = 2;
@@ -102,6 +103,7 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
     setCurrentItemIndex(0);
     setProcessingErrors([]);
     setShowErrorDetails(false);
+    setIsCancelled(false);
   };
 
   const startBulkProcessing = async () => {
@@ -129,7 +131,7 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
     
     try {
       for (let i = 0; i < processedItems.length; i++) {
-        if (!isOpen) break; // Stop if modal is closed
+        if (!isOpen || isCancelled) break; // Stop if modal is closed or cancelled
         
         setCurrentItemIndex(i);
         await processItemSafely(i);
@@ -142,8 +144,14 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
     } finally {
       const endTime = Date.now();
       const totalTime = ((endTime - startTime) / 1000).toFixed(1);
-      console.log(`✅ Bulk send back processing completed in ${totalTime}s`);
-      console.log(`📊 Final results: ${completedCount} completed, ${errorCount} failed`);
+      
+      if (isCancelled) {
+        console.log(`⏹️ Bulk send back processing cancelled after ${totalTime}s`);
+        console.log(`📊 Results before cancellation: ${completedCount} completed, ${errorCount} failed`);
+      } else {
+        console.log(`✅ Bulk send back processing completed in ${totalTime}s`);
+        console.log(`📊 Final results: ${completedCount} completed, ${errorCount} failed`);
+      }
       
       setCurrentStep('completed');
       setIsProcessing(false);
@@ -231,6 +239,11 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
     await apiService.sendBackToPending(processedItem.item.id);
   };
 
+  const handleCancel = () => {
+    console.log('🛑 User cancelled bulk send back processing');
+    setIsCancelled(true);
+  };
+
   const handleComplete = () => {
     const completedItems = processedItems
       .filter(item => item.status === 'completed')
@@ -258,25 +271,74 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-center">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-800">↶ Sending Items Back to Pending</h2>
-              <p className="text-gray-600 mt-1">
+          <div className="flex justify-between items-start">
+            <div className="flex-1 mr-6">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-2xl font-bold text-gray-800">↶ Sending Items Back to Pending</h2>
+                <div className="flex items-center gap-2">
+                  {/* Cancel Button during processing */}
+                  {currentStep === 'processing' && !isCancelled && (
+                    <button
+                      onClick={handleCancel}
+                      className="px-4 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                      Cancel
+                    </button>
+                  )}
+                  {/* Close Button after completion */}
+                  {currentStep === 'completed' && (
+                    <button
+                      onClick={onClose}
+                      className="text-gray-400 hover:text-gray-600 p-2"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              <p className="text-gray-600 mb-3">
                 {currentStep === 'preparing' && `Ready to send ${items.length} items back to pending`}
-                {currentStep === 'processing' && `Processing ${currentItemIndex + 1} of ${items.length} items...`}
-                {currentStep === 'completed' && `Completed: ${completedCount} successful, ${errorCount} failed`}
+                {currentStep === 'processing' && !isCancelled && `Processing ${currentItemIndex + 1} of ${items.length} items...`}
+                {currentStep === 'processing' && isCancelled && `Cancelling... (${currentItemIndex + 1} of ${items.length} processed)`}
+                {currentStep === 'completed' && !isCancelled && `Completed: ${completedCount} successful, ${errorCount} failed`}
+                {currentStep === 'completed' && isCancelled && `Cancelled: ${completedCount} successful, ${errorCount} failed`}
               </p>
+
+              {/* Progress Bar in Header */}
+              {(currentStep === 'processing' || currentStep === 'completed') && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm text-gray-600">
+                    <span>Overall Progress</span>
+                    <span>{Math.round(progressPercentage)}% ({completedCount + errorCount}/{processedItems.length})</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3">
+                    <div
+                      className={`h-3 rounded-full transition-all duration-300 ${
+                        isCancelled 
+                          ? 'bg-gradient-to-r from-yellow-400 to-orange-500'
+                          : currentStep === 'completed'
+                          ? 'bg-gradient-to-r from-orange-400 to-orange-600'
+                          : 'bg-gradient-to-r from-blue-400 to-blue-600'
+                      }`}
+                      style={{ width: `${(completedCount + errorCount) / processedItems.length * 100}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500">
+                    <span>{completedCount} sent back • {errorCount} failed</span>
+                    {currentStep === 'processing' && !isCancelled && (
+                      <span>Est. time remaining: {Math.ceil((processedItems.length - completedCount - errorCount) * 2)}s</span>
+                    )}
+                    {isCancelled && <span className="text-orange-600">Processing cancelled</span>}
+                  </div>
+                </div>
+              )}
             </div>
-            {currentStep === 'completed' && (
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 p-2"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
           </div>
         </div>
 
@@ -308,25 +370,7 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
             </div>
           )}
 
-          {/* Progress Bar */}
-          {currentStep === 'processing' && (
-            <div className="mb-6">
-              <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>Overall Progress</span>
-                <span>{Math.round(progressPercentage)}% ({completedCount + errorCount}/{processedItems.length})</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-gradient-to-r from-orange-400 to-orange-600 h-3 rounded-full transition-all duration-300"
-                  style={{ width: `${progressPercentage}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-2">
-                <span>{completedCount} sent back • {errorCount} failed • {inProgressCount} processing</span>
-                <span>Est. time remaining: {Math.ceil((processedItems.length - completedCount - errorCount) * 2)}s</span>
-              </div>
-            </div>
-          )}
+
 
           {/* Items List */}
           <div className="max-h-96 overflow-y-auto space-y-3">
@@ -356,11 +400,13 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
                     </div>
                   )}
                   {['pending', 'processing', 'retrying'].includes(processedItem.status) && (
-                    <div className={`w-8 h-8 border-4 rounded-full animate-spin ${
-                      processedItem.status === 'retrying' 
-                        ? 'border-yellow-200 border-t-yellow-500'
-                        : 'border-blue-200 border-t-blue-500'
-                    }`}></div>
+                    <div className={`w-8 h-8 border-4 rounded-full ${
+                      isCancelled 
+                        ? 'border-orange-200 border-t-orange-500'
+                        : processedItem.status === 'retrying' 
+                        ? 'border-yellow-200 border-t-yellow-500 animate-spin'
+                        : 'border-blue-200 border-t-blue-500 animate-spin'
+                    } ${!isCancelled ? 'animate-spin' : ''}`}></div>
                   )}
                 </div>
 
@@ -372,8 +418,16 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
                     {processedItem.item.barcodeData && ` | Barcode: ${processedItem.item.barcodeData}`}
                   </p>
                   <div className="text-sm mt-1">
-                    {processedItem.status === 'pending' && <span className="text-gray-500">⏳ Waiting in queue...</span>}
-                    {processedItem.status === 'processing' && <span className="text-blue-600">↶ Sending back to pending...</span>}
+                    {processedItem.status === 'pending' && (
+                      <span className={isCancelled ? "text-orange-500" : "text-gray-500"}>
+                        {isCancelled ? "⏹️ Cancelled" : "⏳ Waiting in queue..."}
+                      </span>
+                    )}
+                    {processedItem.status === 'processing' && (
+                      <span className={isCancelled ? "text-orange-600" : "text-blue-600"}>
+                        {isCancelled ? "⏹️ Cancelling..." : "↶ Sending back to pending..."}
+                      </span>
+                    )}
                     {processedItem.status === 'retrying' && <span className="text-yellow-600">🔄 Retrying... ({processedItem.retryCount || 0}/{MAX_RETRIES})</span>}
                     {processedItem.status === 'completed' && (
                       <span className="text-orange-600">
@@ -439,19 +493,34 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
               )}
               {currentStep === 'processing' && (
                 <div className="text-sm text-gray-600 flex items-center">
-                  <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Sending items back to pending...
+                  {!isCancelled ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Sending items back to pending...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="h-4 w-4 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-orange-600">Cancelling...</span>
+                    </>
+                  )}
                 </div>
               )}
               {currentStep === 'completed' && (
                 <button
                   onClick={handleComplete}
-                  className="px-6 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors"
+                  className={`px-6 py-2 text-white rounded-lg transition-colors ${
+                    isCancelled 
+                      ? 'bg-yellow-500 hover:bg-yellow-600'
+                      : 'bg-orange-500 hover:bg-orange-600'
+                  }`}
                 >
-                  Complete ({completedCount} Sent Back)
+                  {isCancelled ? `Complete (${completedCount} Sent Back, Cancelled)` : `Complete (${completedCount} Sent Back)`}
                 </button>
               )}
               {processingErrors.length > 0 && (
