@@ -816,7 +816,7 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
                           <img 
                             src={item.barcodeImageUrl} 
                             alt={`Barcode: ${item.barcodeData}`}
-                            className="h-12 w-auto"
+                            className="h-20 w-auto"
                           />
                         </div>
                       )}

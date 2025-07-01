@@ -25,6 +25,18 @@ import POSModal from './POSModal';
 import RewardsPointsDashboard from './RewardsPointsDashboard';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
+import {
+  climbingAction,
+  alpineClimbing,
+  mountainTrail,
+  campsiteEvening,
+  skiingPowder,
+  snowboardJump,
+  whitewaterRafting,
+  mountainBiking,
+  outdoorClothing,
+  hikingBoots
+} from '../assets/category-images';
 import { AnalyticsPage, InventoryPage, ActionsPage, UserHistoryPage } from '../pages';
 
 
@@ -704,6 +716,40 @@ const Home: React.FC = () => {
 
     const clearCategoryFilter = () => {
         setActiveCategoryFilter(null);
+    };
+
+    // Category image mapping
+    const getCategoryImage = (category: string) => {
+        const categoryImages: { [key: string]: string } = {
+            'Climbing': climbingAction,
+            'Mountaineering': alpineClimbing,
+            'Hiking': mountainTrail,
+            'Camping': campsiteEvening,
+            'Skiing': skiingPowder,
+            'Snowboarding': snowboardJump,
+            'Water Sports': whitewaterRafting,
+            'Cycling': mountainBiking,
+            'Apparel': outdoorClothing,
+            'Footwear': hikingBoots,
+        };
+        return categoryImages[category] || mountainTrail;
+    };
+
+    // Category icon mapping
+    const getCategoryIcon = (category: string) => {
+        const categoryIcons: { [key: string]: string } = {
+            'Climbing': '🧗',
+            'Skiing': '⛷️',
+            'Hiking': '🥾',
+            'Camping': '⛺',
+            'Mountaineering': '🏔️',
+            'Snowboarding': '🏂',
+            'Cycling': '🚵',
+            'Water Sports': '🚣',
+            'Apparel': '👕',
+            'Footwear': '👟',
+        };
+        return categoryIcons[category] || '📦';
     };
 
     if (loading) {
@@ -1895,27 +1941,52 @@ const Home: React.FC = () => {
                                             <div className="space-y-8">
                                                 {Object.entries(getItemsByCategory()).map(([category, items]) => (
                                                     <div key={category} className="category-section">
-                                                                                                {/* Category Header */}
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div className="flex items-center gap-3">
-                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
-                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                                                </span>
-                                            </div>
-                                            
-                                            {/* View All Category Button */}
-                                            <button
-                                                onClick={() => handleCategoryFilter(category)}
-                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                                View All
-                                            </button>
-                                        </div>
+                                                        {/* Category Header with View All Button */}
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
+                                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <button
+                                                                onClick={() => handleCategoryFilter(category)}
+                                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
+                                                                title={`View all ${category} items`}
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                                </svg>
+                                                                View All
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Category Banner */}
+                                                        <div 
+                                                            className="relative h-36 mb-6 rounded-xl overflow-hidden shadow-lg cursor-pointer group"
+                                                            style={{
+                                                                backgroundImage: `url(${getCategoryImage(category)})`,
+                                                                backgroundSize: 'cover',
+                                                                backgroundPosition: 'center',
+                                                            }}
+                                                            onClick={() => handleCategoryFilter(category)}
+                                                        >
+                                                            {/* Overlay */}
+                                                            <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
+                                                            
+                                                            {/* Content */}
+                                                            <div className="relative h-full flex items-center px-6">
+                                                                <div className="flex items-center gap-4">
+                                                                    <div className="text-4xl">{getCategoryIcon(category)}</div>
+                                                                    <div>
+                                                                        <h3 className="text-xl font-bold text-white mb-1">Explore {category}</h3>
+                                                                        <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
 
                                                         {/* Two-Row Horizontal Scrolling Container */}
                                                         <div className="relative overflow-hidden">

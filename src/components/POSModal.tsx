@@ -878,27 +878,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                   </div>
                 </button>
 
-                <button
-                  onClick={handleGoToCart}
-                  disabled={isScanning || cameraLoading || isCreatingSharedCart}
-                  className="px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-green-500 text-white hover:bg-green-600 hover:shadow-xl"
-                >
-                  <div className="flex items-center space-x-2">
-                    {isCreatingSharedCart ? (
-                      <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                        <span>Setting up Cart...</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13v5m6 0a1 1 0 11-2 0 1 1 0 012 0zm8 0a1 1 0 11-2 0 1 1 0 012 0z" />
-                        </svg>
-                        <span>🛒 Setup Cart</span>
-                      </>
-                    )}
-                  </div>
-                </button>
+
                 
                 {useCamera && (
                   <button

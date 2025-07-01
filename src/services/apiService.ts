@@ -84,8 +84,8 @@ class ApiService {
             ...(options.headers as Record<string, string> || {}),
         };
 
-        // Add authentication for admin endpoints, create-item endpoint, and user endpoints
-        if (endpoint.includes('/admin/') || endpoint.includes('/api/create-item') || endpoint.includes('/api/user/')) {
+        // Add authentication for admin endpoints, create-item endpoint, user endpoints, and shared cart endpoints
+        if (endpoint.includes('/admin/') || endpoint.includes('/api/create-item') || endpoint.includes('/api/user/') || endpoint.includes('/api/shared-cart/')) {
             try {
                 const token = await this.getAuthToken();
                 headers['Authorization'] = `Bearer ${token}`;

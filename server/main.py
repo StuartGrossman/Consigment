@@ -6055,24 +6055,46 @@ async def get_user_shared_carts(request: Request):
 async def get_or_create_pos_cart(request: Request):
     """Get an existing active POS cart or create a new one"""
     try:
+        logger.info("=== GET OR CREATE POS CART STARTED ===")
+        
         # Verify user authentication
         auth_header = request.headers.get("authorization")
+        logger.info(f"Auth header present: {bool(auth_header)}")
+        
         if not auth_header or not auth_header.startswith("Bearer "):
+            logger.error("Missing or invalid authorization header")
             raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
         
         token = auth_header.split("Bearer ")[1]
+        logger.info(f"Token extracted, length: {len(token)}")
+        
         decoded_token = auth.verify_id_token(token)
         user_id = decoded_token['uid']
         user_email = decoded_token.get('email', '')
+        logger.info(f"User authenticated: {user_email} ({user_id})")
         
         # First, try to find an existing active cart for this user
-        existing_carts_query = db.collection('shared_carts').where('access_users', 'array_contains', user_id).where('status', '==', 'active').order_by('created_at', direction='DESCENDING').limit(1).get()
+        logger.info("Searching for existing active carts...")
+        # Simplified query to avoid composite index requirement
+        existing_carts_query = db.collection('shared_carts').where('access_users', 'array_contains', user_id).where('status', '==', 'active').get()
         
-        if existing_carts_query:
-            # Use the most recent active cart
-            cart_doc = existing_carts_query[0]
-            cart_id = cart_doc.id
+        # Sort in Python instead of Firestore to avoid index requirement
+        existing_carts = []
+        for cart_doc in existing_carts_query:
             cart_data = cart_doc.to_dict()
+            cart_data['_doc_id'] = cart_doc.id
+            existing_carts.append(cart_data)
+        
+        # Sort by created_at descending in Python
+        existing_carts.sort(key=lambda x: x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+        
+        if existing_carts:
+            logger.info(f"Found {len(existing_carts)} existing carts")
+            # Use the most recent active cart (first in sorted list)
+            cart_data = existing_carts[0]
+            cart_id = cart_data.pop('_doc_id')  # Remove the internal ID field
+            
+            logger.info(f"Using existing cart {cart_id}")
             
             # Update last accessed info
             db.collection('shared_carts').document(cart_id).update({
@@ -6080,13 +6102,20 @@ async def get_or_create_pos_cart(request: Request):
                 'device_info.last_accessed_device': 'desktop'
             })
             
-            logger.info(f"Using existing shared cart {cart_id} for POS by user {user_email}")
+            logger.info(f"Updated existing shared cart {cart_id} for POS by user {user_email}")
+            
+            # Handle datetime serialization
+            created_at = cart_data.get('created_at')
+            if hasattr(created_at, 'isoformat'):
+                created_at_str = created_at.isoformat()
+            else:
+                created_at_str = datetime.now().isoformat()
             
             return {
                 "success": True,
                 "cart_id": cart_id,
                 "message": "Using existing active cart for POS",
-                "created_at": cart_data.get('created_at').isoformat() if cart_data.get('created_at') else datetime.now().isoformat(),
+                "created_at": created_at_str,
                 "access_code": cart_id[:8].upper(),
                 "items": cart_data.get('items', []),
                 "total_amount": cart_data.get('total_amount', 0),
@@ -6094,12 +6123,14 @@ async def get_or_create_pos_cart(request: Request):
                 "is_existing": True
             }
         else:
+            logger.info("No existing carts found, creating new cart...")
             # Create a new shared cart
+            current_time = datetime.now(timezone.utc)
             shared_cart_data = {
                 'created_by': user_id,
                 'created_by_email': user_email,
-                'created_at': datetime.now(timezone.utc),
-                'last_updated': datetime.now(timezone.utc),
+                'created_at': current_time,
+                'last_updated': current_time,
                 'items': [],
                 'total_amount': 0,
                 'item_count': 0,
@@ -6112,6 +6143,7 @@ async def get_or_create_pos_cart(request: Request):
                 'cart_type': 'pos'  # Mark this as a POS cart
             }
             
+            logger.info("Adding cart to Firestore...")
             # Add to Firestore
             cart_ref = db.collection('shared_carts').document()
             cart_ref.set(shared_cart_data)
@@ -6123,7 +6155,7 @@ async def get_or_create_pos_cart(request: Request):
                 "success": True,
                 "cart_id": cart_id,
                 "message": "Created new shared cart for POS",
-                "created_at": datetime.now().isoformat(),
+                "created_at": current_time.isoformat(),
                 "access_code": cart_id[:8].upper(),
                 "items": [],
                 "total_amount": 0,
@@ -6132,7 +6164,10 @@ async def get_or_create_pos_cart(request: Request):
             }
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         logger.error(f"Error getting or creating POS cart: {str(e)}")
+        logger.error(f"Full traceback: {error_details}")
         raise HTTPException(status_code=500, detail=f"Failed to get or create POS cart: {str(e)}")
 
 if __name__ == "__main__":
