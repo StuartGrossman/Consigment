@@ -4501,18 +4501,18 @@ async def get_user_store_credit(request: Request):
         try:
             # Use simple query without ordering to avoid index requirement  
             transactions_query = db.collection('store_credits').where('userId', '==', user_id).get()
-        
-        for transaction_doc in transactions_query:
-            transaction_data = transaction_doc.to_dict()
-            transactions.append({
-                'id': transaction_doc.id,
-                'amount': transaction_data.get('amount', 0),
-                'type': transaction_data.get('type', 'unknown'),
-                'description': transaction_data.get('description', 'No description'),
-                'createdAt': transaction_data.get('createdAt'),
-                'relatedItemId': transaction_data.get('relatedItemId'),
-                'refundReason': transaction_data.get('refundReason')
-            })
+            
+            for transaction_doc in transactions_query:
+                transaction_data = transaction_doc.to_dict()
+                transactions.append({
+                    'id': transaction_doc.id,
+                    'amount': transaction_data.get('amount', 0),
+                    'type': transaction_data.get('type', 'unknown'),
+                    'description': transaction_data.get('description', 'No description'),
+                    'createdAt': transaction_data.get('createdAt'),
+                    'relatedItemId': transaction_data.get('relatedItemId'),
+                    'refundReason': transaction_data.get('refundReason')
+                })
                 
             # Sort in Python instead of Firestore to avoid index requirement
             transactions.sort(key=lambda x: x.get('createdAt', datetime.min.replace(tzinfo=timezone.utc)) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
