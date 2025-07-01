@@ -24,7 +24,7 @@ import POSModal from './POSModal';
 import RewardsPointsDashboard from './RewardsPointsDashboard';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
-import { AnalyticsPage, InventoryPage, ActionsPage } from '../pages';
+import { AnalyticsPage, InventoryPage, ActionsPage, UserHistoryPage } from '../pages';
 
 
 const Home: React.FC = () => {
@@ -43,7 +43,7 @@ const Home: React.FC = () => {
         }
     };
 
-    const handleNavigateToPage = (page: 'store' | 'analytics' | 'inventory' | 'actions') => {
+    const handleNavigateToPage = (page: 'store' | 'analytics' | 'inventory' | 'actions' | 'userhistory') => {
         setCurrentPage(page);
         // Update legacy state for compatibility
         setShowAnalyticsPage(page === 'analytics');
@@ -69,7 +69,7 @@ const Home: React.FC = () => {
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
     const [showActionsPage, setShowActionsPage] = useState(false);
-    const [currentPage, setCurrentPage] = useState<'store' | 'analytics' | 'inventory' | 'actions'>('store');
+    const [currentPage, setCurrentPage] = useState<'store' | 'analytics' | 'inventory' | 'actions' | 'userhistory'>('store');
     const [isCartModalOpen, setIsCartModalOpen] = useState(false);
     const [isBookmarksModalOpen, setIsBookmarksModalOpen] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
@@ -1426,10 +1426,10 @@ const Home: React.FC = () => {
                                                 
                                                 <button
                                                             onClick={() => {
-                                                        handleNavigateToPage('analytics');
+                                                        handleNavigateToPage(isAdmin ? 'analytics' : 'userhistory');
                                                         setUserMenuOpen(false);
                                                     }}
-                                                            className={`mobile-user-menu-item ${showAnalyticsPage ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
+                                                            className={`mobile-user-menu-item ${(isAdmin && showAnalyticsPage) || (!isAdmin && currentPage === 'userhistory') ? 'mobile-user-menu-item-active' : 'mobile-user-menu-item-default'}`}
                                                 >
                                                             📊 {isAdmin ? 'Sales Dashboard' : 'My User History'}
                                                 </button>
@@ -1582,7 +1582,7 @@ const Home: React.FC = () => {
             )}
 
             {/* Main Content with Sidebar */}
-            {!showAnalyticsPage && !showInventoryPage && !showActionsPage && (
+            {currentPage === 'store' && (
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
                     <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                         {/* Left Sidebar - Filters */}
@@ -2003,6 +2003,13 @@ const Home: React.FC = () => {
                 <ActionsPage 
                     user={user} 
                     isAdmin={isAdmin} 
+                    onNavigateBack={handleNavigateBack} 
+                />
+            )}
+            
+            {currentPage === 'userhistory' && (
+                <UserHistoryPage 
+                    user={user} 
                     onNavigateBack={handleNavigateBack} 
                 />
             )}
