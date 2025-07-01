@@ -998,6 +998,78 @@ class ApiService {
             throw error;
         }
     }
+
+    // Shared Cart Methods for Multi-Device POS
+    async createSharedCart(): Promise<{
+        success: boolean;
+        cart_id: string;
+        message: string;
+        created_at: string;
+        access_code: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/shared-cart/create', {
+                method: 'POST',
+                body: JSON.stringify({}),
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to create shared cart:', error);
+            throw error;
+        }
+    }
+
+    async getSharedCart(cartId: string): Promise<{
+        success: boolean;
+        cart_id: string;
+        cart_data: any;
+        items: any[];
+        total_amount: number;
+        item_count: number;
+    }> {
+        try {
+            const response = await this.makeRequest(`/api/shared-cart/${cartId}`);
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get shared cart:', error);
+            throw error;
+        }
+    }
+
+    async addItemToSharedCart(cartId: string, barcodeData: string): Promise<{
+        success: boolean;
+        message: string;
+        item: any;
+        cart_total: number;
+        cart_item_count: number;
+    }> {
+        try {
+            const response = await this.makeRequest(`/api/shared-cart/${cartId}/add-item`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    barcode_data: barcodeData
+                }),
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to add item to shared cart:', error);
+            throw error;
+        }
+    }
+
+    async getUserSharedCarts(): Promise<{
+        success: boolean;
+        carts: any[];
+        total_carts: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/shared-cart/user-carts');
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get user shared carts:', error);
+            throw error;
+        }
+    }
 }
 
 export const apiService = new ApiService();

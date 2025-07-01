@@ -73,6 +73,10 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
   // Receipt state
   const [receiptData, setReceiptData] = useState<ReceiptData | null>(null);
   
+  // Shared cart state
+  const [sharedCartId, setSharedCartId] = useState<string | null>(null);
+  const [isCreatingSharedCart, setIsCreatingSharedCart] = useState(false);
+  
   // Throttling
   const { throttledAction, isActionDisabled } = useCriticalActionThrottle();
   
@@ -415,6 +419,35 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
       }
     });
   };
+
+  // Handle "Go to Cart" button click
+  const handleGoToCart = async () => {
+    await throttledAction('create-shared-cart', async () => {
+      setIsCreatingSharedCart(true);
+      
+      try {
+        // Create a new shared cart
+        const result = await apiService.createSharedCart();
+        
+        if (result.success) {
+          setSharedCartId(result.cart_id);
+          setScanError(null);
+          
+          // Show success message with access code
+          alert(`✅ Shared cart created successfully!\n\nCart ID: ${result.cart_id}\nAccess Code: ${result.access_code}\n\nYou can now scan items on your phone and they will appear in this cart. The cart will stay active until you complete the sale.`);
+          
+          console.log('🛒 Shared cart created:', result);
+        } else {
+          throw new Error('Failed to create shared cart');
+        }
+      } catch (error) {
+        console.error('❌ Error creating shared cart:', error);
+        setScanError('Failed to create shared cart. Please try again.');
+      } finally {
+        setIsCreatingSharedCart(false);
+      }
+    });
+  };
   
   const removeItemFromCart = (itemId: string) => {
     setPosCart(prevCart => prevCart.filter(cartItem => cartItem.item.id !== itemId));
@@ -695,7 +728,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                 <p className="text-gray-600">Use the camera or enter barcode manually</p>
               </div>
               
-              {/* Camera Toggle */}
+              {/* Camera Toggle and Shared Cart */}
               <div className="flex justify-center space-x-4">
                 <button
                   onClick={useCamera ? stopCamera : startCamera}
@@ -726,6 +759,28 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
                         <span>📱 Start Camera Scanner</span>
+                      </>
+                    )}
+                  </div>
+                </button>
+
+                <button
+                  onClick={handleGoToCart}
+                  disabled={isScanning || cameraLoading || isCreatingSharedCart}
+                  className="px-6 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed bg-green-500 text-white hover:bg-green-600 hover:shadow-xl"
+                >
+                  <div className="flex items-center space-x-2">
+                    {isCreatingSharedCart ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                        <span>Creating Cart...</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m0 0L7 13m0 0l-2.5 5M7 13v5m6 0a1 1 0 11-2 0 1 1 0 012 0zm8 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                        </svg>
+                        <span>🛒 Go to Cart</span>
                       </>
                     )}
                   </div>
