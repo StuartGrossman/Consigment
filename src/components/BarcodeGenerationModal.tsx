@@ -45,51 +45,54 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
     setIsGenerating(true);
     
-    // Generate barcode data with timestamp and item info
-    const now = new Date();
-    const timestamp = now.getTime().toString();
-    const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
-    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
-    
-    // Create a unique barcode combining item ID and timestamp
-    const barcodeValue = `${item.id.slice(-8)}${dateStr}${timeStr}`.slice(0, 12);
-    
-    setBarcodeData(barcodeValue);
+    // Add a brief delay for better UX progression
+    setTimeout(() => {
+      // Generate barcode data with timestamp and item info
+      const now = new Date();
+      const timestamp = now.getTime().toString();
+      const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
+      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
+      
+      // Create a unique barcode combining item ID and timestamp
+      const barcodeValue = `${item.id.slice(-8)}${dateStr}${timeStr}`.slice(0, 12);
+      
+      setBarcodeData(barcodeValue);
 
-    // Generate barcode using jsbarcode
-    if (canvasRef.current) {
-      try {
-        // Clear the canvas first
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      // Generate barcode using jsbarcode
+      if (canvasRef.current) {
+        try {
+          // Clear the canvas first
+          const ctx = canvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+          }
+          
+          // Generate the barcode
+          JsBarcode(canvasRef.current, barcodeValue, {
+            format: "CODE128",
+            width: 2,
+            height: 80,
+            displayValue: true,
+            fontSize: 12,
+            margin: 10,
+            background: "#ffffff",
+            lineColor: "#000000"
+          });
+          
+          console.log('✅ Barcode generated successfully:', barcodeValue);
+          setIsGenerating(false);
+        } catch (error) {
+          console.error('❌ Error generating barcode:', error);
+          setIsGenerating(false);
+          
+          // Show error message to user
+          alert('Error generating barcode. Please try again.');
         }
-        
-        // Generate the barcode
-        JsBarcode(canvasRef.current, barcodeValue, {
-          format: "CODE128",
-          width: 2,
-          height: 80,
-          displayValue: true,
-          fontSize: 12,
-          margin: 10,
-          background: "#ffffff",
-          lineColor: "#000000"
-        });
-        
-        console.log('✅ Barcode generated successfully:', barcodeValue);
+      } else {
+        console.error('❌ Canvas reference not available');
         setIsGenerating(false);
-      } catch (error) {
-        console.error('❌ Error generating barcode:', error);
-        setIsGenerating(false);
-        
-        // Show error message to user
-        alert('Error generating barcode. Please try again.');
       }
-    } else {
-      console.error('❌ Canvas reference not available');
-      setIsGenerating(false);
-    }
+    }, 800); // Brief delay for smooth UX
   };
 
   const handlePrint = () => {
@@ -424,8 +427,8 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div>
-              <h2 className="text-2xl font-bold text-gray-800">Generate Item Barcode</h2>
-              <p className="text-gray-600 mt-1">Create and print barcode before approving item</p>
+              <h2 className="text-2xl font-bold text-gray-800">Approve Item</h2>
+              <p className="text-gray-600 mt-1">Generating barcode label that must be printed. After printing, the item will be available to employees for 3 days before going live to all customers.</p>
             </div>
             <button
               onClick={onClose}
@@ -457,9 +460,19 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
             <h4 className="text-lg font-semibold text-gray-800 mb-4">Generated Barcode</h4>
             
             {isGenerating ? (
-              <div className="flex justify-center items-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
-                <span className="ml-2 text-gray-600">Generating barcode...</span>
+              <div className="flex flex-col items-center py-8">
+                <div className="relative">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-orange-200 border-t-orange-500"></div>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h4" />
+                    </svg>
+                  </div>
+                </div>
+                <div className="mt-4 text-center">
+                  <div className="text-lg font-medium text-gray-800">Generating Barcode...</div>
+                  <div className="text-sm text-gray-600 mt-1">Creating unique identifier for this item</div>
+                </div>
               </div>
             ) : (
               <div className="bg-white border border-gray-200 rounded-lg p-6 inline-block">
@@ -529,14 +542,14 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
                 {isConfirming ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Confirming...
+                    Sending to Approved...
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    Confirm Printed
+                    Send to Approved
                   </>
                 )}
               </button>

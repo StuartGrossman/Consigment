@@ -17,10 +17,12 @@ interface AnalyticsProps {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'sold' | 'shipped' | 'unshipped' | 'refunds'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sold' | 'shipped' | 'unshipped' | 'refunds' | 'orders'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [soldItems, setSoldItems] = useState<ConsignmentItem[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
   const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
@@ -36,6 +38,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       fetchDashboardData();
     } else if (activeTab === 'sold') {
       fetchSoldItems();
+    } else if (activeTab === 'orders' && isAdmin) {
+      fetchOrders();
     } else if (activeTab === 'shipped' && isAdmin) {
       setIsShippedItemsModalOpen(true);
     } else if (activeTab === 'unshipped' && isAdmin) {
@@ -52,6 +56,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         fetchDashboardData();
       } else if (activeTab === 'sold') {
         fetchSoldItems();
+      } else if (activeTab === 'orders' && isAdmin) {
+        fetchOrders();
       }
     }, 30000); // 30 seconds
 
@@ -151,8 +157,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     }
   };
 
-
-
   const fetchSoldItems = async () => {
     setLoading(true);
     try {
@@ -189,24 +193,52 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     }
   };
 
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      // Fetch orders from backend API
+      const response = await fetch('/api/admin/orders', {
+        headers: {
+          'Authorization': `Bearer ${await user?.getIdToken()}`
+        }
+      });
+      
+      if (response.ok) {
+        const ordersData = await response.json();
+        setOrders(ordersData);
+      } else {
+        console.error('Failed to fetch orders:', response.statusText);
+      }
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const calculateDashboardData = (items: ConsignmentItem[], users: any[]) => {
+    console.log('📊 Calculating dashboard data with', items.length, 'items');
+    
     const now = new Date();
     const soldItems = items.filter(item => item.status === 'sold');
+    console.log('📊 Found', soldItems.length, 'sold items');
     
     const totalRevenue = soldItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
     const uniqueSellers = new Set(items.map(item => item.sellerId));
     const avgItemPrice = soldItems.length > 0 ? totalRevenue / soldItems.length : 0;
     
-    // Monthly revenue data (last 12 months)
+    // Monthly revenue data (last 12 months) - improved calculation
     const monthlyRevenue = [];
     for (let i = 11; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
       const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
       
-      const monthItems = soldItems.filter(item => 
-        item.soldAt && item.soldAt >= monthStart && item.soldAt <= monthEnd
-      );
+      const monthItems = soldItems.filter(item => {
+        // Better date handling - use soldAt if available, otherwise createdAt
+        const itemDate = item.soldAt || item.createdAt;
+        return itemDate && itemDate >= monthStart && itemDate <= monthEnd;
+      });
       
       const monthRevenue = monthItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
       
@@ -216,8 +248,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         items: monthItems.length
       });
     }
+    console.log('📊 Monthly revenue data:', monthlyRevenue);
 
-    // Category breakdown
+    // Category breakdown - ensure we have data
     const categoryMap = new Map<string, {count: number, revenue: number}>();
     items.forEach(item => {
       const category = item.category || 'Uncategorized';
@@ -231,11 +264,21 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       }
     });
     
-    const categoryBreakdown = Array.from(categoryMap.entries()).map(([category, data]) => ({
+    let categoryBreakdown = Array.from(categoryMap.entries()).map(([category, data]) => ({
       category,
       count: data.count,
       revenue: data.revenue
     })).sort((a, b) => b.count - a.count);
+
+    // Ensure we have at least some sample data for demonstration
+    if (categoryBreakdown.length === 0) {
+      categoryBreakdown = [
+        { category: 'Jackets', count: 0, revenue: 0 },
+        { category: 'Pants', count: 0, revenue: 0 },
+        { category: 'Accessories', count: 0, revenue: 0 }
+      ];
+    }
+    console.log('📊 Category breakdown:', categoryBreakdown);
 
     // Status breakdown
     const statusMap = new Map<string, number>();
@@ -243,13 +286,23 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       statusMap.set(item.status, (statusMap.get(item.status) || 0) + 1);
     });
     
-    const statusBreakdown = Array.from(statusMap.entries()).map(([status, count]) => ({
+    let statusBreakdown = Array.from(statusMap.entries()).map(([status, count]) => ({
       status: status.charAt(0).toUpperCase() + status.slice(1),
       count,
       value: count
     }));
 
-    return {
+    // Ensure we have at least some sample data
+    if (statusBreakdown.length === 0) {
+      statusBreakdown = [
+        { status: 'Pending', count: 0, value: 0 },
+        { status: 'Live', count: 0, value: 0 },
+        { status: 'Sold', count: 0, value: 0 }
+      ];
+    }
+    console.log('📊 Status breakdown:', statusBreakdown);
+
+    const result = {
       totalRevenue,
       totalItems: items.length,
       activeUsers: uniqueSellers.size,
@@ -258,6 +311,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       categoryBreakdown,
       statusBreakdown
     };
+    
+    console.log('📊 Final dashboard data:', result);
+    return result;
   };
 
   const exportData = (format: 'csv' | 'json') => {
@@ -275,6 +331,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         soldItems.forEach((item) => {
           csvContent += `"${item.title}","${item.sellerName}",${item.price},${item.soldPrice || item.price},"${item.soldAt?.toLocaleDateString()}"\n`;
         });
+      } else if (activeTab === 'orders') {
+        csvContent = 'Order ID,Customer Name,Customer Email,Total Amount,Payment Status,Payment Method,Status,Items Count,Date\n';
+        orders.forEach((order) => {
+          csvContent += `"${order.orderId || order.id}","${order.customerName}","${order.customerEmail}",${order.totalAmount},"${order.paymentStatus}","${order.paymentMethod}","${order.status}",${order.items?.length || 0},"${new Date(order.createdAt).toLocaleDateString()}"\n`;
+        });
       }
       
       const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -290,6 +351,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         data = dashboardData;
       } else if (activeTab === 'sold') {
         data = { soldItems };
+      } else if (activeTab === 'orders') {
+        data = { orders };
       }
       
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -349,6 +412,16 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
             {isAdmin && (
               <>
                 <button
+                  onClick={() => setActiveTab('orders')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'orders'
+                      ? 'border-slate-500 text-slate-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Orders
+                </button>
+                <button
                   onClick={() => setActiveTab('unshipped')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
                     activeTab === 'unshipped'
@@ -391,6 +464,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                 fetchDashboardData();
               } else if (activeTab === 'sold') {
                 fetchSoldItems();
+              } else if (activeTab === 'orders') {
+                fetchOrders();
               }
             }}
             className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
@@ -451,93 +526,172 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                   {/* Monthly Revenue Trend */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue Trend</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <AreaChart data={dashboardData.monthlyRevenue}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="month" stroke="#64748b" />
-                        <YAxis stroke="#64748b" />
-                        <Tooltip 
-                          formatter={(value: any) => [formatCurrency(value), 'Revenue']}
-                          labelStyle={{ color: '#1f2937' }}
-                          contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
-                        />
-                        <Area type="monotone" dataKey="revenue" stroke="#64748b" fill="#94a3b8" fillOpacity={0.3} />
-                      </AreaChart>
-                    </ResponsiveContainer>
+                    {dashboardData?.monthlyRevenue && dashboardData.monthlyRevenue.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={dashboardData.monthlyRevenue}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis 
+                            dataKey="month" 
+                            stroke="#64748b" 
+                            fontSize={12}
+                            tick={{ fill: '#64748b' }}
+                          />
+                          <YAxis 
+                            stroke="#64748b" 
+                            fontSize={12}
+                            tick={{ fill: '#64748b' }}
+                            tickFormatter={(value) => value > 0 ? `$${value}` : '0'}
+                          />
+                          <Tooltip 
+                            formatter={(value: any) => [formatCurrency(Number(value) || 0), 'Revenue']}
+                            labelStyle={{ color: '#1f2937' }}
+                            contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="revenue" 
+                            stroke="#64748b" 
+                            fill="#94a3b8" 
+                            fillOpacity={0.3}
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="text-center text-gray-500">
+                          <div className="text-3xl mb-2">📈</div>
+                          <div className="text-sm">No revenue data available</div>
+                          <div className="text-xs text-gray-400 mt-1">Data will appear when items are sold</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Items Sold by Month */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Items Sold by Month</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={dashboardData.monthlyRevenue}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                        <XAxis dataKey="month" stroke="#64748b" />
-                        <YAxis stroke="#64748b" />
-                        <Tooltip 
-                          formatter={(value: any) => [value, 'Items Sold']}
-                          labelStyle={{ color: '#1f2937' }}
-                          contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
-                        />
-                        <Bar dataKey="items" fill="#64748b" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    {dashboardData?.monthlyRevenue && dashboardData.monthlyRevenue.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={dashboardData.monthlyRevenue}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis 
+                            dataKey="month" 
+                            stroke="#64748b" 
+                            fontSize={12}
+                            tick={{ fill: '#64748b' }}
+                          />
+                          <YAxis 
+                            stroke="#64748b" 
+                            fontSize={12}
+                            tick={{ fill: '#64748b' }}
+                            allowDecimals={false}
+                          />
+                          <Tooltip 
+                            formatter={(value: any) => [Number(value) || 0, 'Items Sold']}
+                            labelStyle={{ color: '#1f2937' }}
+                            contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                          />
+                          <Bar 
+                            dataKey="items" 
+                            fill="#64748b" 
+                            radius={[4, 4, 0, 0]}
+                            stroke="#52525b"
+                            strokeWidth={1}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="text-center text-gray-500">
+                          <div className="text-3xl mb-2">📊</div>
+                          <div className="text-sm">No sales data available</div>
+                          <div className="text-xs text-gray-400 mt-1">Data will appear when items are sold</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Items by Category */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Items by Category</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={dashboardData.categoryBreakdown}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ category, count }) => `${category}: ${count}`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="count"
-                        >
-                          {dashboardData.categoryBreakdown.map((entry: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value: any) => [value, 'Items']}
-                          labelStyle={{ color: '#1f2937' }}
-                          contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    {dashboardData?.categoryBreakdown && dashboardData.categoryBreakdown.length > 0 && dashboardData.categoryBreakdown.some((item: any) => item.count > 0) ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={dashboardData.categoryBreakdown.filter((item: any) => item.count > 0)}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ category, count }) => count > 0 ? `${category}: ${count}` : ''}
+                            outerRadius={90}
+                            innerRadius={30}
+                            fill="#8884d8"
+                            dataKey="count"
+                            stroke="#fff"
+                            strokeWidth={2}
+                          >
+                                                         {dashboardData.categoryBreakdown.filter((item: any) => item.count > 0).map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            formatter={(value: any) => [Number(value) || 0, 'Items']}
+                            labelStyle={{ color: '#1f2937' }}
+                            contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="text-center text-gray-500">
+                          <div className="text-3xl mb-2">🏷️</div>
+                          <div className="text-sm">No category data available</div>
+                          <div className="text-xs text-gray-400 mt-1">Data will appear when items are listed</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Item Status Distribution */}
                   <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Item Status Distribution</h3>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie
-                          data={dashboardData.statusBreakdown}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          label={({ status, count }) => `${status}: ${count}`}
-                          outerRadius={80}
-                          fill="#8884d8"
-                          dataKey="value"
-                        >
-                          {dashboardData.statusBreakdown.map((entry: any, index: number) => (
-                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip 
-                          formatter={(value: any) => [value, 'Items']}
-                          labelStyle={{ color: '#1f2937' }}
-                          contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    {dashboardData?.statusBreakdown && dashboardData.statusBreakdown.length > 0 && dashboardData.statusBreakdown.some((item: any) => item.value > 0) ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={dashboardData.statusBreakdown.filter((item: any) => item.value > 0)}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ status, count }) => count > 0 ? `${status}: ${count}` : ''}
+                            outerRadius={90}
+                            innerRadius={30}
+                            fill="#8884d8"
+                            dataKey="value"
+                            stroke="#fff"
+                            strokeWidth={2}
+                          >
+                            {dashboardData.statusBreakdown.filter((item: any) => item.value > 0).map((entry: any, index: number) => (
+                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            formatter={(value: any) => [Number(value) || 0, 'Items']}
+                            labelStyle={{ color: '#1f2937' }}
+                            contentStyle={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[300px] flex items-center justify-center border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="text-center text-gray-500">
+                          <div className="text-3xl mb-2">📋</div>
+                          <div className="text-sm">No status data available</div>
+                          <div className="text-xs text-gray-400 mt-1">Data will appear when items are listed</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -660,6 +814,197 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
               </div>
             )}
 
+            {/* Orders Tab */}
+            {activeTab === 'orders' && isAdmin && (
+              <div className="space-y-8">
+                {/* User Search */}
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Search Orders</h3>
+                  <div className="flex gap-4">
+                    <div className="flex-1">
+                      <input
+                        type="text"
+                        placeholder="Search by customer name, email, or order ID..."
+                        value={userSearchQuery}
+                        onChange={(e) => setUserSearchQuery(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                      />
+                    </div>
+                    <button
+                      onClick={fetchOrders}
+                      className="px-6 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
+                    >
+                      Search
+                    </button>
+                  </div>
+                </div>
+
+                {/* Orders Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Total Orders</h3>
+                    <p className="text-3xl font-bold">{orders.length}</p>
+                  </div>
+                  <div className="bg-gradient-to-r from-gray-500 to-gray-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Pending Shipment</h3>
+                    <p className="text-3xl font-bold">
+                      {orders.filter(order => !order.shippedAt && order.status === 'completed').length}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-r from-zinc-500 to-zinc-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Shipped Orders</h3>
+                    <p className="text-3xl font-bold">
+                      {orders.filter(order => order.shippedAt).length}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-r from-stone-500 to-stone-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Total Revenue</h3>
+                    <p className="text-3xl font-bold">
+                      {formatCurrency(orders.reduce((sum, order) => sum + order.totalAmount, 0))}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Orders Table */}
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    All Orders ({orders.filter(order => 
+                      !userSearchQuery || 
+                      order.customerName?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                      order.customerEmail?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                      order.orderId?.toLowerCase().includes(userSearchQuery.toLowerCase())
+                    ).length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shipping</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {orders
+                          .filter(order => 
+                            !userSearchQuery || 
+                            order.customerName?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                            order.customerEmail?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                            order.orderId?.toLowerCase().includes(userSearchQuery.toLowerCase())
+                          )
+                          .map((order) => (
+                            <tr key={order.id} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-600">
+                                {order.orderId || order.id}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">{order.customerName}</div>
+                                  <div className="text-sm text-gray-500">{order.customerEmail}</div>
+                                  {order.customerPhone && (
+                                    <div className="text-sm text-gray-500">{order.customerPhone}</div>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="text-sm text-gray-900">
+                                  {order.items?.length || 0} items
+                                </div>
+                                {order.items && order.items.slice(0, 2).map((item: any, idx: number) => (
+                                  <div key={idx} className="text-xs text-gray-500 truncate max-w-xs">
+                                    {item.title}
+                                  </div>
+                                ))}
+                                {order.items && order.items.length > 2 && (
+                                  <div className="text-xs text-gray-400">
+                                    +{order.items.length - 2} more...
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
+                                {formatCurrency(order.totalAmount)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm">
+                                  <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    order.paymentStatus === 'completed' 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : order.paymentStatus === 'pending'
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {order.paymentStatus || 'Unknown'}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    {order.paymentMethod}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  order.status === 'completed' 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : order.status === 'processing'
+                                    ? 'bg-blue-100 text-blue-800'
+                                    : order.status === 'pending'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-gray-100 text-gray-800'
+                                }`}>
+                                  {order.status || 'Unknown'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                {order.shippedAt ? (
+                                  <div>
+                                    <div className="text-sm text-green-600 font-medium">✓ Shipped</div>
+                                    {order.trackingNumber && (
+                                      <div className="text-xs text-gray-500">
+                                        {order.trackingNumber}
+                                      </div>
+                                    )}
+                                    <div className="text-xs text-gray-500">
+                                      {new Date(order.shippedAt).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                ) : order.shippingAddress ? (
+                                  <div>
+                                    <div className="text-sm text-orange-600">📦 Pending</div>
+                                    <div className="text-xs text-gray-500">
+                                      {order.shippingAddress.city}, {order.shippingAddress.state}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-sm text-gray-400">In-store pickup</div>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {new Date(order.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <button
+                                  onClick={() => {
+                                    // Handle view order details
+                                    console.log('View order details:', order);
+                                  }}
+                                  className="text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-1 rounded transition-colors"
+                                >
+                                  View Details
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
 
           </>
         )}

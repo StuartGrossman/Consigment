@@ -5,6 +5,10 @@ import { ConsignmentItem, AuthUser } from '../types';
 import { logUserAction } from '../services/firebaseService';
 import { apiService } from '../services/apiService';
 import NotificationModal from './NotificationModal';
+import {
+  LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from 'recharts';
 
 interface SoldItemsModalProps {
     isOpen: boolean;
@@ -158,6 +162,71 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
         return sum + userEarnings;
     }, 0);
 
+    // Calculate chart data
+    const calculateChartData = () => {
+        // Monthly sales trend (last 12 months)
+        const monthlyData = [];
+        const now = new Date();
+        
+        for (let i = 11; i >= 0; i--) {
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+            const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+            
+            const monthItems = soldItems.filter(item => {
+                const soldDate = item.soldAt || item.createdAt;
+                return soldDate >= monthStart && soldDate <= monthEnd;
+            });
+            
+            const monthRevenue = monthItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
+            
+            monthlyData.push({
+                month: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+                revenue: monthRevenue,
+                items: monthItems.length
+            });
+        }
+
+        // Category breakdown
+        const categoryMap = new Map();
+        soldItems.forEach(item => {
+            const category = item.category || 'Uncategorized';
+            const current = categoryMap.get(category) || { count: 0, revenue: 0 };
+            categoryMap.set(category, {
+                count: current.count + 1,
+                revenue: current.revenue + (item.soldPrice || item.price)
+            });
+        });
+
+        const categoryData = Array.from(categoryMap.entries()).map(([category, data]) => ({
+            category,
+            count: data.count,
+            revenue: data.revenue
+        })).sort((a, b) => b.revenue - a.revenue);
+
+        // Sale type breakdown
+        const saleTypeData = [
+            {
+                type: 'Online Sales',
+                count: soldItems.filter(item => item.saleType === 'online').length,
+                revenue: soldItems.filter(item => item.saleType === 'online')
+                    .reduce((sum, item) => sum + (item.soldPrice || item.price), 0)
+            },
+            {
+                type: 'In-Store Sales',
+                count: soldItems.filter(item => item.saleType !== 'online').length,
+                revenue: soldItems.filter(item => item.saleType !== 'online')
+                    .reduce((sum, item) => sum + (item.soldPrice || item.price), 0)
+            }
+        ];
+
+        return { monthlyData, categoryData, saleTypeData };
+    };
+
+    const chartData = calculateChartData();
+
+    const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0'];
+
     if (!isOpen) return null;
 
     return (
@@ -211,6 +280,96 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                                             <div>In-Store: {soldItems.filter(item => item.saleType === 'in-store').length}</div>
                                             <div>Online: {soldItems.filter(item => item.saleType === 'online').length}</div>
                                         </div>
+                                    </div>
+                                </div>
+
+                                {/* Charts Section */}
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    {/* Monthly Revenue Trend */}
+                                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue Trend</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <LineChart data={chartData.monthlyData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                                                <XAxis dataKey="month" stroke="#6b7280" />
+                                                <YAxis stroke="#6b7280" tickFormatter={(value) => `$${value}`} />
+                                                <Tooltip 
+                                                    formatter={(value: any) => [formatCurrency(value), 'Revenue']}
+                                                    labelStyle={{ color: '#1f2937' }}
+                                                    contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                                                />
+                                                <Line 
+                                                    type="monotone" 
+                                                    dataKey="revenue" 
+                                                    stroke="#059669" 
+                                                    strokeWidth={3}
+                                                    dot={{ fill: '#059669', strokeWidth: 2 }}
+                                                />
+                                            </LineChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Items Sold by Month */}
+                                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Items Sold by Month</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={chartData.monthlyData}>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                                                <XAxis dataKey="month" stroke="#6b7280" />
+                                                <YAxis stroke="#6b7280" />
+                                                <Tooltip 
+                                                    formatter={(value: any) => [value, 'Items Sold']}
+                                                    labelStyle={{ color: '#1f2937' }}
+                                                    contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                                                />
+                                                <Bar dataKey="items" fill="#3b82f6" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Category Revenue Breakdown */}
+                                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue by Category</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <PieChart>
+                                                <Pie
+                                                    data={chartData.categoryData.slice(0, 6)}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    labelLine={false}
+                                                    label={({ category, revenue }) => `${category}: ${formatCurrency(revenue)}`}
+                                                    outerRadius={80}
+                                                    fill="#8884d8"
+                                                    dataKey="revenue"
+                                                >
+                                                    {chartData.categoryData.slice(0, 6).map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))}
+                                                </Pie>
+                                                <Tooltip formatter={(value: any) => [formatCurrency(value), 'Revenue']} />
+                                            </PieChart>
+                                        </ResponsiveContainer>
+                                    </div>
+
+                                    {/* Sale Type Comparison */}
+                                    <div className="bg-white border border-gray-200 rounded-lg p-6">
+                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales by Type</h3>
+                                        <ResponsiveContainer width="100%" height={300}>
+                                            <BarChart data={chartData.saleTypeData} layout="horizontal">
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
+                                                <XAxis type="number" stroke="#6b7280" tickFormatter={(value) => `$${value}`} />
+                                                <YAxis dataKey="type" type="category" stroke="#6b7280" width={100} />
+                                                <Tooltip 
+                                                    formatter={(value: any, name: string) => [
+                                                        name === 'revenue' ? formatCurrency(value) : value,
+                                                        name === 'revenue' ? 'Revenue' : 'Count'
+                                                    ]}
+                                                    labelStyle={{ color: '#1f2937' }}
+                                                    contentStyle={{ backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}
+                                                />
+                                                <Bar dataKey="revenue" fill="#8b5cf6" />
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </div>
                                 </div>
 

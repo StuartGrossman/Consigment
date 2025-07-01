@@ -1665,6 +1665,14 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
             batch.commit()
             logger.info(f"Successfully processed order {order_id} for user {user_id}")
             
+            # Award rewards points for the purchase (if user is authenticated)
+            if not is_server_processing and user_id:
+                try:
+                    award_purchase_points(user_id, total_amount)
+                except Exception as e:
+                    logger.error(f"Failed to award points for purchase {order_id}: {e}")
+                    # Don't fail the whole payment for points issues
+            
             return PaymentResponse(
                 success=True,
                 order_id=order_id,
@@ -2905,185 +2913,1087 @@ async def generate_test_data(request: Request):
         
         logger.info(f"Admin {admin_user_id} generating test data")
         
-        # Sample outdoor gear images
-        outdoor_gear_images = [
-            'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1545558014-8692077e9b5c?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop',
-            'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop'
-        ]
-
-        # Sample test items with outdoor gear theme
+        # Comprehensive test data with diverse categories and high-quality images
         test_items = [
+            # Electronics - Enhanced with more items
             {
-                'title': 'Patagonia Down Jacket - Men\'s Large',
-                'description': 'Premium down-insulated jacket perfect for mountain adventures. Features 800-fill goose down, DWR coating, and adjustable hood.',
-                'price': 125.00,
-                'originalPrice': 189.95,
-                'brand': 'Patagonia',
-                'category': 'Jackets & Coats',
-                'gender': 'Men',
-                'size': 'Large',
-                'color': 'Navy Blue',
-                'condition': 'Very Good',
-                'material': 'Nylon, Goose Down',
-                'tags': ['outdoor', 'winter', 'premium', 'down'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Store Admin',
-                'sellerEmail': 'admin@store.com',
-                'isTestData': True,
-                'images': [outdoor_gear_images[0], outdoor_gear_images[1]]
-            },
-            {
-                'title': 'Black Diamond Climbing Helmet',
-                'description': 'Lightweight climbing helmet with excellent ventilation. UIAA certified for rock climbing and mountaineering.',
-                'price': 45.00,
-                'originalPrice': 75.00,
-                'brand': 'Black Diamond',
-                'category': 'Safety & Protection',
+                'title': 'Garmin Fenix 7X Solar GPS Watch',
+                'description': 'Multi-sport GPS smartwatch with Power Glass solar charging lens. Features heart rate monitoring, pulse ox sensor, detailed mapping, and up to 28 days battery life. Built for serious athletes and outdoor enthusiasts.',
+                'price': 649.00,
+                'originalPrice': 899.99,
+                'brand': 'Garmin',
+                'category': 'Electronics',
                 'gender': 'Unisex',
-                'size': 'M/L',
-                'color': 'White',
+                'size': '51mm',
+                'color': 'Carbon Gray DLC',
                 'condition': 'Excellent',
-                'material': 'ABS Plastic',
-                'tags': ['climbing', 'safety', 'helmet'],
-                'status': 'pending',
-                'sellerId': 'mygrossman.stewart.gmail.com',
-                'sellerName': 'Test Seller',
-                'sellerEmail': 'mygrossman.stewart.gmail.com',
-                'isTestData': True,
-                'images': [outdoor_gear_images[2]]
-            },
-            {
-                'title': 'Osprey Hiking Backpack - 50L',
-                'description': 'Multi-day trekking backpack with suspension system, hydration compatibility, and rain cover included.',
-                'price': 89.99,
-                'originalPrice': 149.95,
-                'brand': 'Osprey',
-                'category': 'Backpacks',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Forest Green',
-                'condition': 'Good',
-                'material': 'Ripstop Nylon',
-                'tags': ['hiking', 'backpack', 'outdoor'],
+                'material': 'Titanium Bezel, Sapphire Lens',
+                'tags': ['gps', 'smartwatch', 'solar', 'multisport', 'mapping'],
                 'status': 'pending',
                 'sellerId': admin_user_id,
-                'sellerName': 'Store Admin',
-                'sellerEmail': 'admin@store.com',
+                'sellerName': 'Tech Gear Expert',
+                'sellerEmail': 'tech@summitgear.com',
                 'isTestData': True,
-                'images': [outdoor_gear_images[3], outdoor_gear_images[4]]
+                'images': [
+                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80'
+                ]
             },
             {
-                'title': 'Salomon Trail Running Shoes',
-                'description': 'High-performance trail running shoes with aggressive grip and protective toe cap. Size 10.5 US.',
-                'price': 65.00,
-                'originalPrice': 120.00,
-                'brand': 'Salomon',
+                'title': 'GoPro Hero 12 Black Action Camera',
+                'description': '5.3K60 video recording with Emmy Award-winning HyperSmooth 6.0 stabilization. Waterproof to 33ft without housing. Includes Hero 12 Black camera, Enduro battery, curved adhesive mount, mounting buckle, and USB-C cable.',
+                'price': 379.00,
+                'originalPrice': 499.99,
+                'brand': 'GoPro',
+                'category': 'Electronics',
+                'gender': 'Unisex',
+                'size': '2.4 x 1.7 x 1.4 in',
+                'color': 'Black',
+                'condition': 'Like New',
+                'material': 'Aluminum Alloy Housing',
+                'tags': ['action camera', '5.3k video', 'waterproof', 'hypermooth'],
+                'status': 'pending',
+                'sellerId': 'outdoor_videographer_001',
+                'sellerName': 'Adventure Filmmaker',
+                'sellerEmail': 'films@adventures.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Apple Watch Ultra 2 - GPS + Cellular',
+                'description': 'Rugged titanium smartwatch designed for endurance athletes and outdoor adventurers. Features precision dual-frequency GPS, up to 36 hours battery life, and the brightest Apple Watch display ever.',
+                'price': 689.00,
+                'originalPrice': 799.00,
+                'brand': 'Apple',
+                'category': 'Electronics',
+                'gender': 'Unisex',
+                'size': '49mm',
+                'color': 'Natural Titanium',
+                'condition': 'Excellent',
+                'material': 'Grade 5 Titanium',
+                'tags': ['smartwatch', 'gps', 'cellular', 'titanium', 'apple'],
+                'status': 'pending',
+                'sellerId': 'apple_enthusiast_pro',
+                'sellerName': 'Premium Tech Consignment',
+                'sellerEmail': 'premium@techconsign.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1510017098667-27dfc7150c83?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'DJI Mini 4 Pro Drone',
+                'description': 'Compact drone with 4K/60fps HDR video, omnidirectional obstacle sensing, and 34-minute max flight time. Perfect for aerial photography and videography.',
+                'price': 759.00,
+                'originalPrice': 1069.00,
+                'brand': 'DJI',
+                'category': 'Electronics',
+                'gender': 'Unisex',
+                'size': 'Foldable Design',
+                'color': 'Gray',
+                'condition': 'Very Good',
+                'material': 'Magnesium Alloy Frame',
+                'tags': ['drone', '4k video', 'aerial photography', 'compact'],
+                'status': 'pending',
+                'sellerId': 'aerial_photographer',
+                'sellerName': 'Sky View Productions',
+                'sellerEmail': 'sky@aerialphoto.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Insta360 X3 360° Action Camera',
+                'description': '360° action camera with 5.7K video recording, invisible selfie stick effect, and FlowState stabilization. Perfect for immersive content creation.',
+                'price': 349.00,
+                'originalPrice': 449.99,
+                'brand': 'Insta360',
+                'category': 'Electronics',
+                'gender': 'Unisex',
+                'size': 'Compact',
+                'color': 'Black',
+                'condition': 'Very Good',
+                'material': 'Aluminum Alloy',
+                'tags': ['360 camera', '5.7k video', 'action camera', 'stabilization'],
+                'status': 'pending',
+                'sellerId': 'content_creator_360',
+                'sellerName': '360 Content Studio',
+                'sellerEmail': 'create@360studio.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Climbing & Mountaineering - Enhanced with more realistic descriptions
+            {
+                'title': 'Black Diamond Momentum Climbing Shoes - Men\'s',
+                'description': 'Comfortable all-day climbing shoe perfect for beginners and gym sessions. Features sticky BD NeoFriction rubber, breathable Engineered Knit Technology upper, and a generous fit for comfort during extended climbing sessions.',
+                'price': 55.00,
+                'originalPrice': 89.95,
+                'brand': 'Black Diamond',
                 'category': 'Footwear',
                 'gender': 'Men',
                 'size': '10.5',
-                'color': 'Black/Red',
+                'color': 'Ash',
                 'condition': 'Good',
-                'material': 'Synthetic, Rubber',
-                'tags': ['running', 'trail', 'athletic'],
+                'material': 'Engineered Knit, NeoFriction Rubber',
+                'tags': ['climbing shoes', 'beginner friendly', 'gym climbing'],
                 'status': 'pending',
-                'sellerId': 'mygrossman.stewart.gmail.com',
-                'sellerName': 'Test Seller',
-                'sellerEmail': 'mygrossman.stewart.gmail.com',
+                'sellerId': 'rock_climber_pro',
+                'sellerName': 'Vertical Adventures',
+                'sellerEmail': 'climb@vertical.com',
                 'isTestData': True,
-                'images': [outdoor_gear_images[5]]
+                'images': [
+                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1517654077773-8a82e5eaf8c8?w=800&h=600&fit=crop&q=80'
+                ]
             },
             {
-                'title': 'Arc\'teryx Softshell Jacket',
-                'description': 'Weather-resistant softshell jacket with articulated design. Perfect for alpine climbing and skiing.',
-                'price': 175.00,
-                'originalPrice': 279.00,
-                'brand': 'Arc\'teryx',
+                'title': 'La Sportiva Solution Comp Climbing Shoes - Women\'s',
+                'description': 'Aggressive performance climbing shoe with P3 system for precise edging and hooking. Features sticky Vibram XS Grip2 rubber and Fast Lacing System. Perfect for advanced sport climbing and bouldering.',
+                'price': 129.00,
+                'originalPrice': 189.00,
+                'brand': 'La Sportiva',
+                'category': 'Footwear',
+                'gender': 'Women',
+                'size': '7.5',
+                'color': 'White/Lily Orange',
+                'condition': 'Excellent',
+                'material': 'Leather, Vibram XS Grip2',
+                'tags': ['aggressive climbing', 'sport climbing', 'bouldering'],
+                'status': 'pending',
+                'sellerId': 'comp_climber_pro',
+                'sellerName': 'Elite Climbing Gear',
+                'sellerEmail': 'elite@climbinggear.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Mammut 9.5mm Phoenix Dry Climbing Rope',
+                'description': '70m dynamic single rope with Dry treatment technology providing water resistance. Featuring UIAA and CE certified construction with middle mark for safe rappelling. Perfect for sport, trad, and alpine climbing.',
+                'price': 125.00,
+                'originalPrice': 179.95,
+                'brand': 'Mammut',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '70m x 9.5mm',
+                'color': 'Safety Orange',
+                'condition': 'Very Good',
+                'material': 'Nylon Core, Polyester Sheath',
+                'tags': ['dynamic rope', 'dry treatment', 'single rope', 'middle mark'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Mountain Guide Services',
+                'sellerEmail': 'guides@mountain.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1464207687429-7505649dae38?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Black Diamond Solution Climbing Harness',
+                'description': 'Lightweight all-around harness with Dual Core Construction for strength and comfort. Features four gear loops, belay loop rated to 15 kN, and adjustable leg loops. Perfect for sport climbing and multipitch routes.',
+                'price': 45.00,
+                'originalPrice': 65.00,
+                'brand': 'Black Diamond',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': 'Medium',
+                'color': 'Ultra Blue',
+                'condition': 'Good',
+                'material': 'Nylon Webbing',
+                'tags': ['climbing harness', 'sport climbing', 'multipitch'],
+                'status': 'pending',
+                'sellerId': 'climbing_instructor_001',
+                'sellerName': 'Rock Climbing Academy',
+                'sellerEmail': 'instruct@rockacademy.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1464207687429-7505649dae38?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Petzl GriGri+ Belay Device',
+                'description': 'Assisted-braking belay device with anti-panic handle and top-rope mode selector. Features cam-assisted blocking for added security. Compatible with 8.5-11mm dynamic ropes.',
+                'price': 85.00,
+                'originalPrice': 109.95,
+                'brand': 'Petzl',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': 'Standard',
+                'color': 'Red',
+                'condition': 'Like New',
+                'material': 'Aluminum Alloy',
+                'tags': ['belay device', 'assisted braking', 'safety'],
+                'status': 'pending',
+                'sellerId': 'safety_first_climbing',
+                'sellerName': 'Climbing Safety Experts',
+                'sellerEmail': 'safety@climbsafe.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Camping Gear - Enhanced with professional descriptions
+            {
+                'title': 'Big Agnes Copper Spur HV UL2 Tent',
+                'description': 'Award-winning ultralight 2-person backpacking tent with High Volume hub design for maximum livability. Features two large vestibules (8.5 + 8.5 sq ft), DAC Featherlite NFL poles, and proprietary tent fabrics. Trail weight: 2 lbs 12 oz.',
+                'price': 315.00,
+                'originalPrice': 449.95,
+                'brand': 'Big Agnes',
+                'category': 'Camping Gear',
+                'gender': 'Unisex',
+                'size': '2 Person',
+                'color': 'Gray/Orange',
+                'condition': 'Excellent',
+                'material': 'Ripstop Nylon, DAC Featherlite Poles',
+                'tags': ['ultralight', 'backpacking', 'freestanding', 'dual vestibule'],
+                'status': 'pending',
+                'sellerId': 'backpack_camper_001',
+                'sellerName': 'Lightweight Adventures',
+                'sellerEmail': 'ultralight@camping.net',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'REI Co-op Half Dome 4 Plus Tent',
+                'description': 'Spacious 4-person family tent with color-coded poles and clips for easy setup. Features two doors, two vestibules, and 60 sq ft of floor space. Great for car camping and base camps.',
+                'price': 189.00,
+                'originalPrice': 269.00,
+                'brand': 'REI Co-op',
+                'category': 'Camping Gear',
+                'gender': 'Unisex',
+                'size': '4 Person',
+                'color': 'Red/Gray',
+                'condition': 'Very Good',
+                'material': '75D Polyester, Aluminum Poles',
+                'tags': ['family tent', 'car camping', 'spacious', 'dual doors'],
+                'status': 'pending',
+                'sellerId': 'family_camper_pro',
+                'sellerName': 'Family Outdoor Adventures',
+                'sellerEmail': 'family@outdooradventures.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Jetboil Flash Cooking System',
+                'description': 'Integrated cooking system that boils water in 100 seconds flat. Features FluxRing heat exchanger, push-button ignition, and insulated cozy. Includes 1L FluxRing cooking cup and fuel stabilizer.',
+                'price': 75.00,
+                'originalPrice': 109.95,
+                'brand': 'Jetboil',
+                'category': 'Camping Gear',
+                'gender': 'Unisex',
+                'size': '1.0L',
+                'color': 'Carbon',
+                'condition': 'Very Good',
+                'material': 'Aluminum, Stainless Steel',
+                'tags': ['integrated stove', 'fast boiling', 'lightweight', 'backpacking'],
+                'status': 'pending',
+                'sellerId': 'camp_cook_expert',
+                'sellerName': 'Outdoor Chef',
+                'sellerEmail': 'cook@outdoors.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1570737845904-972921524d9f?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1587712284248-91c0f8df4de4?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Western Mountaineering UltraLite Sleeping Bag',
+                'description': '20°F rated sleeping bag with 850+ fill power goose down. Weighs only 2 lbs 1 oz. Features differential cut construction and full-length zipper with draft tube.',
+                'price': 385.00,
+                'originalPrice': 520.00,
+                'brand': 'Western Mountaineering',
+                'category': 'Sleep Systems',
+                'gender': 'Unisex',
+                'size': 'Regular',
+                'color': 'Red',
+                'condition': 'Excellent',
+                'material': '850+ Fill Goose Down, Microfiber Shell',
+                'tags': ['down sleeping bag', 'ultralight', '20 degree', 'premium'],
+                'status': 'pending',
+                'sellerId': 'sleep_system_expert',
+                'sellerName': 'Backcountry Sleep Co',
+                'sellerEmail': 'sleep@backcountry.gear',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Therm-a-Rest NeoAir XLite Sleeping Pad',
+                'description': 'Award-winning ultralight inflatable sleeping pad with Triangular Core Matrix construction. R-value 4.2, weighs 12 oz. Packs to size of water bottle.',
+                'price': 129.00,
+                'originalPrice': 199.95,
+                'brand': 'Therm-a-Rest',
+                'category': 'Sleep Systems',
+                'gender': 'Unisex',
+                'size': 'Regular',
+                'color': 'Lemon Curry',
+                'condition': 'Very Good',
+                'material': '30D Ripstop Nylon',
+                'tags': ['sleeping pad', 'ultralight', 'insulated', 'compact'],
+                'status': 'pending',
+                'sellerId': 'comfort_camping_pro',
+                'sellerName': 'Sleep Comfort Specialists',
+                'sellerEmail': 'comfort@camping.experts',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'MSR PocketRocket 2 Ultralight Stove',
+                'description': 'Ultralight canister stove weighing just 2.6 oz. Features WindClip technology and improved pot supports. Boils 1 liter of water in 3.5 minutes.',
+                'price': 35.00,
+                'originalPrice': 49.95,
+                'brand': 'MSR',
+                'category': 'Camping Gear',
+                'gender': 'Unisex',
+                'size': 'Ultralight',
+                'color': 'Red',
+                'condition': 'Good',
+                'material': 'Stainless Steel, Aluminum',
+                'tags': ['ultralight stove', 'canister', 'windproof', 'compact'],
+                'status': 'pending',
+                'sellerId': 'minimalist_camper',
+                'sellerName': 'Ultralight Gear Co',
+                'sellerEmail': 'minimal@ultralightgear.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1570737845904-972921524d9f?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1587712284248-91c0f8df4de4?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Jackets & Outerwear
+            {
+                'title': "Arc'teryx Atom LT Vest - Men's",
+                'description': 'Versatile synthetic insulation vest perfect for layering. Wind and weather resistant.',
+                'price': 129.00,
+                'originalPrice': 189.00,
+                'brand': "Arc'teryx",
                 'category': 'Jackets & Coats',
                 'gender': 'Men',
-                'size': 'Medium',
+                'size': 'Large',
                 'color': 'Black',
                 'condition': 'Excellent',
-                'material': 'Softshell, Gore-Tex',
-                'tags': ['premium', 'weather-resistant', 'alpine'],
+                'material': 'Coreloft Synthetic',
+                'tags': ['layering', 'insulation', 'vest'],
                 'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Store Admin',
-                'sellerEmail': 'admin@store.com',
+                'sellerId': 'layer_master_pro',
+                'sellerName': 'Layering Systems',
+                'sellerEmail': 'layers@system.com',
                 'isTestData': True,
-                'images': [outdoor_gear_images[6], outdoor_gear_images[7]]
+                'images': [
+                    'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop'
+                ]
             },
             {
-                'title': 'Mammut Climbing Harness',
-                'description': 'Comfortable climbing harness with adjustable leg loops and gear loops. CE certified.',
-                'price': 35.00,
-                'originalPrice': 65.00,
-                'brand': 'Mammut',
-                'category': 'Safety & Protection',
-                'gender': 'Unisex',
+                'title': 'Patagonia Torrentshell 3L Rain Jacket',
+                'description': 'Waterproof, breathable rain jacket with 3-layer H2No Performance Standard shell.',
+                'price': 95.00,
+                'originalPrice': 149.00,
+                'brand': 'Patagonia',
+                'category': 'Jackets & Coats',
+                'gender': 'Women',
                 'size': 'Medium',
-                'color': 'Blue/Grey',
+                'color': 'Navy Blue',
                 'condition': 'Very Good',
-                'material': 'Nylon, Polyester',
-                'tags': ['climbing', 'safety', 'harness'],
+                'material': 'Recycled Nylon',
+                'tags': ['rain jacket', 'waterproof', 'breathable'],
                 'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Store Admin',
-                'sellerEmail': 'admin@store.com',
+                'sellerId': 'rain_gear_specialist',
+                'sellerName': 'Weather Protection Co',
+                'sellerEmail': 'rain@weather.com',
                 'isTestData': True,
-                'images': [outdoor_gear_images[0]]
+                'images': [
+                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1578489758854-f134a358f08b?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Footwear
+            {
+                'title': 'Salomon X Ultra 3 GTX Hiking Shoes',
+                'description': 'Gore-Tex waterproof hiking shoes with Contagrip sole for superior grip on any terrain.',
+                'price': 99.00,
+                'originalPrice': 149.95,
+                'brand': 'Salomon',
+                'category': 'Footwear',
+                'gender': 'Men',
+                'size': '10',
+                'color': 'Black/Magnet',
+                'condition': 'Excellent',
+                'material': 'Synthetic, Gore-Tex',
+                'tags': ['waterproof', 'hiking', 'trail running'],
+                'status': 'pending',
+                'sellerId': 'fast_hiker_001',
+                'sellerName': 'Speed Trail Adventures',
+                'sellerEmail': 'fast@trails.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=600&fit=crop'
+                ]
             },
             {
-                'title': 'The North Face Base Layer',
-                'description': 'Moisture-wicking merino wool base layer for cold weather activities.',
-                'price': 25.00,
-                'originalPrice': 45.00,
-                'brand': 'The North Face',
-                'category': 'Base Layers',
+                'title': 'Merrell Moab 3 Waterproof Hiking Boots',
+                'description': 'Durable waterproof hiking boots with Vibram TC5+ outsole and protective rubber toe cap.',
+                'price': 85.00,
+                'originalPrice': 129.95,
+                'brand': 'Merrell',
+                'category': 'Footwear',
+                'gender': 'Women',
+                'size': '8.5',
+                'color': 'Earth',
+                'condition': 'Good',
+                'material': 'Leather, Mesh',
+                'tags': ['waterproof', 'hiking boots', 'vibram sole'],
+                'status': 'pending',
+                'sellerId': 'trail_explorer_pro',
+                'sellerName': 'Day Hiking Specialists',
+                'sellerEmail': 'explore@trails.net',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Backpacks
+            {
+                'title': 'Osprey Atmos AG 65 Backpack',
+                'description': 'Anti-Gravity suspension system provides exceptional comfort for multi-day backpacking trips.',
+                'price': 185.00,
+                'originalPrice': 270.00,
+                'brand': 'Osprey',
+                'category': 'Backpacks',
+                'gender': 'Men',
+                'size': 'Medium (65L)',
+                'color': 'Abyss Grey',
+                'condition': 'Very Good',
+                'material': 'Nylon Ripstop',
+                'tags': ['backpacking', 'anti-gravity', 'multi-day'],
+                'status': 'pending',
+                'sellerId': 'backpack_expert_001',
+                'sellerName': 'Long Distance Trekking',
+                'sellerEmail': 'trek@longdistance.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1581833971358-2c8b550f87b3?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1525971118847-e5eb07203437?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'Deuter Speed Lite 26 Daypack',
+                'description': 'Lightweight daypack perfect for hiking, climbing, and everyday adventures.',
+                'price': 65.00,
+                'originalPrice': 95.00,
+                'brand': 'Deuter',
+                'category': 'Backpacks',
+                'gender': 'Unisex',
+                'size': '26L',
+                'color': 'Alpine Green',
+                'condition': 'Excellent',
+                'material': 'Ripstop Nylon',
+                'tags': ['daypack', 'lightweight', 'climbing'],
+                'status': 'pending',
+                'sellerId': 'day_hiker_specialist',
+                'sellerName': 'Single Day Adventures',
+                'sellerEmail': 'day@adventures.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1622260614927-9cd71154b3a2?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Winter Sports
+            {
+                'title': 'Rossignol Experience 88 Ti Skis',
+                'description': 'All-mountain skis with titanal construction for stability and performance on any terrain.',
+                'price': 385.00,
+                'originalPrice': 649.95,
+                'brand': 'Rossignol',
+                'category': 'Winter Sports',
+                'gender': 'Unisex',
+                'size': '172cm',
+                'color': 'Black/Yellow',
+                'condition': 'Good',
+                'material': 'Wood Core, Titanal',
+                'tags': ['all-mountain', 'titanal', 'carving'],
+                'status': 'pending',
+                'sellerId': 'ski_instructor_pro',
+                'sellerName': 'Alpine Ski School',
+                'sellerEmail': 'ski@alpine.school',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1578758002140-b1d10f48aa31?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'Burton Custom Snowboard',
+                'description': 'Versatile all-mountain snowboard with camber profile for power and precision.',
+                'price': 289.00,
+                'originalPrice': 429.95,
+                'brand': 'Burton',
+                'category': 'Winter Sports',
+                'gender': 'Men',
+                'size': '158cm',
+                'color': 'Blue Graphics',
+                'condition': 'Very Good',
+                'material': 'Wood Core, Fiberglass',
+                'tags': ['all-mountain', 'camber', 'freestyle'],
+                'status': 'pending',
+                'sellerId': 'snowboard_pro_rider',
+                'sellerName': 'Mountain Boarders',
+                'sellerEmail': 'ride@mountain.board',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1578758002140-b1d10f48aa31?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Water Sports
+            {
+                'title': 'BOTE Flood Aero Inflatable SUP',
+                'description': 'High-quality inflatable stand-up paddleboard with pump and paddle included.',
+                'price': 589.00,
+                'originalPrice': 799.00,
+                'brand': 'BOTE',
+                'category': 'Water Sports',
+                'gender': 'Unisex',
+                'size': "11'6\"",
+                'color': 'Teal',
+                'condition': 'Like New',
+                'material': 'Military Grade PVC',
+                'tags': ['SUP', 'inflatable', 'paddle included'],
+                'status': 'pending',
+                'sellerId': 'paddle_board_expert',
+                'sellerName': 'Lake Adventures',
+                'sellerEmail': 'paddle@lake.adventures',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'NRS Women\'s Endurance Splash Jacket',
+                'description': 'Lightweight paddling jacket with breathable fabric and adjustable fit.',
+                'price': 75.00,
+                'originalPrice': 119.95,
+                'brand': 'NRS',
+                'category': 'Water Sports',
                 'gender': 'Women',
                 'size': 'Small',
-                'color': 'Grey',
+                'color': 'Purple',
                 'condition': 'Good',
-                'material': 'Merino Wool',
-                'tags': ['base-layer', 'merino', 'thermal'],
+                'material': 'Ripstop Nylon',
+                'tags': ['paddling', 'kayaking', 'breathable'],
                 'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Store Admin',
-                'sellerEmail': 'admin@store.com',
+                'sellerId': 'kayak_enthusiast_001',
+                'sellerName': 'River Running Co',
+                'sellerEmail': 'kayak@river.runs',
                 'isTestData': True,
-                'images': [outdoor_gear_images[1]]
+                'images': [
+                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1578758002140-b1d10f48aa31?w=800&h=600&fit=crop'
+                ]
             },
+            
+            # Cycling
             {
-                'title': 'Smartwool Merino Socks',
-                'description': 'Premium merino wool hiking socks with cushioning and odor resistance.',
-                'price': 12.00,
-                'originalPrice': 22.00,
-                'brand': 'Smartwool',
-                'category': 'Accessories',
+                'title': 'Specialized Stumpjumper Comp Mountain Bike',
+                'description': 'Full suspension mountain bike with 29" wheels and modern geometry for trail riding.',
+                'price': 2199.00,
+                'originalPrice': 3299.00,
+                'brand': 'Specialized',
+                'category': 'Cycling',
                 'gender': 'Unisex',
                 'size': 'Large',
-                'color': 'Charcoal',
+                'color': 'Red/Black',
+                'condition': 'Good',
+                'material': 'Carbon Fiber',
+                'tags': ['mountain bike', 'full suspension', '29er'],
+                'status': 'pending',
+                'sellerId': 'mtb_rider_pro',
+                'sellerName': 'Single Track Adventures',
+                'sellerEmail': 'mtb@singletrack.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'Giro Montaro MIPS Helmet',
+                'description': 'Mountain bike helmet with MIPS technology for enhanced protection and comfort.',
+                'price': 89.00,
+                'originalPrice': 149.95,
+                'brand': 'Giro',
+                'category': 'Cycling',
+                'gender': 'Unisex',
+                'size': 'Medium',
+                'color': 'Matte Blue',
+                'condition': 'Excellent',
+                'material': 'Polycarbonate',
+                'tags': ['MIPS', 'mountain bike', 'safety'],
+                'status': 'pending',
+                'sellerId': 'safe_rider_001',
+                'sellerName': 'Bike Safety Pro',
+                'sellerEmail': 'safety@bike.protection',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1558658044-4c1e7c7a0b47?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Fishing
+            {
+                'title': 'Orvis Helios 3D Fly Rod',
+                'description': 'Premium fly fishing rod with exceptional feel and accuracy for serious anglers.',
+                'price': 549.00,
+                'originalPrice': 798.00,
+                'brand': 'Orvis',
+                'category': 'Fishing',
+                'gender': 'Unisex',
+                'size': '9\'0" 5wt',
+                'color': 'Olive',
+                'condition': 'Excellent',
+                'material': 'Carbon Fiber',
+                'tags': ['fly fishing', 'premium', 'trout'],
+                'status': 'pending',
+                'sellerId': 'fly_fisher_expert',
+                'sellerName': 'Trout Stream Outfitters',
+                'sellerEmail': 'fly@trout.streams',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'Simms G3 Guide Stockingfoot Waders',
+                'description': 'Breathable chest waders with reinforced construction for demanding fishing conditions.',
+                'price': 379.00,
+                'originalPrice': 599.95,
+                'brand': 'Simms',
+                'category': 'Fishing',
+                'gender': 'Men',
+                'size': 'Large',
+                'color': 'Dark Stone',
+                'condition': 'Good',
+                'material': 'Gore-Tex Pro',
+                'tags': ['waders', 'breathable', 'fly fishing'],
+                'status': 'pending',
+                'sellerId': 'wading_specialist',
+                'sellerName': 'Deep Water Access',
+                'sellerEmail': 'wade@river.access',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Accessories
+            {
+                'title': 'Hydro Flask 32oz Wide Mouth',
+                'description': 'Insulated stainless steel water bottle that keeps drinks cold for 24 hours or hot for 12 hours.',
+                'price': 25.00,
+                'originalPrice': 44.95,
+                'brand': 'Hydro Flask',
+                'category': 'Accessories',
+                'gender': 'Unisex',
+                'size': '32oz',
+                'color': 'Pacific Blue',
+                'condition': 'Good',
+                'material': 'Stainless Steel',
+                'tags': ['insulated', 'water bottle', 'hydration'],
+                'status': 'pending',
+                'sellerId': 'hydration_expert',
+                'sellerName': 'Water Bottle Station',
+                'sellerEmail': 'hydrate@water.bottles',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'Black Diamond Spot 325 Headlamp',
+                'description': 'Reliable LED headlamp with 325 lumens and red night vision. Waterproof design.',
+                'price': 25.00,
+                'originalPrice': 39.95,
+                'brand': 'Black Diamond',
+                'category': 'Accessories',
+                'gender': 'Unisex',
+                'size': 'One Size',
+                'color': 'Aluminum',
+                'condition': 'Very Good',
+                'material': 'Aluminum, Plastic',
+                'tags': ['headlamp', 'LED', 'waterproof'],
+                'status': 'pending',
+                'sellerId': 'night_navigation_pro',
+                'sellerName': 'Head Light Specialists',
+                'sellerEmail': 'night@navigation.lights',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop'
+                ]
+            },
+            
+            # Base Layers & Clothing
+            {
+                'title': 'Smartwool Merino 150 Base Layer',
+                'description': 'Lightweight merino wool base layer with natural odor resistance and temperature regulation.',
+                'price': 45.00,
+                'originalPrice': 75.00,
+                'brand': 'Smartwool',
+                'category': 'Base Layers',
+                'gender': 'Women',
+                'size': 'Medium',
+                'color': 'Deep Navy',
                 'condition': 'Very Good',
                 'material': 'Merino Wool',
-                'tags': ['socks', 'merino', 'hiking'],
+                'tags': ['merino wool', 'base layer', 'odor resistant'],
                 'status': 'pending',
-                'sellerId': 'mygrossman.stewart.gmail.com',
-                'sellerName': 'Test Seller',
-                'sellerEmail': 'mygrossman.stewart.gmail.com',
+                'sellerId': 'wool_specialist_001',
+                'sellerName': 'Natural Fibers Co',
+                'sellerEmail': 'wool@natural.fibers',
                 'isTestData': True,
-                'images': [outdoor_gear_images[2]]
+                'images': [
+                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
+                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop'
+                ]
+            },
+            {
+                'title': 'Patagonia Baggies Shorts 5-inch',
+                'description': 'Quick-dry recycled nylon shorts perfect for hiking, swimming, and everyday wear. Features DWR finish, mesh liner, and elastic waistband with drawstring.',
+                'price': 32.00,
+                'originalPrice': 55.00,
+                'brand': 'Patagonia',
+                'category': 'Shorts',
+                'gender': 'Men',
+                'size': '32',
+                'color': 'Navy Blue',
+                'condition': 'Good',
+                'material': 'Recycled Nylon DWR',
+                'tags': ['quick dry', 'versatile', 'recycled', 'water repellent'],
+                'status': 'pending',
+                'sellerId': 'shorts_enthusiast',
+                'sellerName': 'Summer Hikes Co',
+                'sellerEmail': 'shorts@summer.hikes',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Additional Comprehensive Categories
+            
+            # Mountain Biking & Cycling
+            {
+                'title': 'Trek Fuel EX 8 Full Suspension Mountain Bike',
+                'description': '29" full suspension trail bike with 130mm travel front and rear. Features Shimano XT 12-speed drivetrain, RockShox suspension, and Trek\'s Alpha Platinum Aluminum frame.',
+                'price': 2899.00,
+                'originalPrice': 3999.00,
+                'brand': 'Trek',
+                'category': 'Cycling',
+                'gender': 'Unisex',
+                'size': 'Large (19.5")',
+                'color': 'Matte Trek Black',
+                'condition': 'Very Good',
+                'material': 'Alpha Platinum Aluminum',
+                'tags': ['full suspension', 'trail bike', '29er', 'shimano xt'],
+                'status': 'pending',
+                'sellerId': 'mountain_bike_shop',
+                'sellerName': 'Trail Bike Specialists',
+                'sellerEmail': 'bikes@trailspecialists.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Fox Racing Rampage Pro Carbon MIPS Helmet',
+                'description': 'Full-face mountain bike helmet with MIPS technology and carbon fiber shell. Features Magnetic Visor System and dual-density EPS liner.',
+                'price': 189.00,
+                'originalPrice': 299.00,
+                'brand': 'Fox Racing',
+                'category': 'Cycling',
+                'gender': 'Unisex',
+                'size': 'Medium',
+                'color': 'Matte Black',
+                'condition': 'Excellent',
+                'material': 'Carbon Fiber, EPS Foam',
+                'tags': ['full face helmet', 'mips', 'mountain biking', 'carbon'],
+                'status': 'pending',
+                'sellerId': 'downhill_rider_pro',
+                'sellerName': 'Gravity Sports',
+                'sellerEmail': 'gravity@downnhill.sports',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1558658044-4c1e7c7a0b47?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Shimano SPD Pedals PD-M520',
+                'description': 'Clipless mountain bike pedals with dual-sided entry and adjustable release tension. Includes cleats and mounting hardware.',
+                'price': 35.00,
+                'originalPrice': 59.99,
+                'brand': 'Shimano',
+                'category': 'Cycling',
+                'gender': 'Unisex',
+                'size': 'Standard',
+                'color': 'Black',
+                'condition': 'Good',
+                'material': 'Aluminum Alloy',
+                'tags': ['clipless pedals', 'mountain bike', 'dual sided'],
+                'status': 'pending',
+                'sellerId': 'bike_component_pro',
+                'sellerName': 'Component Specialists',
+                'sellerEmail': 'components@bikeshop.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Fishing Gear
+            {
+                'title': 'Sage X 9\' 5wt Fly Rod',
+                'description': 'High-performance fly rod with KonneticHD Technology. Delivers exceptional accuracy and feel for trout fishing. Includes protective tube and sock.',
+                'price': 649.00,
+                'originalPrice': 925.00,
+                'brand': 'Sage',
+                'category': 'Fishing',
+                'gender': 'Unisex',
+                'size': '9\'0" 5wt',
+                'color': 'Sage Green',
+                'condition': 'Like New',
+                'material': 'KonneticHD Carbon Fiber',
+                'tags': ['fly rod', 'trout', 'premium', 'sage'],
+                'status': 'pending',
+                'sellerId': 'fly_fishing_guide',
+                'sellerName': 'Western Rivers Outfitters',
+                'sellerEmail': 'guide@westernrivers.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1445020556993-2b4ac8027ac3?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Patagonia Swiftcurrent Expedition Waders',
+                'description': 'Premium chest waders with H2No 4-layer waterproof/breathable fabric. Features reinforced knees, gravel guards, and stocking foot design.',
+                'price': 449.00,
+                'originalPrice': 649.00,
+                'brand': 'Patagonia',
+                'category': 'Fishing',
+                'gender': 'Men',
+                'size': 'Large',
+                'color': 'Forge Grey',
+                'condition': 'Very Good',
+                'material': 'H2No 4-Layer Fabric',
+                'tags': ['chest waders', 'breathable', 'reinforced', 'stocking foot'],
+                'status': 'pending',
+                'sellerId': 'fly_fishing_outfitter',
+                'sellerName': 'Angler\'s Paradise',
+                'sellerEmail': 'fish@anglersparadise.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1464822759844-d150ad6d1ccf?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1445020556993-2b4ac8027ac3?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Running & Fitness
+            {
+                'title': 'Garmin Forerunner 255 GPS Running Watch',
+                'description': 'Advanced GPS running watch with training metrics, recovery advisor, and up to 14-day battery life. Features multi-band GPS and running power.',
+                'price': 279.00,
+                'originalPrice': 349.99,
+                'brand': 'Garmin',
+                'category': 'Electronics',
+                'gender': 'Unisex',
+                'size': '45.6mm',
+                'color': 'Tidal Blue',
+                'condition': 'Excellent',
+                'material': 'Fiber-reinforced Polymer',
+                'tags': ['running watch', 'gps', 'training metrics', 'long battery'],
+                'status': 'pending',
+                'sellerId': 'running_coach_pro',
+                'sellerName': 'Marathon Training Co',
+                'sellerEmail': 'coach@marathontraining.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            {
+                'title': 'Hoka Clifton 9 Running Shoes - Women\'s',
+                'description': 'Lightweight daily trainer with maximum cushioning. Features early stage Meta-Rocker technology and engineered mesh upper for breathability.',
+                'price': 95.00,
+                'originalPrice': 139.95,
+                'brand': 'Hoka',
+                'category': 'Footwear',
+                'gender': 'Women',
+                'size': '8.5',
+                'color': 'Dazzling Blue',
+                'condition': 'Good',
+                'material': 'Engineered Mesh, EVA Midsole',
+                'tags': ['running shoes', 'maximum cushion', 'daily trainer'],
+                'status': 'pending',
+                'sellerId': 'running_store_pro',
+                'sellerName': 'Fleet Feet Running',
+                'sellerEmail': 'run@fleetfeet.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Yoga & Fitness
+            {
+                'title': 'Manduka PRO Yoga Mat 6mm',
+                'description': 'Professional-grade yoga mat with superior cushioning and grip. Features closed-cell construction and lifetime guarantee. Non-toxic and emissions-tested.',
+                'price': 89.00,
+                'originalPrice': 128.00,
+                'brand': 'Manduka',
+                'category': 'Fitness',
+                'gender': 'Unisex',
+                'size': '71" x 24" x 6mm',
+                'color': 'Black',
+                'condition': 'Very Good',
+                'material': 'PVC-free, Non-toxic',
+                'tags': ['yoga mat', 'professional grade', 'lifetime guarantee'],
+                'status': 'pending',
+                'sellerId': 'yoga_instructor_pro',
+                'sellerName': 'Zen Yoga Studio',
+                'sellerEmail': 'zen@yogastudio.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Travel & Luggage
+            {
+                'title': 'Patagonia Black Hole Duffel 55L',
+                'description': 'Weather-resistant duffel bag made from recycled polyester ripstop. Features removable padded shoulder straps and multiple carry options.',
+                'price': 89.00,
+                'originalPrice': 129.00,
+                'brand': 'Patagonia',
+                'category': 'Travel Gear',
+                'gender': 'Unisex',
+                'size': '55L',
+                'color': 'Classic Navy',
+                'condition': 'Very Good',
+                'material': 'Recycled Polyester Ripstop',
+                'tags': ['duffel bag', 'weather resistant', 'travel', 'recycled'],
+                'status': 'pending',
+                'sellerId': 'adventure_traveler',
+                'sellerName': 'Global Adventure Gear',
+                'sellerEmail': 'travel@adventuregear.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1622260614927-9cd71154b3a2?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Additional Premium Electronics
+            {
+                'title': 'Suunto 9 Peak Pro GPS Sports Watch',
+                'description': 'Ultra-durable GPS sports watch with sapphire crystal glass and grade 5 titanium bezel. Features 170+ sport modes and up to 300 hours battery life.',
+                'price': 459.00,
+                'originalPrice': 649.00,
+                'brand': 'Suunto',
+                'category': 'Electronics',
+                'gender': 'Unisex',
+                'size': '43mm',
+                'color': 'All Black',
+                'condition': 'Excellent',
+                'material': 'Grade 5 Titanium, Sapphire Crystal',
+                'tags': ['gps watch', 'ultra durable', 'long battery', '170 sports'],
+                'status': 'pending',
+                'sellerId': 'endurance_athlete_pro',
+                'sellerName': 'Ultra Endurance Gear',
+                'sellerEmail': 'ultra@endurancegear.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1510017098667-27dfc7150c83?w=800&h=600&fit=crop&q=80'
+                ]
+            },
+            
+            # Accessories & Gear
+            {
+                'title': 'Yeti Rambler 20oz Tumbler with MagSlider Lid',
+                'description': 'Double-wall vacuum insulated tumbler with MagSlider Lid. Keeps drinks cold for hours and hot drinks hot. Dishwasher safe.',
+                'price': 25.00,
+                'originalPrice': 35.00,
+                'brand': 'Yeti',
+                'category': 'Accessories',
+                'gender': 'Unisex',
+                'size': '20oz',
+                'color': 'Navy',
+                'condition': 'Very Good',
+                'material': '18/8 Stainless Steel',
+                'tags': ['insulated tumbler', 'vacuum sealed', 'magslider'],
+                'status': 'pending',
+                'sellerId': 'gear_accessories_pro',
+                'sellerName': 'Premium Accessories Co',
+                'sellerEmail': 'accessories@premiumgear.com',
+                'isTestData': True,
+                'images': [
+                    'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&h=600&fit=crop&q=80',
+                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop&q=80'
+                ]
             }
         ]
         
         created_items = []
         for item_data in test_items:
-            # Add common fields (images are already included in each item)
+            # Add common fields
             item_data.update({
                 'createdAt': datetime.now(timezone.utc),
                 'lastUpdated': datetime.now(timezone.utc),
@@ -3096,14 +4006,15 @@ async def generate_test_data(request: Request):
             created_items.append({
                 'id': doc_ref[1].id,
                 'title': item_data['title'],
-                'brand': item_data['brand']
+                'brand': item_data['brand'],
+                'category': item_data['category']
             })
         
         # Log admin action
         db.collection('adminActions').add({
             'adminId': admin_user_id,
             'action': 'test_data_generated',
-            'details': f'Generated {len(created_items)} test items',
+            'details': f'Generated {len(created_items)} diverse test items across multiple categories',
             'timestamp': datetime.now(timezone.utc),
             'itemCount': len(created_items)
         })
@@ -3112,7 +4023,7 @@ async def generate_test_data(request: Request):
         
         return {
             "success": True,
-            "message": f"Successfully generated {len(created_items)} test items",
+            "message": f"Successfully generated {len(created_items)} diverse test items across multiple categories",
             "itemCount": len(created_items),
             "items": created_items
         }
@@ -3587,7 +4498,9 @@ async def get_user_store_credit(request: Request):
         
         # Get store credit transaction history
         transactions = []
-        transactions_query = db.collection('storeCredit').where('userId', '==', user_id).order_by('createdAt', direction='DESCENDING').get()
+        try:
+            # Use simple query without ordering to avoid index requirement  
+            transactions_query = db.collection('store_credits').where('userId', '==', user_id).get()
         
         for transaction_doc in transactions_query:
             transaction_data = transaction_doc.to_dict()
@@ -3600,6 +4513,14 @@ async def get_user_store_credit(request: Request):
                 'relatedItemId': transaction_data.get('relatedItemId'),
                 'refundReason': transaction_data.get('refundReason')
             })
+                
+            # Sort in Python instead of Firestore to avoid index requirement
+            transactions.sort(key=lambda x: x.get('createdAt', datetime.min.replace(tzinfo=timezone.utc)) or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+            
+        except Exception as e:
+            logger.warning(f"Error fetching store credit transactions: {e}")
+            # Continue with empty transactions list if query fails
+            transactions = []
         
         logger.info(f"Found ${current_balance} store credit balance and {len(transactions)} transactions for user {user_email}")
         
@@ -3873,6 +4794,95 @@ async def create_sample_data(request: Request):
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/search-customers")
+async def search_customers(q: str, admin_data: dict = Depends(verify_admin_access)):
+    """Search for customers by email or phone number for POS system"""
+    try:
+        logger.info(f"🔍 Searching customers with query: '{q}'")
+        
+        if not q or len(q.strip()) < 3:
+            return {
+                "success": True,
+                "customers": [],
+                "message": "Query too short, minimum 3 characters required"
+            }
+        
+        search_query = q.strip().lower()
+        customers = []
+        
+        # Search in Firebase Auth users
+        try:
+            # Get all users from Firebase Auth (this is a paginated API)
+            page = auth.list_users()
+            
+            while page:
+                for user in page.users:
+                    # Check if email or phone matches search query
+                    email_match = user.email and search_query in user.email.lower()
+                    phone_match = user.phone_number and search_query in user.phone_number
+                    
+                    if email_match or phone_match:
+                        customers.append({
+                            'uid': user.uid,
+                            'email': user.email,
+                            'phoneNumber': user.phone_number,
+                            'displayName': user.display_name,
+                            'createdAt': user.user_metadata.creation_timestamp if user.user_metadata else None,
+                            'lastSignIn': user.user_metadata.last_sign_in_timestamp if user.user_metadata else None,
+                            'emailVerified': user.email_verified,
+                            'disabled': user.disabled
+                        })
+                
+                # Get next page
+                page = page.get_next_page() if page.has_next_page else None
+                
+        except Exception as e:
+            logger.warning(f"Failed to search Firebase Auth users: {e}")
+        
+        # Also search in the users collection in Firestore
+        try:
+            users_ref = db.collection('users')
+            users = users_ref.stream()
+            
+            for user_doc in users:
+                user_data = user_doc.to_dict()
+                user_data['uid'] = user_doc.id
+                
+                email_match = user_data.get('email') and search_query in user_data.get('email', '').lower()
+                phone_match = user_data.get('phoneNumber') and search_query in user_data.get('phoneNumber', '')
+                
+                if email_match or phone_match:
+                    # Check if already added from Firebase Auth
+                    if not any(c['uid'] == user_data['uid'] for c in customers):
+                        customers.append({
+                            'uid': user_data['uid'],
+                            'email': user_data.get('email'),
+                            'phoneNumber': user_data.get('phoneNumber'),
+                            'displayName': user_data.get('displayName') or user_data.get('email'),
+                            'createdAt': user_data.get('createdAt'),
+                            'isAdmin': user_data.get('isAdmin', False),
+                            'storeCredit': user_data.get('storeCredit', 0)
+                        })
+                        
+        except Exception as e:
+            logger.warning(f"Failed to search Firestore users: {e}")
+        
+        logger.info(f"✅ Found {len(customers)} customers matching query '{q}'")
+        
+        return {
+            "success": True,
+            "customers": customers[:10],  # Limit to 10 results
+            "total_found": len(customers),
+            "query": q
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Customer search failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to search customers: {str(e)}"
+        )
 
 @app.get("/api/admin/debug-barcodes")
 async def debug_barcodes(admin_data: dict = Depends(verify_admin_access)):
@@ -4221,6 +5231,582 @@ async def process_inhouse_sale(request: Request, admin_data: dict = Depends(veri
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Sale processing failed: {str(e)}"
+        )
+
+# Rewards system endpoints
+@app.get("/api/admin/rewards-config")
+async def get_rewards_config(admin_data: dict = Depends(verify_admin_access)):
+    """Get current rewards configuration"""
+    try:
+        config_doc = db.collection('system').document('rewards_config').get()
+        if config_doc.exists:
+            config_data = config_doc.to_dict()
+            # Convert timestamps to datetime objects for consistent handling
+            if 'lastUpdated' in config_data:
+                config_data['lastUpdated'] = config_data['lastUpdated']
+            
+            return {
+                "success": True,
+                "config": config_data
+            }
+        else:
+            # Return default configuration
+            default_config = {
+                "pointsPerDollarSpent": 1,
+                "refundPointsPercentage": 50,
+                "pointValueInUSD": 0.01,
+                "minimumRedemptionPoints": 100,
+                "bonusPointsMultiplier": 1.5,
+                "welcomeBonusPoints": 100,
+                "lastUpdated": datetime.now(timezone.utc),
+                "updatedBy": "system"
+            }
+            
+            # Save default config
+            db.collection('system').document('rewards_config').set(default_config)
+            
+            return {
+                "success": True,
+                "config": default_config
+            }
+    except Exception as e:
+        logger.error(f"Error fetching rewards config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch rewards configuration: {str(e)}"
+        )
+
+@app.post("/api/admin/update-rewards-config")
+async def update_rewards_config(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Update rewards configuration"""
+    try:
+        config_data = await request.json()
+        
+        # Add metadata
+        config_data['lastUpdated'] = datetime.now(timezone.utc)
+        config_data['updatedBy'] = admin_data.get('email', admin_data.get('uid'))
+        
+        # Validate required fields
+        required_fields = ['pointsPerDollarSpent', 'refundPointsPercentage', 'pointValueInUSD', 'minimumRedemptionPoints']
+        for field in required_fields:
+            if field not in config_data:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Missing required field: {field}"
+                )
+        
+        # Validate ranges
+        if config_data['pointsPerDollarSpent'] <= 0 or config_data['pointsPerDollarSpent'] > 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Points per dollar must be between 0.1 and 10"
+            )
+        
+        if config_data['pointValueInUSD'] <= 0 or config_data['pointValueInUSD'] > 1:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Point value must be between 0.001 and 1"
+            )
+        
+        # Save to database
+        db.collection('system').document('rewards_config').set(config_data)
+        
+        logger.info(f"Rewards configuration updated by {admin_data.get('email')}")
+        
+        return {
+            "success": True,
+            "message": "Rewards configuration updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating rewards config: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update rewards configuration: {str(e)}"
+        )
+
+@app.get("/api/admin/rewards-analytics")
+async def get_rewards_analytics(admin_data: dict = Depends(verify_admin_access)):
+    """Get rewards analytics data"""
+    try:
+        # Get all users with rewards data
+        users_ref = db.collection('users')
+        users_docs = users_ref.stream()
+        
+        users_data = []
+        total_points = 0
+        
+        for user_doc in users_docs:
+            user_data = user_doc.to_dict()
+            user_id = user_doc.id
+            
+            # Get user's rewards info
+            rewards_info = user_data.get('rewards', {})
+            total_user_points = rewards_info.get('totalPoints', 0)
+            total_earned = rewards_info.get('totalEarned', 0)
+            total_redeemed = rewards_info.get('totalRedeemed', 0)
+            
+            # Get user's total spending
+            total_spent = 0
+            try:
+                orders_ref = db.collection('orders').where('userId', '==', user_id)
+                orders_docs = orders_ref.stream()
+                for order_doc in orders_docs:
+                    order_data = order_doc.to_dict()
+                    total_spent += order_data.get('total_amount', 0)
+            except:
+                pass
+            
+            # Add to users data if they have any rewards activity
+            if total_user_points > 0 or total_earned > 0 or total_redeemed > 0:
+                users_data.append({
+                    'uid': user_id,
+                    'email': user_data.get('email', ''),
+                    'displayName': user_data.get('displayName', user_data.get('email', 'Unknown')),
+                    'totalPoints': total_user_points,
+                    'totalSpent': total_spent,
+                    'totalEarned': total_earned,
+                    'totalRedeemed': total_redeemed,
+                    'lastActivity': user_data.get('lastActivity', datetime.now(timezone.utc)),
+                    'joinDate': user_data.get('createdAt', datetime.now(timezone.utc))
+                })
+                
+                total_points += total_user_points
+        
+        # Get rewards config for calculations
+        config_doc = db.collection('system').document('rewards_config').get()
+        point_value = 0.01  # Default
+        if config_doc.exists:
+            config_data = config_doc.to_dict()
+            point_value = config_data.get('pointValueInUSD', 0.01)
+        
+        return {
+            "success": True,
+            "users": users_data,
+            "totalPoints": total_points,
+            "totalValue": total_points * point_value
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching rewards analytics: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch rewards analytics: {str(e)}"
+        )
+
+@app.post("/api/admin/adjust-user-points")
+async def adjust_user_points(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Adjust user's rewards points"""
+    try:
+        data = await request.json()
+        user_id = data.get('userId')
+        points_adjustment = data.get('pointsAdjustment', 0)
+        reason = data.get('reason', 'Admin adjustment')
+        
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User ID is required"
+            )
+        
+        # Get user document
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        user_data = user_doc.to_dict()
+        rewards_info = user_data.get('rewards', {
+            'totalPoints': 0,
+            'totalEarned': 0,
+            'totalRedeemed': 0,
+            'history': []
+        })
+        
+        # Calculate new balance
+        current_points = rewards_info.get('totalPoints', 0)
+        new_balance = max(0, current_points + points_adjustment)  # Don't allow negative points
+        
+        # Update rewards info
+        rewards_info['totalPoints'] = new_balance
+        if points_adjustment > 0:
+            rewards_info['totalEarned'] = rewards_info.get('totalEarned', 0) + points_adjustment
+        
+        # Add to history
+        history_entry = {
+            'type': 'admin_adjustment',
+            'points': points_adjustment,
+            'reason': reason,
+            'timestamp': datetime.now(timezone.utc),
+            'adminUser': admin_data.get('email', admin_data.get('uid')),
+            'balanceAfter': new_balance
+        }
+        
+        if 'history' not in rewards_info:
+            rewards_info['history'] = []
+        rewards_info['history'].append(history_entry)
+        
+        # Update user document
+        user_ref.update({'rewards': rewards_info})
+        
+        logger.info(f"Points adjusted for user {user_id}: {points_adjustment} points, reason: {reason}")
+        
+        return {
+            "success": True,
+            "message": f"Successfully adjusted user points by {points_adjustment}",
+            "newBalance": new_balance
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error adjusting user points: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to adjust user points: {str(e)}"
+        )
+
+@app.post("/api/user/redeem-points")
+async def redeem_rewards_points(request: Request, user_data: dict = Depends(verify_firebase_token)):
+    """Allow user to redeem points for store credit"""
+    try:
+        data = await request.json()
+        points_to_redeem = data.get('pointsToRedeem', 0)
+        
+        if points_to_redeem <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Points to redeem must be greater than 0"
+            )
+        
+        user_id = user_data.get('uid')
+        
+        # Get rewards config
+        config_doc = db.collection('system').document('rewards_config').get()
+        if not config_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Rewards configuration not found"
+            )
+        
+        config_data = config_doc.to_dict()
+        point_value = config_data.get('pointValueInUSD', 0.01)
+        min_redemption = config_data.get('minimumRedemptionPoints', 100)
+        
+        if points_to_redeem < min_redemption:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Minimum redemption is {min_redemption} points"
+            )
+        
+        # Get user document
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        if not user_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        user_doc_data = user_doc.to_dict()
+        rewards_info = user_doc_data.get('rewards', {'totalPoints': 0})
+        current_points = rewards_info.get('totalPoints', 0)
+        
+        if current_points < points_to_redeem:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Insufficient points for redemption"
+            )
+        
+        # Calculate USD value
+        usd_value = points_to_redeem * point_value
+        
+        # Update points balance
+        new_points_balance = current_points - points_to_redeem
+        rewards_info['totalPoints'] = new_points_balance
+        rewards_info['totalRedeemed'] = rewards_info.get('totalRedeemed', 0) + points_to_redeem
+        
+        # Add to history
+        history_entry = {
+            'type': 'redemption',
+            'points': -points_to_redeem,
+            'usdValue': usd_value,
+            'timestamp': datetime.now(timezone.utc),
+            'balanceAfter': new_points_balance
+        }
+        
+        if 'history' not in rewards_info:
+            rewards_info['history'] = []
+        rewards_info['history'].append(history_entry)
+        
+        # Add store credit
+        current_store_credit = user_doc_data.get('storeCredit', 0)
+        new_store_credit = current_store_credit + usd_value
+        
+        # Update user document
+        user_ref.update({
+            'rewards': rewards_info,
+            'storeCredit': new_store_credit
+        })
+        
+        logger.info(f"User {user_id} redeemed {points_to_redeem} points for ${usd_value} store credit")
+        
+        return {
+            "success": True,
+            "message": f"Successfully redeemed {points_to_redeem} points for ${usd_value:.2f} store credit",
+            "pointsRedeemed": points_to_redeem,
+            "usdValue": usd_value,
+            "newPointsBalance": new_points_balance,
+            "storeCreditAdded": usd_value
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error redeeming points: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to redeem points: {str(e)}"
+        )
+
+@app.get("/api/user/rewards-info")
+async def get_user_rewards_info(user_data: dict = Depends(verify_firebase_token)):
+    """Get user's rewards information"""
+    try:
+        user_id = user_data.get('uid')
+        
+        # Get rewards config
+        config_doc = db.collection('system').document('rewards_config').get()
+        config_data = {}
+        if config_doc.exists:
+            config_data = config_doc.to_dict()
+        
+        point_value = config_data.get('pointValueInUSD', 0.01)
+        min_redemption = config_data.get('minimumRedemptionPoints', 100)
+        
+        # Get user document
+        user_ref = db.collection('users').document(user_id)
+        user_doc = user_ref.get()
+        
+        rewards_info = {'totalPoints': 0, 'totalEarned': 0, 'totalRedeemed': 0, 'history': []}
+        
+        if user_doc.exists:
+            user_data_doc = user_doc.to_dict()
+            rewards_info = user_data_doc.get('rewards', rewards_info)
+        
+        return {
+            "success": True,
+            "totalPoints": rewards_info.get('totalPoints', 0),
+            "totalEarned": rewards_info.get('totalEarned', 0),
+            "totalRedeemed": rewards_info.get('totalRedeemed', 0),
+            "pointValue": point_value,
+            "minimumRedemption": min_redemption,
+            "history": rewards_info.get('history', [])
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching user rewards info: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch rewards information: {str(e)}"
+        )
+
+# Helper function to award points for purchases
+def award_purchase_points(user_id: str, purchase_amount: float):
+    """Award points to a user based on their purchase amount"""
+    try:
+        # Get current rewards configuration
+        config_doc = db.collection('admin_settings').document('rewards_config').get()
+        if config_doc.exists:
+            config = config_doc.to_dict()
+            points_per_dollar = config.get('pointsPerDollar', 1.0)
+        else:
+            points_per_dollar = 1.0  # Default: 1 point per dollar
+        
+        # Calculate points to award
+        points_to_award = int(purchase_amount * points_per_dollar)
+        
+        if points_to_award > 0:
+            # Get user's current points
+            user_doc = db.collection('users').document(user_id).get()
+            if user_doc.exists:
+                current_points = user_doc.to_dict().get('rewardsPoints', 0)
+                new_total = current_points + points_to_award
+                
+                # Update user's points
+                db.collection('users').document(user_id).update({
+                    'rewardsPoints': new_total,
+                    'lastPointsUpdate': datetime.now(timezone.utc)
+                })
+                
+                # Create points transaction record
+                transaction = {
+                    'userId': user_id,
+                    'type': 'earned',
+                    'points': points_to_award,
+                    'description': f'Purchase reward - ${purchase_amount:.2f}',
+                    'createdAt': datetime.now(timezone.utc),
+                    'orderId': None,  # Could link to order if available
+                    'balance_after': new_total
+                }
+                
+                db.collection('rewards_transactions').add(transaction)
+                
+                logger.info(f"Awarded {points_to_award} points to user {user_id} for ${purchase_amount:.2f} purchase")
+                return True
+            else:
+                logger.warning(f"User {user_id} not found when trying to award points")
+                return False
+        else:
+            logger.info(f"No points awarded - purchase amount too small: ${purchase_amount:.2f}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error awarding purchase points to user {user_id}: {e}")
+        return False
+
+@app.get("/api/admin/orders")
+async def get_all_orders(admin_data: dict = Depends(verify_admin_access)):
+    """Get all orders with comprehensive details including items, shipping, and payment info"""
+    try:
+        logger.info("Fetching all orders for admin dashboard")
+        
+        # First, get all completed transactions/payments
+        payments_ref = db.collection('payments')
+        payments_docs = payments_ref.get()
+        
+        orders = []
+        
+        for payment_doc in payments_docs:
+            payment_data = payment_doc.to_dict()
+            payment_id = payment_doc.id
+            
+            # Get the order items from the sold items
+            order_items = []
+            total_amount = 0
+            
+            # Look for items that were part of this transaction
+            items_ref = db.collection('items')
+            
+            # Try to find items by transaction_id first
+            if 'transaction_id' in payment_data:
+                sold_items_query = items_ref.where('transaction_id', '==', payment_data['transaction_id'])
+                sold_items_docs = sold_items_query.get()
+                
+                for item_doc in sold_items_docs:
+                    item_data = item_doc.to_dict()
+                    order_items.append({
+                        'id': item_doc.id,
+                        'title': item_data.get('title', 'Unknown Item'),
+                        'price': item_data.get('soldPrice', item_data.get('price', 0)),
+                        'seller': item_data.get('sellerName', 'Unknown Seller'),
+                        'category': item_data.get('category', 'Uncategorized'),
+                        'status': item_data.get('status', 'sold'),
+                        'shippedAt': item_data.get('shippedAt'),
+                        'trackingNumber': item_data.get('trackingNumber')
+                    })
+                    total_amount += item_data.get('soldPrice', item_data.get('price', 0))
+            
+            # If no items found by transaction_id, try other methods
+            if not order_items and 'order_id' in payment_data:
+                sold_items_query = items_ref.where('order_id', '==', payment_data['order_id'])
+                sold_items_docs = sold_items_query.get()
+                
+                for item_doc in sold_items_docs:
+                    item_data = item_doc.to_dict()
+                    order_items.append({
+                        'id': item_doc.id,
+                        'title': item_data.get('title', 'Unknown Item'),
+                        'price': item_data.get('soldPrice', item_data.get('price', 0)),
+                        'seller': item_data.get('sellerName', 'Unknown Seller'),
+                        'category': item_data.get('category', 'Uncategorized'),
+                        'status': item_data.get('status', 'sold'),
+                        'shippedAt': item_data.get('shippedAt'),
+                        'trackingNumber': item_data.get('trackingNumber')
+                    })
+                    total_amount += item_data.get('soldPrice', item_data.get('price', 0))
+            
+            # If still no items, this might be a payment without properly linked items
+            if not order_items:
+                # Use payment amount as fallback
+                total_amount = payment_data.get('amount', payment_data.get('total_amount', 0))
+                order_items = [{
+                    'id': 'unknown',
+                    'title': 'Order Details Not Available',
+                    'price': total_amount,
+                    'seller': 'System',
+                    'category': 'Payment Record',
+                    'status': 'completed'
+                }]
+            
+            # Build order object
+            order = {
+                'id': payment_id,
+                'orderId': payment_data.get('order_id', payment_id),
+                'customerName': payment_data.get('customer_name', payment_data.get('customerName', 'Unknown Customer')),
+                'customerEmail': payment_data.get('customer_email', payment_data.get('customerEmail', 'No email')),
+                'customerPhone': payment_data.get('customer_phone', payment_data.get('customerPhone')),
+                'totalAmount': total_amount or payment_data.get('amount', 0),
+                'paymentStatus': payment_data.get('status', payment_data.get('payment_status', 'completed')),
+                'paymentMethod': payment_data.get('payment_method', payment_data.get('paymentMethod', 'card')),
+                'status': 'completed',  # All payments are completed by default
+                'items': order_items,
+                'createdAt': payment_data.get('created_at', payment_data.get('createdAt', datetime.now(timezone.utc))),
+                'shippedAt': None,  # Will be set if any items are shipped
+                'trackingNumber': None,
+                'shippingAddress': {
+                    'address': payment_data.get('shipping_address', payment_data.get('address')),
+                    'city': payment_data.get('shipping_city', payment_data.get('city')),
+                    'state': payment_data.get('shipping_state', payment_data.get('state')),
+                    'zip': payment_data.get('shipping_zip', payment_data.get('zip_code')),
+                    'country': payment_data.get('shipping_country', 'US')
+                } if payment_data.get('fulfillment_method') == 'shipping' else None,
+                'fulfillmentMethod': payment_data.get('fulfillment_method', 'pickup'),
+                'notes': payment_data.get('notes', ''),
+                'transactionId': payment_data.get('transaction_id', payment_id)
+            }
+            
+            # Check if any items in the order have been shipped
+            shipped_items = [item for item in order_items if item.get('shippedAt')]
+            if shipped_items:
+                # Use the first shipped item's shipping info
+                first_shipped = shipped_items[0]
+                order['shippedAt'] = first_shipped.get('shippedAt')
+                order['trackingNumber'] = first_shipped.get('trackingNumber')
+            
+            orders.append(order)
+        
+        # Sort orders by creation date (newest first)
+        orders.sort(key=lambda x: x.get('createdAt', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+        
+        # Convert datetime objects to ISO strings for JSON serialization
+        for order in orders:
+            if isinstance(order.get('createdAt'), datetime):
+                order['createdAt'] = order['createdAt'].isoformat()
+            if isinstance(order.get('shippedAt'), datetime):
+                order['shippedAt'] = order['shippedAt'].isoformat()
+            
+            # Handle items datetime conversion
+            for item in order.get('items', []):
+                if isinstance(item.get('shippedAt'), datetime):
+                    item['shippedAt'] = item['shippedAt'].isoformat()
+        
+        logger.info(f"Successfully fetched {len(orders)} orders for admin dashboard")
+        
+        return orders
+        
+    except Exception as e:
+        logger.error(f"Error fetching orders: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch orders: {str(e)}"
         )
 
 if __name__ == "__main__":

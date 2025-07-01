@@ -7,6 +7,7 @@ import { logUserAction } from '../services/firebaseService';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import NotificationModal from './NotificationModal';
+import BulkActionsModal from './BulkActionsModal';
 import { testDataFiles } from '../assets/test-data';
 
 interface InventoryDashboardProps {
@@ -54,7 +55,40 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
     message: '',
     type: 'info' as 'success' | 'error' | 'info' | 'warning'
   });
+  const [showBulkActionsModal, setShowBulkActionsModal] = useState(false);
   const { user } = useAuth();
+
+  // Define available bulk actions
+  const availableBulkActions = [
+    {
+      id: 'approve',
+      name: 'Approve Items',
+      description: 'Mark selected items as approved',
+      icon: '✅',
+      color: 'green'
+    },
+    {
+      id: 'make-live',
+      name: 'Make Live',
+      description: 'Publish selected items for sale',
+      icon: '🚀',
+      color: 'blue'
+    },
+    {
+      id: 'reject',
+      name: 'Reject Items',
+      description: 'Mark selected items as rejected',
+      icon: '❌',
+      color: 'red'
+    },
+    {
+      id: 'archive',
+      name: 'Archive Items',
+      description: 'Move selected items to archive',
+      icon: '📦',
+      color: 'gray'
+    }
+  ];
 
   // Helper function to show notifications
   const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
@@ -732,54 +766,21 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Bulk Actions</label>
             <button
-              onClick={() => setShowBulkActions(!showBulkActions)}
+              onClick={() => setShowBulkActionsModal(true)}
               disabled={selectedItems.length === 0}
-              className="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm"
+              className="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
             >
-              Actions ({selectedItems.length})
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Bulk Actions ({selectedItems.length})
             </button>
           </div>
         </div>
 
 
 
-        {/* Bulk Actions Panel */}
-        {showBulkActions && selectedItems.length > 0 && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => handleBulkStatusChange('pending')}
-                className="bg-yellow-500 text-white px-3 py-1 rounded text-sm hover:bg-yellow-600"
-              >
-                Move to Pending
-              </button>
-              <button
-                onClick={() => handleBulkStatusChange('approved')}
-                className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600"
-              >
-                Move to Approved
-              </button>
-              <button
-                onClick={() => handleBulkStatusChange('live')}
-                className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
-              >
-                Mark as Live
-              </button>
-              <button
-                onClick={() => handleBulkStatusChange('archived')}
-                className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600"
-              >
-                Archive Items
-              </button>
-              <button
-                onClick={() => setShowBulkActions(false)}
-                className="bg-gray-400 text-white px-3 py-1 rounded text-sm hover:bg-gray-500"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+
       </div>
 
       {/* Items Table */}
@@ -809,8 +810,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
               {viewMode === 'individual' ? (
                 // Individual Items View
                 filteredItems.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleItemSelect(item.id)}>
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedItems.includes(item.id)}
@@ -888,11 +889,14 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {item.sellerName}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-2">
                         {item.status === 'live' && (
                           <button
-                            onClick={() => handleDiscountClick(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDiscountClick(item);
+                            }}
                             className="text-orange-600 hover:text-orange-900"
                           >
                             Discount
@@ -900,7 +904,10 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         )}
                         {item.status !== 'archived' && (
                           <button
-                            onClick={() => handleSingleItemAction(item.id, 'archived')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSingleItemAction(item.id, 'archived');
+                            }}
                             className="text-gray-600 hover:text-gray-900"
                           >
                             Archive
@@ -913,8 +920,15 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
               ) : (
                 // Grouped Items View
                 groupedItems.map((group) => (
-                  <tr key={group.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <tr key={group.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => {
+                    const allSelected = group.items.every(item => selectedItems.includes(item.id));
+                    if (allSelected) {
+                      setSelectedItems(prev => prev.filter(id => !group.items.some(item => item.id === id)));
+                    } else {
+                      setSelectedItems(prev => [...prev, ...group.items.map(item => item.id)]);
+                    }
+                  }}>
+                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={group.items.every(item => selectedItems.includes(item.id))}
@@ -973,10 +987,11 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {[...new Set(group.items.map(item => item.sellerName))].join(', ')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation();
                             // Archive all items in the group that aren't already archived
                             group.items.forEach(item => {
                               if (item.status !== 'archived') {
@@ -1049,6 +1064,18 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           showNotification={showNotificationModal}
         />
       )}
+
+      {/* Bulk Actions Modal */}
+      <BulkActionsModal
+        isOpen={showBulkActionsModal}
+        onClose={() => setShowBulkActionsModal(false)}
+        selectedItems={selectedItems}
+        availableActions={availableBulkActions}
+        onComplete={() => {
+          setSelectedItems([]);
+          fetchAllItems();
+        }}
+      />
 
       {/* Notification Modal */}
       <NotificationModal

@@ -847,6 +847,157 @@ class ApiService {
             throw error;
         }
     }
+
+    // Rewards system methods
+    async getRewardsConfig(): Promise<{
+        success: boolean;
+        config: any;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/rewards-config');
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get rewards config:', error);
+            throw error;
+        }
+    }
+
+    async updateRewardsConfig(configData: any): Promise<{
+        success: boolean;
+        message: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/update-rewards-config', {
+                method: 'POST',
+                body: JSON.stringify(configData),
+            });
+            
+            const result = await response.json();
+            
+            // Log the config update action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'rewards_config_updated', 
+                    `Updated rewards configuration`,
+                    '',
+                    'rewards_config'
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to update rewards config:', error);
+            throw error;
+        }
+    }
+
+    async getRewardsAnalytics(): Promise<{
+        success: boolean;
+        users: any[];
+        totalPoints: number;
+        totalValue: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/rewards-analytics');
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get rewards analytics:', error);
+            throw error;
+        }
+    }
+
+    async adjustUserRewardsPoints(userId: string, pointsAdjustment: number, reason: string): Promise<{
+        success: boolean;
+        message: string;
+        newBalance: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/adjust-user-points', {
+                method: 'POST',
+                body: JSON.stringify({
+                    userId,
+                    pointsAdjustment,
+                    reason,
+                }),
+            });
+            
+            const result = await response.json();
+            
+            // Log the points adjustment action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'user_points_adjusted', 
+                    `Adjusted user points by ${pointsAdjustment}: ${reason}`,
+                    userId,
+                    reason
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to adjust user points:', error);
+            throw error;
+        }
+    }
+
+    async redeemRewardsPoints(pointsToRedeem: number): Promise<{
+        success: boolean;
+        message: string;
+        pointsRedeemed: number;
+        usdValue: number;
+        newPointsBalance: number;
+        storeCreditAdded: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/user/redeem-points', {
+                method: 'POST',
+                body: JSON.stringify({
+                    pointsToRedeem,
+                }),
+            });
+            
+            const result = await response.json();
+            
+            // Log the points redemption action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'points_redeemed', 
+                    `Redeemed ${pointsToRedeem} points for $${result.usdValue} store credit`,
+                    '',
+                    `${pointsToRedeem} points`
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to redeem rewards points:', error);
+            throw error;
+        }
+    }
+
+    async getUserRewardsInfo(): Promise<{
+        success: boolean;
+        totalPoints: number;
+        totalEarned: number;
+        totalRedeemed: number;
+        pointValue: number;
+        minimumRedemption: number;
+        history: any[];
+    }> {
+        try {
+            const response = await this.makeRequest('/api/user/rewards-info');
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get user rewards info:', error);
+            throw error;
+        }
+    }
 }
 
 export const apiService = new ApiService();

@@ -105,7 +105,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   // Bulk actions
   const handleBulkApprove = async () => {
     if (selectedItems.size === 0) return;
-    setShowBulkApproveModal(true);
+    // Skip confirmation modal and go directly to bulk barcode generation
+    setShowBulkBarcodeModal(true);
   };
 
   const confirmBulkApprove = async () => {
@@ -153,7 +154,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
   const handleApproveClick = async (item: ConsignmentItem) => {
     await throttledAction(`approve-${item.id}`, async () => {
       setSelectedItem(item);
-      setShowApproveModal(true);
+      // Skip confirmation modal and go directly to barcode generation
+      setShowBarcodeModal(true);
     });
   };
 
@@ -335,15 +337,23 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           ) : (
             <div className="space-y-4 sm:space-y-6">
               {pendingItems.map((item) => (
-                <div key={item.id} className="mobile-admin-item-card">
+                <div 
+                  key={item.id} 
+                  className={`mobile-admin-item-card cursor-pointer transition-all duration-200 ${
+                    selectedItems.has(item.id) 
+                      ? 'ring-2 ring-orange-500 bg-orange-50 border-orange-200' 
+                      : 'hover:bg-gray-50 hover:border-gray-300'
+                  }`}
+                  onClick={() => toggleSelectItem(item.id)}
+                >
                   <div className="mobile-admin-item-layout">
                     {/* Selection Checkbox */}
                     <div className="flex items-start">
                       <input
                         type="checkbox"
                         checked={selectedItems.has(item.id)}
-                        onChange={() => toggleSelectItem(item.id)}
-                        className="mt-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+                        onChange={(e) => e.stopPropagation()}
+                        className="mt-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded pointer-events-none"
                       />
                     </div>
                     
@@ -413,14 +423,20 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
 
                       <div className="mobile-admin-item-actions">
                         <button
-                          onClick={() => handleEdit(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(item);
+                          }}
                           disabled={processingItemId === item.id || isActionDisabled(`edit-${item.id}`)}
                           className="mobile-admin-button mobile-admin-button-edit disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isActionProcessing(`edit-${item.id}`) ? 'Opening...' : 'Edit Details'}
                         </button>
                         <button
-                          onClick={() => handleApproveClick(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleApproveClick(item);
+                          }}
                           disabled={processingItemId === item.id || isActionDisabled(`approve-${item.id}`)}
                           className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
                         >
@@ -428,7 +444,10 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
                            isActionProcessing(`approve-${item.id}`) ? 'Opening...' : 'Approve Item'}
                         </button>
                         <button
-                          onClick={() => handleRejectClick(item)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRejectClick(item);
+                          }}
                           disabled={processingItemId === item.id || isActionDisabled(`reject-${item.id}`)}
                           className="mobile-admin-button mobile-admin-button-reject disabled:opacity-50 disabled:cursor-not-allowed"
                         >

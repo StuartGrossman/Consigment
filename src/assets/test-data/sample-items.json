@@ -1,4 +1,475 @@
 {
+  "electronics": [
+    {
+      "item_title": "Garmin Fenix 7X Solar GPS Watch",
+      "manufacturer": "Garmin",
+      "product_category": "electronics",
+      "dimensions": "51mm case",
+      "primary_color": "black",
+      "wear_condition": "excellent",
+      "retail_value": 899.99,
+      "asking_price": 649.00,
+      "item_notes": "Multi-sport GPS watch with solar charging. Includes original box and charger.",
+      "owner_contact": {
+        "email_address": "tech.mountain@gear.com",
+        "phone_number": "555-0001"
+      }
+    },
+    {
+      "item_title": "GoPro Hero 11 Black Action Camera",
+      "manufacturer": "GoPro",
+      "product_category": "electronics",
+      "size": "compact",
+      "color": "black",
+      "condition": "like_new",
+      "original_price": 499.99,
+      "sale_price": 379.00,
+      "description": "4K action camera with HyperSmooth 5.0 stabilization. Includes 64GB SD card.",
+      "seller_info": {
+        "contact_email": "action.cam@adventures.net",
+        "phone": "555-0002"
+      }
+    },
+    {
+      "product_name": "Anker PowerCore 26800 Power Bank",
+      "brand_name": "Anker",
+      "gear_type": "electronics",
+      "capacity": "26800mAh",
+      "color_way": "black",
+      "condition_rating": "very_good",
+      "original_price": 65.99,
+      "sale_price": 39.00,
+      "description": "High-capacity portable charger for multi-day adventures. Slight wear on exterior.",
+      "seller_info": {
+        "contact_email": "power.user@hiking.com",
+        "phone": "555-0003"
+      }
+    }
+  ],
+  "climbing_gear": [
+    {
+      "item_title": "Black Diamond Momentum Climbing Shoes",
+      "manufacturer": "Black Diamond",
+      "product_category": "climbing_gear",
+      "size": "US 10.5",
+      "primary_color": "gray",
+      "wear_condition": "good",
+      "retail_value": 89.95,
+      "asking_price": 55.00,
+      "item_notes": "Comfortable beginner climbing shoes. Some wear on toe but good tread.",
+      "owner_contact": {
+        "email_address": "rock.climber@vertical.com",
+        "phone_number": "555-0004"
+      }
+    },
+    {
+      "gear_name": "Petzl Sama Climbing Harness",
+      "make": "Petzl",
+      "category": "climbing_gear",
+      "harness_size": "large",
+      "shade": "blue",
+      "usage_level": "excellent",
+      "retail_cost": 59.95,
+      "offered_at": 39.00,
+      "notes": "Lightweight sport climbing harness. Used less than 10 times.",
+      "seller_contact": {
+        "email_addr": "sport.climber@rocks.net",
+        "phone_num": "555-0005"
+      }
+    },
+    {
+      "equipment_name": "Mammut 9.5mm Infinity Dry Rope",
+      "producer": "Mammut",
+      "gear_category": "climbing_gear",
+      "rope_length": "70m",
+      "primary_hue": "green",
+      "condition_grade": "very_good",
+      "recommended_price": 179.95,
+      "selling_price": 125.00,
+      "product_info": "Dynamic climbing rope with dry treatment. Minimal sheath wear.",
+      "contact_information": {
+        "email": "rope.master@alpine.routes",
+        "telephone": "555-0006"
+      }
+    }
+  ],
+  "winter_sports": [
+    {
+      "item_title": "Rossignol Experience 88 Ti Skis",
+      "manufacturer": "Rossignol",
+      "product_category": "winter_sports",
+      "ski_length": "172cm",
+      "primary_color": "black_yellow",
+      "wear_condition": "good",
+      "retail_value": 649.95,
+      "asking_price": 385.00,
+      "item_notes": "All-mountain skis with titanal construction. Some edge wear, freshly waxed.",
+      "owner_contact": {
+        "email_address": "ski.enthusiast@powder.com",
+        "phone_number": "555-0007"
+      }
+    },
+    {
+      "product_name": "Burton Custom Snowboard",
+      "brand_name": "Burton",
+      "gear_type": "winter_sports",
+      "board_size": "158cm",
+      "color_way": "blue_graphics",
+      "condition_rating": "excellent",
+      "original_price": 579.95,
+      "sale_price": 389.00,
+      "description": "Freestyle/all-mountain snowboard. Minimal base scratches, excellent condition.",
+      "seller_info": {
+        "contact_email": "snowboard.pro@mountain.rider",
+        "phone": "555-0008"
+      }
+    },
+    {
+      "gear_title": "Salomon QST 106 Skis with Bindings",
+      "brand_label": "Salomon",
+      "equipment_class": "winter_sports",
+      "ski_dimensions": "180cm",
+      "surface_color": "orange_black",
+      "usage_condition": "very_good",
+      "factory_price": 899.90,
+      "market_price": 559.00,
+      "usage_notes": "Freeride skis with Warden 13 bindings. Great for powder and off-piste.",
+      "contact_details": {
+        "email_string": "freeride.skier@backcountry.com",
+        "number": "555-0009"
+      }
+    }
+  ],
+  "water_sports": [
+    {
+      "item_title": "BOTE Flood Aero Inflatable SUP",
+      "manufacturer": "BOTE",
+      "product_category": "water_sports",
+      "board_length": "11'6\"",
+      "primary_color": "teal",
+      "wear_condition": "like_new",
+      "retail_value": 799.00,
+      "asking_price": 589.00,
+      "item_notes": "Inflatable stand-up paddleboard with pump and paddle. Used twice.",
+      "owner_contact": {
+        "email_address": "paddle.board@lake.adventures",
+        "phone_number": "555-0010"
+      }
+    },
+    {
+      "product_name": "Patagonia Torrentshell 3L Jacket",
+      "brand_name": "Patagonia",
+      "gear_type": "water_sports",
+      "garment_size": "medium",
+      "color_way": "navy_blue",
+      "condition_rating": "excellent",
+      "original_price": 149.00,
+      "sale_price": 95.00,
+      "description": "Waterproof rain jacket for kayaking and water sports. Excellent condition.",
+      "seller_info": {
+        "contact_email": "water.sports@adventure.gear",
+        "phone": "555-0011"
+      }
+    },
+    {
+      "equipment_name": "NRS Women's Endurance Splash Jacket",
+      "producer": "NRS",
+      "gear_category": "water_sports",
+      "jacket_size": "small",
+      "primary_hue": "purple",
+      "condition_grade": "good",
+      "recommended_price": 119.95,
+      "selling_price": 75.00,
+      "product_info": "Lightweight paddling jacket with breathable fabric. Some fading but fully functional.",
+      "contact_information": {
+        "email": "kayak.enthusiast@river.runs",
+        "telephone": "555-0012"
+      }
+    }
+  ],
+  "camping_gear": [
+    {
+      "item_title": "Big Agnes Copper Spur HV UL2 Tent",
+      "manufacturer": "Big Agnes",
+      "product_category": "camping_gear",
+      "tent_capacity": "2_person",
+      "primary_color": "gray_orange",
+      "wear_condition": "excellent",
+      "retail_value": 449.95,
+      "asking_price": 315.00,
+      "item_notes": "Ultralight backpacking tent with dual vestibules. Used on 3 trips.",
+      "owner_contact": {
+        "email_address": "backpack.camper@trails.net",
+        "phone_number": "555-0013"
+      }
+    },
+    {
+      "gear_name": "Jetboil Flash Cooking System",
+      "make": "Jetboil",
+      "category": "camping_gear",
+      "fuel_type": "canister",
+      "shade": "carbon",
+      "usage_level": "very_good",
+      "retail_cost": 109.95,
+      "offered_at": 75.00,
+      "notes": "Compact camping stove with cup. Includes igniter and measuring cup.",
+      "seller_contact": {
+        "email_addr": "camp.cook@outdoor.meals",
+        "phone_num": "555-0014"
+      }
+    },
+    {
+      "product_name": "Yeti Tundra 35 Cooler",
+      "brand_name": "Yeti",
+      "gear_type": "camping_gear",
+      "cooler_size": "35_quart",
+      "color_way": "tan",
+      "condition_rating": "good",
+      "original_price": 299.99,
+      "sale_price": 199.00,
+      "description": "Rotomolded cooler with excellent ice retention. Some exterior scratches.",
+      "seller_info": {
+        "contact_email": "base.camp@car.camping",
+        "phone": "555-0015"
+      }
+    }
+  ],
+  "footwear": [
+    {
+      "item_title": "Merrell Moab 3 Hiking Boots",
+      "manufacturer": "Merrell",
+      "product_category": "footwear",
+      "boot_size": "US 9.5",
+      "primary_color": "earth",
+      "wear_condition": "good",
+      "retail_value": 129.95,
+      "asking_price": 79.00,
+      "item_notes": "Waterproof hiking boots with Vibram soles. Moderate wear but good tread.",
+      "owner_contact": {
+        "email_address": "day.hiker@trail.miles",
+        "phone_number": "555-0016"
+      }
+    },
+    {
+      "equipment_name": "Salomon X Ultra 3 GTX Hiking Shoes",
+      "producer": "Salomon",
+      "gear_category": "footwear",
+      "shoe_size": "US 10",
+      "primary_hue": "black_magnet",
+      "condition_grade": "excellent",
+      "recommended_price": 149.95,
+      "selling_price": 99.00,
+      "product_info": "Gore-Tex hiking shoes with Contagrip sole. Barely used, excellent condition.",
+      "contact_information": {
+        "email": "fast.hiker@speed.trails",
+        "telephone": "555-0017"
+      }
+    },
+    {
+      "product_name": "Danner Mountain Light Boots",
+      "brand_name": "Danner",
+      "gear_type": "footwear",
+      "boot_dimensions": "US 11",
+      "color_way": "brown_leather",
+      "condition_rating": "very_good",
+      "original_price": 379.95,
+      "sale_price": 245.00,
+      "description": "Full-grain leather mountaineering boots. Resoled once, excellent condition.",
+      "seller_info": {
+        "contact_email": "mountain.climber@peaks.adventure",
+        "phone": "555-0018"
+      }
+    }
+  ],
+  "clothing": [
+    {
+      "item_title": "Arc'teryx Atom LT Vest",
+      "manufacturer": "Arc'teryx",
+      "product_category": "clothing",
+      "garment_size": "large",
+      "primary_color": "black",
+      "wear_condition": "excellent",
+      "retail_value": 189.00,
+      "asking_price": 129.00,
+      "item_notes": "Synthetic insulation vest perfect for layering. Minimal use.",
+      "owner_contact": {
+        "email_address": "layer.master@warmth.systems",
+        "phone_number": "555-0019"
+      }
+    },
+    {
+      "gear_name": "Smartwool Merino 150 Base Layer",
+      "make": "Smartwool",
+      "category": "clothing",
+      "shirt_size": "medium",
+      "shade": "deep_navy",
+      "usage_level": "very_good",
+      "retail_cost": 75.00,
+      "offered_at": 45.00,
+      "notes": "Merino wool base layer with natural odor resistance. Great for multi-day trips.",
+      "seller_contact": {
+        "email_addr": "wool.lover@natural.fibers",
+        "phone_num": "555-0020"
+      }
+    },
+    {
+      "product_name": "Outdoor Research Ferrosi Hoody",
+      "brand_name": "Outdoor Research",
+      "gear_type": "clothing",
+      "jacket_size": "small",
+      "color_way": "storm",
+      "condition_rating": "good",
+      "original_price": 149.00,
+      "sale_price": 89.00,
+      "description": "Softshell hoody with DWR finish. Some pilling but very functional.",
+      "seller_info": {
+        "contact_email": "soft.shell@wind.protection",
+        "phone": "555-0021"
+      }
+    }
+  ],
+  "cycling": [
+    {
+      "item_title": "Specialized Stumpjumper Comp Mountain Bike",
+      "manufacturer": "Specialized",
+      "product_category": "cycling",
+      "frame_size": "large",
+      "primary_color": "red_black",
+      "wear_condition": "good",
+      "retail_value": 3299.00,
+      "asking_price": 2199.00,
+      "item_notes": "Full suspension mountain bike with 29\" wheels. Well maintained, some wear.",
+      "owner_contact": {
+        "email_address": "mtb.rider@single.track",
+        "phone_number": "555-0022"
+      }
+    },
+    {
+      "equipment_name": "Giro Montaro MIPS Helmet",
+      "producer": "Giro",
+      "gear_category": "cycling",
+      "helmet_size": "medium",
+      "primary_hue": "matte_blue",
+      "condition_grade": "excellent",
+      "recommended_price": 149.95,
+      "selling_price": 89.00,
+      "product_info": "Mountain bike helmet with MIPS technology. Never crashed, excellent condition.",
+      "contact_information": {
+        "email": "safe.rider@helmet.protection",
+        "telephone": "555-0023"
+      }
+    },
+    {
+      "product_name": "Shimano SPD Pedals PD-M540",
+      "brand_name": "Shimano",
+      "gear_type": "cycling",
+      "pedal_type": "clipless",
+      "color_way": "black",
+      "condition_rating": "very_good",
+      "original_price": 79.99,
+      "sale_price": 45.00,
+      "description": "Clipless mountain bike pedals with cleats included. Well maintained.",
+      "seller_info": {
+        "contact_email": "pedal.power@bike.efficiency",
+        "phone": "555-0024"
+      }
+    }
+  ],
+  "fishing": [
+    {
+      "item_title": "Orvis Helios 3D Fly Rod",
+      "manufacturer": "Orvis",
+      "product_category": "fishing",
+      "rod_length": "9'0\"",
+      "line_weight": "5wt",
+      "primary_color": "olive",
+      "wear_condition": "excellent",
+      "retail_value": 798.00,
+      "asking_price": 549.00,
+      "item_notes": "Premium fly rod with tube and sock. Used sparingly, excellent condition.",
+      "owner_contact": {
+        "email_address": "fly.fisher@trout.streams",
+        "phone_number": "555-0025"
+      }
+    },
+    {
+      "gear_name": "Simms Waders G3 Guide Stockingfoot",
+      "make": "Simms",
+      "category": "fishing",
+      "wader_size": "large",
+      "shade": "dark_stone",
+      "usage_level": "good",
+      "retail_cost": 599.95,
+      "offered_at": 379.00,
+      "notes": "Breathable chest waders with reinforced knees. Some wear but no leaks.",
+      "seller_contact": {
+        "email_addr": "wading.deep@river.access",
+        "phone_num": "555-0026"
+      }
+    },
+    {
+      "equipment_name": "Patagonia Sling Pack",
+      "producer": "Patagonia",
+      "gear_category": "fishing",
+      "pack_capacity": "8L",
+      "primary_hue": "sage_green",
+      "condition_grade": "very_good",
+      "recommended_price": 99.00,
+      "selling_price": 65.00,
+      "product_info": "Sling pack perfect for fly fishing. Multiple pockets and hydration compatible.",
+      "contact_information": {
+        "email": "pack.light@stream.access",
+        "telephone": "555-0027"
+      }
+    }
+  ],
+  "accessories": [
+    {
+      "item_title": "Hydro Flask 32oz Water Bottle",
+      "manufacturer": "Hydro Flask",
+      "product_category": "accessories",
+      "bottle_size": "32oz",
+      "primary_color": "pacific",
+      "wear_condition": "good",
+      "retail_value": 44.95,
+      "asking_price": 25.00,
+      "item_notes": "Insulated water bottle with some exterior scratches. Keeps drinks cold.",
+      "owner_contact": {
+        "email_address": "hydration.station@water.bottles",
+        "phone_number": "555-0028"
+      }
+    },
+    {
+      "product_name": "Osprey Ultralight Stuff Pack",
+      "brand_name": "Osprey",
+      "gear_type": "accessories",
+      "pack_size": "18L",
+      "color_way": "shadow_grey",
+      "condition_rating": "excellent",
+      "original_price": 39.95,
+      "sale_price": 25.00,
+      "description": "Packable daypack that stuffs into its own pocket. Perfect for travel.",
+      "seller_info": {
+        "contact_email": "pack.away@ultra.light",
+        "phone": "555-0029"
+      }
+    },
+    {
+      "gear_title": "Black Diamond Spot 325 Headlamp",
+      "brand_label": "Black Diamond",
+      "equipment_class": "accessories",
+      "light_output": "325_lumens",
+      "surface_color": "aluminum",
+      "usage_condition": "very_good",
+      "factory_price": 39.95,
+      "market_price": 25.00,
+      "usage_notes": "Reliable headlamp with red light mode. Includes extra batteries.",
+      "contact_details": {
+        "email_string": "night.navigation@head.lights",
+        "number": "555-0030"
+      }
+    }
+  ],
   "outdoor_equipment": [
     {
       "item_title": "Mammut Trion Alpinist 28+7 Backpack",
@@ -301,7 +772,7 @@
       }
     }
   ],
-  "data_format_version": "3.2",
-  "export_timestamp": "2024-12-30T18:45:00Z",
-  "total_items": 20
+  "data_format_version": "4.0",
+  "export_timestamp": "2024-12-30T23:30:00Z",
+  "total_items": 50
 } 

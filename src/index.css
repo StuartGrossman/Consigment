@@ -25,10 +25,90 @@
 .scrollbar-hide {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+  -webkit-overflow-scrolling: touch; /* iOS smooth scrolling */
 }
 
 .scrollbar-hide::-webkit-scrollbar {
   display: none;  /* Chrome, Safari, Opera */
+}
+
+/* Two-row category horizontal scrolling - constrained to prevent page extension */
+.category-section {
+  width: 100%;
+  max-width: 100vw;
+  overflow: hidden; /* Prevent any spillover */
+  position: relative;
+}
+
+.category-section [data-category] {
+  scroll-behavior: smooth;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Ensure it doesn't extend the page */
+  contain: layout style;
+  /* Prevent parent container expansion */
+  min-width: 0;
+  /* Hide scrollbar but allow scrolling */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.category-section [data-category]::-webkit-scrollbar {
+  display: none;
+}
+
+/* Two-row grid layout optimization */
+.category-section .grid-rows-2 {
+  /* Ensure cards in two rows stay aligned */
+  align-items: stretch;
+  /* Maintain consistent spacing */
+  gap: 1rem;
+  /* Allow horizontal scrolling without affecting page width */
+  width: max-content;
+  max-width: none;
+}
+
+/* Individual item cards in two-row layout */
+.category-section .grid-rows-2 > div {
+  flex-shrink: 0;
+  width: 18rem; /* 288px - consistent card width */
+  scroll-snap-align: start;
+}
+
+/* Snap scrolling for better UX on touch devices */
+@media (max-width: 1024px) {
+  .category-section [data-category] {
+    scroll-snap-type: x mandatory;
+  }
+  
+  .category-section .grid-rows-2 > div {
+    scroll-snap-align: start;
+  }
+}
+
+/* Ensure grid containers don't exceed viewport */
+.category-section .grid {
+  max-width: 100%;
+  overflow: visible; /* Allow cards to extend horizontally for scrolling */
+}
+
+/* Enhanced touch scrolling */
+@supports (-webkit-touch-callout: none) {
+  .scrollbar-hide {
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+  }
+  
+  .category-section [data-category] {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Card hover animations */
+.group:hover .group-hover\:scale-105 {
+  transform: scale(1.05);
 }
 
 /* Modal Backdrop Utility - Ensures full viewport coverage */
@@ -93,4 +173,23 @@
 .break-words {
   overflow-wrap: break-word;
   word-break: break-word;
+}
+
+/* Custom scrollbar styling for filter sidebar */
+.filter-sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.filter-sidebar-scroll::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.filter-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.filter-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }

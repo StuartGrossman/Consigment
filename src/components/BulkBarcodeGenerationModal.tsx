@@ -17,8 +17,11 @@ interface ProcessedItem {
   item: ConsignmentItem;
   barcodeData: string;
   barcodeImageUrl: string;
-  status: 'pending' | 'generating' | 'uploading' | 'completing' | 'completed' | 'error';
+  status: 'pending' | 'generating' | 'uploading' | 'completing' | 'completed' | 'error' | 'retrying';
   error?: string;
+  retryCount?: number;
+  startTime?: number;
+  endTime?: number;
 }
 
 const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({ 
@@ -32,7 +35,14 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
   const [currentStep, setCurrentStep] = useState<'preparing' | 'processing' | 'completed'>('preparing');
   const [currentItemIndex, setCurrentItemIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingErrors, setProcessingErrors] = useState<string[]>([]);
+  const [showErrorDetails, setShowErrorDetails] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Constants for retry and timeout handling
+  const MAX_RETRIES = 2; // Reduced from 3 to prevent long retry loops
+  const PROCESSING_TIMEOUT = 15000; // Reduced from 30s to 15s per item
+  const CANVAS_GENERATION_TIMEOUT = 5000; // Reduced from 10s to 5s for canvas operations
 
   useEffect(() => {
     if (isOpen && items.length > 0) {
@@ -40,52 +50,387 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
     }
   }, [isOpen, items]);
 
+  // Separate effect for auto-starting to avoid race conditions
+  useEffect(() => {
+    if (isOpen && processedItems.length > 0 && currentStep === 'preparing' && !isProcessing) {
+      console.log('⏰ Setting up auto-start timer for bulk processing');
+      const timeoutId = setTimeout(() => {
+        console.log('⏰ Auto-start timer triggered');
+        startBulkProcessing();
+      }, 1000);
+      
+      return () => {
+        console.log('⏰ Auto-start timer cleared');
+        clearTimeout(timeoutId);
+      };
+    }
+  }, [isOpen, currentStep]); // Removed processedItems and isProcessing to prevent retriggering
+
+  // Component lifecycle logging
+  useEffect(() => {
+    if (isOpen) {
+      console.log('🔧 BulkBarcodeGenerationModal opened/mounted');
+      console.log(`🔧 Initial state: items=${items.length}, step=${currentStep}, processing=${isProcessing}`);
+    }
+    
+    return () => {
+      if (isOpen) {
+        console.log('🔧 BulkBarcodeGenerationModal closing/unmounting');
+      }
+    };
+  }, [isOpen]);
+
+  // State validation during processing - reduced frequency to prevent interference
+  useEffect(() => {
+    if (currentStep === 'processing' && processedItems.length > 0 && isProcessing) {
+      console.log('🔍 Setting up periodic state validation');
+      const validationInterval = setInterval(() => {
+        console.log('🔍 Running periodic state validation...');
+        validateState();
+      }, 15000); // Validate every 15 seconds instead of 5 to reduce interference
+      
+      return () => {
+        console.log('🔍 Clearing state validation interval');
+        clearInterval(validationInterval);
+      };
+    }
+  }, [currentStep]); // Removed other dependencies to prevent restarts
+
+  // Monitor for unexpected state changes
+  useEffect(() => {
+    console.log(`🔄 State change detected: step=${currentStep}, index=${currentItemIndex}, processing=${isProcessing}, items=${processedItems.length}`);
+  }, [currentStep, currentItemIndex, isProcessing, processedItems.length]);
+
+  // Cleanup effect to detect premature closing
+  useEffect(() => {
+    return () => {
+      if (isProcessing && currentStep === 'processing') {
+        console.warn('🚨 Modal closing while processing is active!');
+        console.warn(`🚨 Processing state: item ${currentItemIndex + 1}/${processedItems.length}, completed=${processedItems.filter(i => i.status === 'completed').length}`);
+        console.warn('🚨 This may cause progress bar corruption on next open');
+      }
+    };
+  }, [isProcessing, currentStep, currentItemIndex, processedItems]);
+
+  // Ensure canvas is always available
+  const ensureCanvasAvailable = (): boolean => {
+    if (!canvasRef.current) {
+      console.warn('🎨 Canvas not available, attempting to recreate...');
+      // Try to recreate canvas element
+      const canvas = document.createElement('canvas');
+      canvas.style.display = 'none';
+      document.body.appendChild(canvas);
+      // Update ref
+      if (canvasRef) {
+        (canvasRef as any).current = canvas;
+      }
+      const success = !!canvasRef.current;
+      console.log(`🎨 Canvas recreation ${success ? 'successful' : 'failed'}`);
+      return success;
+    }
+    return true;
+  };
+
+  // Validate state consistency
+  const validateState = () => {
+    const issues: string[] = [];
+    
+    if (processedItems.length === 0 && currentStep === 'processing') {
+      issues.push('Processing with no items');
+    }
+    
+    if (currentItemIndex >= processedItems.length && currentStep === 'processing') {
+      issues.push(`Current index (${currentItemIndex}) exceeds items length (${processedItems.length})`);
+    }
+    
+    if (currentItemIndex < -1) {
+      issues.push(`Invalid current index: ${currentItemIndex}`);
+    }
+    
+    const statusCounts = processedItems.reduce((acc, item) => {
+      acc[item.status] = (acc[item.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const totalProcessed = (statusCounts.completed || 0) + (statusCounts.error || 0);
+    const totalPending = statusCounts.pending || 0;
+    const totalProcessing = Object.keys(statusCounts).reduce((sum, key) => {
+      if (['generating', 'uploading', 'completing', 'retrying'].includes(key)) {
+        return sum + statusCounts[key];
+      }
+      return sum;
+    }, 0);
+    
+    if (totalProcessed + totalPending + totalProcessing !== processedItems.length) {
+      issues.push(`Status count mismatch: ${totalProcessed + totalPending + totalProcessing} vs ${processedItems.length}`);
+    }
+    
+    if (issues.length > 0) {
+      console.error('🚨 State validation failed:', issues);
+      console.error('🚨 Current state:', {
+        currentStep,
+        currentItemIndex,
+        isProcessing,
+        itemsLength: processedItems.length,
+        statusCounts
+      });
+    }
+    
+    return issues.length === 0;
+  };
+
   const initializeProcessedItems = () => {
+    // Don't reinitialize if already processing to prevent restart loops
+    if (isProcessing) {
+      console.warn('🚫 Skipping initialization - processing already in progress');
+      return;
+    }
+    
+    // Validate items before processing
+    const validationErrors: string[] = [];
+    
+    if (!items || items.length === 0) {
+      validationErrors.push('No items provided for processing');
+    }
+    
+    items.forEach((item, index) => {
+      if (!item.id) {
+        validationErrors.push(`Item ${index + 1}: Missing item ID`);
+      }
+      if (!item.title) {
+        validationErrors.push(`Item ${index + 1}: Missing item title`);
+      }
+      if (typeof item.price !== 'number' || item.price <= 0) {
+        validationErrors.push(`Item ${index + 1}: Invalid price`);
+      }
+    });
+    
+    if (validationErrors.length > 0) {
+      setProcessingErrors(validationErrors);
+      setShowErrorDetails(true);
+      return;
+    }
+    
     const initialItems: ProcessedItem[] = items.map(item => ({
       item,
       barcodeData: generateBarcodeData(item),
       barcodeImageUrl: '',
-      status: 'pending'
+      status: 'pending',
+      retryCount: 0,
+      startTime: undefined,
+      endTime: undefined
     }));
+    
     setProcessedItems(initialItems);
     setCurrentStep('preparing');
     setCurrentItemIndex(0);
+    setProcessingErrors([]);
+    setShowErrorDetails(false);
   };
 
   const generateBarcodeData = (item: ConsignmentItem): string => {
     const timestamp = Date.now().toString().slice(-8);
-    const itemIdShort = item.id.slice(-4);
-    return `CSG${timestamp}${itemIdShort}`;
+    const itemIdShort = item.id.slice(-4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+    // Ensure we have at least 4 characters for the item ID part
+    const paddedItemId = itemIdShort.padEnd(4, '0').slice(0, 4);
+    return `CSG${timestamp}${paddedItemId}`;
   };
 
   const startBulkProcessing = async () => {
-    setIsProcessing(true);
-    setCurrentStep('processing');
-    
-    for (let i = 0; i < processedItems.length; i++) {
-      setCurrentItemIndex(i);
-      await processItem(i);
+    if (isProcessing) {
+      console.warn('🚫 Bulk processing already in progress, ignoring duplicate start request');
+      return;
     }
     
-    setCurrentStep('completed');
-    setIsProcessing(false);
+    if (currentStep !== 'preparing') {
+      console.warn('🚫 Cannot start processing, current step is not preparing:', currentStep);
+      return;
+    }
+    
+    if (processedItems.length === 0) {
+      console.warn('🚫 Cannot start processing, no items to process');
+      return;
+    }
+    
+    console.log(`🚀 Starting bulk barcode processing for ${processedItems.length} items`);
+    const startTime = Date.now();
+    
+    // Set processing state immediately to prevent duplicate starts
+    setIsProcessing(true);
+    setCurrentStep('processing');
+    setCurrentItemIndex(0);
+    
+    try {
+      for (let i = 0; i < processedItems.length; i++) {
+        // Check if we should stop processing (modal might be closed)
+        if (!isOpen) {
+          console.warn(`🛑 Modal closed, stopping processing at item ${i + 1}/${processedItems.length}`);
+          break;
+        }
+        
+        const itemStartTime = Date.now();
+        console.log(`📋 Processing item ${i + 1}/${processedItems.length}: ${processedItems[i].item.title}`);
+        
+        // Update current index before processing
+        setCurrentItemIndex(i);
+        
+        // Log progress calculation
+        const completedSoFar = processedItems.filter(item => item.status === 'completed').length;
+        const errorsSoFar = processedItems.filter(item => item.status === 'error').length;
+        const progressPercent = Math.round(((completedSoFar + errorsSoFar) / processedItems.length) * 100);
+        console.log(`📊 Progress: ${progressPercent}% (${completedSoFar + errorsSoFar}/${processedItems.length}) - Processing item ${i + 1}`);
+        
+        // Process item with robust error handling
+        await processItemSafely(i);
+        
+        const itemEndTime = Date.now();
+        const itemDuration = itemEndTime - itemStartTime;
+        console.log(`✅ Completed item ${i + 1} in ${itemDuration}ms`);
+        
+        // Small delay between items to prevent overwhelming the server and canvas
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        // Log memory usage every 10 items
+        if ((i + 1) % 10 === 0) {
+          try {
+            const perf = performance as any;
+            if (perf.memory) {
+              console.log(`💾 Memory usage at item ${i + 1}: ${Math.round(perf.memory.usedJSHeapSize / 1024 / 1024)}MB`);
+            }
+          } catch (e) {
+            // Memory API not available, skip logging
+          }
+        }
+      }
+    } catch (error) {
+      console.error('💥 Fatal error during bulk processing:', error);
+      console.error('💥 Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    } finally {
+      const totalTime = Date.now() - startTime;
+      console.log(`🏁 Bulk processing completed in ${totalTime}ms (${Math.round(totalTime / 1000)}s)`);
+      
+      setCurrentStep('completed');
+      setIsProcessing(false);
+      setCurrentItemIndex(-1); // Reset index when completed
+      
+      // Final progress summary
+      const finalCompleted = processedItems.filter(item => item.status === 'completed').length;
+      const finalErrors = processedItems.filter(item => item.status === 'error').length;
+      console.log(`📈 Final results: ${finalCompleted} completed, ${finalErrors} failed, ${processedItems.length - finalCompleted - finalErrors} remaining`);
+    }
   };
 
-  const processItem = async (index: number): Promise<void> => {
+  const processItemSafely = async (index: number): Promise<void> => {
+    const processedItem = processedItems[index];
+    const startTime = Date.now();
+    
+    console.log(`🔄 Starting safe processing for item ${index}: ${processedItem.item.title}`);
+    
+    // Set start time
+    setProcessedItems(prev => prev.map((item, i) => 
+      i === index ? { ...item, startTime } : item
+    ));
+    
+    let retryCount = 0;
+    let lastError: string = '';
+    
+    while (retryCount <= MAX_RETRIES) {
+      try {
+        console.log(`🎯 Processing attempt ${retryCount + 1}/${MAX_RETRIES + 1} for item ${index}`);
+        
+        // Create timeout promise
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Processing timeout')), PROCESSING_TIMEOUT);
+        });
+        
+        // Update retry count if this is a retry
+        if (retryCount > 0) {
+          console.log(`🔁 Retry ${retryCount}/${MAX_RETRIES} for item ${index} after error: ${lastError}`);
+          setProcessedItems(prev => prev.map((item, i) => 
+            i === index ? { ...item, retryCount } : item
+          ));
+          updateItemStatus(index, 'retrying', `Retry ${retryCount}/${MAX_RETRIES}: ${lastError}`);
+          
+          // Wait before retry with exponential backoff
+          const backoffDelay = 1000 * retryCount;
+          console.log(`⏱️ Waiting ${backoffDelay}ms before retry for item ${index}`);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
+        }
+        
+        // Process with timeout
+        console.log(`⚡ Starting actual processing for item ${index}`);
+        await Promise.race([
+          processItemWithRetry(index),
+          timeoutPromise
+        ]);
+        
+        // If we get here, processing was successful
+        const endTime = Date.now();
+        const duration = endTime - startTime;
+        console.log(`✅ Successfully processed item ${index} in ${duration}ms after ${retryCount} retries`);
+        return;
+        
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        lastError = errorMessage;
+        
+        console.error(`❌ Error processing item ${index} (attempt ${retryCount + 1}):`, errorMessage);
+        if (error instanceof Error && error.stack) {
+          console.error(`🔍 Error stack for item ${index}:`, error.stack);
+        }
+        
+        // Check if we should retry
+        if (retryCount < MAX_RETRIES && errorMessage !== 'Processing timeout') {
+          retryCount++;
+          console.warn(`🔄 Will retry item ${index}, attempt ${retryCount}/${MAX_RETRIES}`);
+        } else {
+          // Final failure
+          const endTime = Date.now();
+          const duration = endTime - startTime;
+          console.error(`💀 Final failure for item ${index} after ${retryCount} retries in ${duration}ms: ${errorMessage}`);
+          updateItemStatus(index, 'error', `Final error after ${retryCount} retries: ${errorMessage}`);
+          setProcessedItems(prev => prev.map((item, i) => 
+            i === index ? { ...item, endTime, retryCount } : item
+          ));
+          return;
+        }
+      }
+    }
+  };
+  
+  const processItemWithRetry = async (index: number): Promise<void> => {
     const processedItem = processedItems[index];
     
     try {
+      // Ensure canvas is available before processing
+      if (!ensureCanvasAvailable()) {
+        throw new Error('Canvas not available for barcode generation - unable to recreate');
+      }
+      
       // Update status to generating
       updateItemStatus(index, 'generating');
       
-      // Generate barcode image
+      // Generate barcode image with validation
+      if (!processedItem.barcodeData || processedItem.barcodeData.length < 5) {
+        throw new Error('Invalid barcode data generated');
+      }
+      
       const barcodeImageUrl = await generateBarcodeImage(processedItem.barcodeData, processedItem.item.id);
+      
+      if (!barcodeImageUrl || !barcodeImageUrl.startsWith('http')) {
+        throw new Error('Failed to upload barcode image');
+      }
       
       // Update status to uploading
       updateItemStatus(index, 'uploading');
       
       // Update status to completing
       updateItemStatus(index, 'completing');
+      
+      // Validate API service availability
+      if (!apiService || !apiService.updateItemWithBarcode) {
+        throw new Error('API service not available');
+      }
       
       // Update item in database with barcode
       await apiService.updateItemWithBarcode(processedItem.item.id, {
@@ -94,33 +439,75 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
         status: 'approved'
       });
       
-      // Update processed item with image URL and mark as completed
+      // Mark as completed with end time
+      const endTime = Date.now();
       setProcessedItems(prev => prev.map((item, i) => 
-        i === index ? { ...item, barcodeImageUrl, status: 'completed' } : item
+        i === index ? { ...item, barcodeImageUrl, status: 'completed', endTime } : item
       ));
       
     } catch (error) {
-      console.error(`Error processing item ${processedItem.item.id}:`, error);
-      updateItemStatus(index, 'error', error instanceof Error ? error.message : 'Unknown error');
+      // Let the parent handle retries
+      throw error;
     }
   };
 
   const updateItemStatus = (index: number, status: ProcessedItem['status'], error?: string) => {
-    setProcessedItems(prev => prev.map((item, i) => 
-      i === index ? { ...item, status, error } : item
-    ));
+    console.log(`📝 Updating item ${index} status: ${status}${error ? ` (${error})` : ''}`);
+    
+    setProcessedItems(prev => {
+      const updated = prev.map((item, i) => 
+        i === index ? { ...item, status, error } : item
+      );
+      
+      // Log status distribution for debugging
+      const statusCounts = updated.reduce((acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      console.log(`📊 Status distribution after updating item ${index}:`, statusCounts);
+      return updated;
+    });
   };
 
   const generateBarcodeImage = async (barcodeData: string, itemId: string): Promise<string> => {
+    console.log(`🎨 Starting barcode generation for item ${itemId} with data: ${barcodeData}`);
+    
     return new Promise((resolve, reject) => {
-      if (!canvasRef.current) {
-        reject(new Error('Canvas not available'));
+      if (!ensureCanvasAvailable()) {
+        console.error(`❌ Canvas not available for item ${itemId}`);
+        reject(new Error('Canvas not available - unable to recreate'));
         return;
       }
 
+      console.log(`✅ Canvas available for item ${itemId}`);
+
+      // Set canvas generation timeout
+      const canvasTimeout = setTimeout(() => {
+        console.error(`⏰ Canvas generation timeout for item ${itemId} after ${CANVAS_GENERATION_TIMEOUT}ms`);
+        reject(new Error('Canvas generation timeout'));
+      }, CANVAS_GENERATION_TIMEOUT);
+
       try {
+        // Validate barcode data format for CODE128 (supports ASCII characters 0-127)
+        if (!/^[A-Za-z0-9]+$/.test(barcodeData)) {
+          console.error(`❌ Invalid barcode format for item ${itemId}: ${barcodeData}`);
+          throw new Error('Invalid barcode data format');
+        }
+
+        console.log(`✅ Barcode format valid for item ${itemId}`);
+
+        // Get canvas reference
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          console.error(`❌ Canvas reference lost for item ${itemId}`);
+          throw new Error('Canvas reference lost during processing');
+        }
+
+        console.log(`🖼️ Generating barcode on canvas for item ${itemId}`);
+
         // Generate barcode on canvas
-        JsBarcode(canvasRef.current, barcodeData, {
+        JsBarcode(canvas, barcodeData, {
           format: 'CODE128',
           width: 2,
           height: 100,
@@ -129,24 +516,87 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
           margin: 10
         });
 
+        console.log(`✅ Barcode generated on canvas for item ${itemId}, dimensions: ${canvas.width}x${canvas.height}`);
+
+        // Validate canvas content
+        if (canvas.width === 0 || canvas.height === 0) {
+          console.error(`❌ Invalid canvas dimensions for item ${itemId}: ${canvas.width}x${canvas.height}`);
+          throw new Error('Canvas generation failed - invalid dimensions');
+        }
+
+        console.log(`📦 Converting canvas to blob for item ${itemId}`);
+
         // Convert canvas to blob and upload
-        canvasRef.current.toBlob(async (blob) => {
+        canvas.toBlob(async (blob) => {
+          clearTimeout(canvasTimeout);
+          
           if (!blob) {
-            reject(new Error('Failed to generate barcode image'));
+            console.error(`❌ Failed to generate blob for item ${itemId}`);
+            reject(new Error('Failed to generate barcode image blob'));
+            return;
+          }
+
+          console.log(`✅ Blob generated for item ${itemId}, size: ${blob.size} bytes`);
+
+          // Validate blob size
+          if (blob.size === 0) {
+            console.error(`❌ Empty blob generated for item ${itemId}`);
+            reject(new Error('Generated barcode image is empty'));
+            return;
+          }
+
+          if (blob.size > 5 * 1024 * 1024) { // 5MB limit
+            console.error(`❌ Blob too large for item ${itemId}: ${blob.size} bytes`);
+            reject(new Error('Generated barcode image is too large'));
             return;
           }
 
           try {
-            const storageRef = ref(storage, `barcodes/${itemId}_${barcodeData}.png`);
-            await uploadBytes(storageRef, blob);
+            // Validate storage availability
+            if (!storage) {
+              console.error(`❌ Firebase storage not available for item ${itemId}`);
+              throw new Error('Firebase storage not available');
+            }
+
+            console.log(`☁️ Starting upload to Firebase for item ${itemId}`);
+            const uploadStartTime = Date.now();
+
+            const storageRef = ref(storage, `barcodes/${itemId}_${barcodeData}_${Date.now()}.png`);
+            
+            // Upload with metadata
+            const metadata = {
+              contentType: 'image/png',
+              customMetadata: {
+                'itemId': itemId,
+                'barcodeData': barcodeData,
+                'generatedAt': new Date().toISOString()
+              }
+            };
+            
+            await uploadBytes(storageRef, blob, metadata);
+            const uploadDuration = Date.now() - uploadStartTime;
+            console.log(`✅ Upload completed for item ${itemId} in ${uploadDuration}ms`);
+
+            console.log(`🔗 Getting download URL for item ${itemId}`);
             const downloadURL = await getDownloadURL(storageRef);
+            
+            // Validate download URL
+            if (!downloadURL || !downloadURL.startsWith('http')) {
+              console.error(`❌ Invalid download URL for item ${itemId}: ${downloadURL}`);
+              throw new Error('Invalid download URL received');
+            }
+            
+            console.log(`✅ Barcode generation complete for item ${itemId}: ${downloadURL.substring(0, 100)}...`);
             resolve(downloadURL);
           } catch (error) {
-            reject(error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown storage error';
+            console.error(`❌ Storage upload failed for item ${itemId}:`, errorMessage);
+            reject(new Error(`Storage upload failed: ${errorMessage}`));
           }
         }, 'image/png');
       } catch (error) {
-        reject(error);
+        clearTimeout(canvasTimeout);
+        reject(new Error(`Barcode generation failed: ${error instanceof Error ? error.message : 'Unknown canvas error'}`));
       }
     });
   };
@@ -230,13 +680,71 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
 
   const completedCount = processedItems.filter(item => item.status === 'completed').length;
   const errorCount = processedItems.filter(item => item.status === 'error').length;
-  const progressPercentage = processedItems.length > 0 ? (completedCount / processedItems.length) * 100 : 0;
+  const inProgressCount = processedItems.filter(item => 
+    ['generating', 'uploading', 'completing', 'retrying'].includes(item.status)
+  ).length;
+  
+  // Calculate progress more accurately - include current item being processed
+  const effectiveProgress = currentStep === 'processing' 
+    ? Math.max(completedCount + errorCount, currentItemIndex)
+    : completedCount + errorCount;
+    
+  const progressPercentage = processedItems.length > 0 
+    ? Math.min(100, (effectiveProgress / processedItems.length) * 100)
+    : 0;
+
+  // Debug logging for progress calculation (only when processing)
+  if (currentStep === 'processing' && processedItems.length > 0) {
+    const debugInfo = {
+      totalItems: processedItems.length,
+      completedCount,
+      errorCount,
+      inProgressCount,
+      currentItemIndex,
+      effectiveProgress,
+      progressPercentage: Math.round(progressPercentage),
+      currentStep,
+      isProcessing
+    };
+    
+    // Detect potential progress corruption
+    const possibleIssues = [];
+    if (currentItemIndex > processedItems.length) {
+      possibleIssues.push('Current index exceeds total items');
+    }
+    if (effectiveProgress > processedItems.length) {
+      possibleIssues.push('Effective progress exceeds total items');
+    }
+    if (progressPercentage > 100) {
+      possibleIssues.push('Progress percentage over 100%');
+    }
+    if (currentItemIndex < 0 && currentStep === 'processing') {
+      possibleIssues.push('Negative current index during processing');
+    }
+    
+         if (possibleIssues.length > 0) {
+       console.error('🚨 Progress corruption detected:', possibleIssues);
+       console.error('🚨 Debug info:', debugInfo);
+       // Log corruption but don't auto-fix during processing to avoid restart loops
+       console.warn('🚨 Corruption detected but not fixing automatically to prevent restart loops');
+     }
+    
+    // Log every 5 items or when there's a significant change
+    const shouldLog = currentItemIndex % 5 === 0 || 
+                     progressPercentage % 10 < 1 || 
+                     (completedCount + errorCount) !== effectiveProgress ||
+                     possibleIssues.length > 0;
+    
+    if (shouldLog) {
+      console.log(`📈 Progress calculation:`, debugInfo);
+    }
+  }
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center mb-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-800">Bulk Barcode Generation</h2>
               <p className="text-gray-600 mt-1">
@@ -256,24 +764,66 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
               </button>
             )}
           </div>
-        </div>
 
-        <div className="p-6">
-          {/* Progress Bar */}
+          {/* Progress Bar - Now in Header */}
           {currentStep === 'processing' && (
-            <div className="mb-6">
-              <div className="flex justify-between text-sm text-gray-600 mb-2">
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm text-gray-600">
                 <span>Overall Progress</span>
-                <span>{Math.round(progressPercentage)}%</span>
+                <span>{Math.round(progressPercentage)}% ({completedCount + errorCount}/{processedItems.length})</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
-                  className="bg-green-500 h-3 rounded-full transition-all duration-300"
+                  className="bg-gradient-to-r from-green-400 to-green-600 h-3 rounded-full transition-all duration-500"
                   style={{ width: `${progressPercentage}%` }}
                 ></div>
               </div>
+              <div className="flex justify-between text-xs text-gray-500">
+                <span>
+                  {completedCount} completed
+                  {errorCount > 0 && ` • ${errorCount} failed`}
+                  {inProgressCount > 0 && ` • ${inProgressCount} processing`}
+                </span>
+                <span>
+                  Item {currentItemIndex + 1} of {processedItems.length}
+                  {processedItems.length - completedCount - errorCount > 0 && 
+                    ` • Est. ${Math.ceil((processedItems.length - completedCount - errorCount) * 3)}s remaining`
+                  }
+                </span>
+              </div>
             </div>
           )}
+        </div>
+
+        <div className="p-6">
+          {/* Error Summary */}
+          {processingErrors.length > 0 && (
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-red-800 font-medium">⚠️ Validation Errors</h3>
+                  <p className="text-red-600 text-sm mt-1">{processingErrors.length} error(s) found</p>
+                </div>
+                <button
+                  onClick={() => setShowErrorDetails(!showErrorDetails)}
+                  className="text-red-600 hover:text-red-800 text-sm"
+                >
+                  {showErrorDetails ? 'Hide Details' : 'Show Details'}
+                </button>
+              </div>
+              {showErrorDetails && (
+                <div className="mt-3 space-y-1">
+                  {processingErrors.map((error, index) => (
+                    <div key={index} className="text-sm text-red-700 bg-red-100 p-2 rounded">
+                      {error}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+
 
           {/* Items List */}
           <div className="max-h-96 overflow-y-auto space-y-3">
@@ -302,8 +852,12 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
                       </svg>
                     </div>
                   )}
-                  {['pending', 'generating', 'uploading', 'completing'].includes(processedItem.status) && (
-                    <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin"></div>
+                  {['pending', 'generating', 'uploading', 'completing', 'retrying'].includes(processedItem.status) && (
+                    <div className={`w-8 h-8 border-4 rounded-full animate-spin ${
+                      processedItem.status === 'retrying' 
+                        ? 'border-yellow-200 border-t-yellow-500'
+                        : 'border-blue-200 border-t-blue-500'
+                    }`}></div>
                   )}
                 </div>
 
@@ -314,12 +868,27 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
                     ${processedItem.item.price} | Barcode: {processedItem.barcodeData}
                   </p>
                   <div className="text-sm mt-1">
-                    {processedItem.status === 'pending' && <span className="text-gray-500">Waiting...</span>}
-                    {processedItem.status === 'generating' && <span className="text-blue-600">Generating barcode...</span>}
-                    {processedItem.status === 'uploading' && <span className="text-blue-600">Uploading image...</span>}
-                    {processedItem.status === 'completing' && <span className="text-blue-600">Finalizing...</span>}
-                    {processedItem.status === 'completed' && <span className="text-green-600">✓ Completed successfully</span>}
-                    {processedItem.status === 'error' && <span className="text-red-600">✗ Error: {processedItem.error}</span>}
+                    {processedItem.status === 'pending' && <span className="text-gray-500">⏳ Waiting in queue...</span>}
+                    {processedItem.status === 'generating' && <span className="text-blue-600">🔄 Generating barcode...</span>}
+                    {processedItem.status === 'uploading' && <span className="text-blue-600">☁️ Uploading to cloud storage...</span>}
+                    {processedItem.status === 'completing' && <span className="text-blue-600">✅ Updating database...</span>}
+                    {processedItem.status === 'retrying' && <span className="text-yellow-600">🔄 Retrying... ({processedItem.retryCount || 0}/{MAX_RETRIES})</span>}
+                    {processedItem.status === 'completed' && (
+                      <span className="text-green-600">
+                        ✓ Completed successfully
+                        {processedItem.startTime && processedItem.endTime && (
+                          <span className="text-gray-400 ml-2">
+                            ({((processedItem.endTime - processedItem.startTime) / 1000).toFixed(1)}s)
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {processedItem.status === 'error' && (
+                      <div className="text-red-600">
+                        <div>✗ Failed after {processedItem.retryCount || 0} retries</div>
+                        <div className="text-xs text-red-500 mt-1">{processedItem.error}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -25,6 +25,7 @@ import ActionsDashboard from './ActionsDashboard';
 import MyPendingItemsModal from './MyPendingItemsModal';
 import StoreCreditModal from './StoreCreditModal';
 import POSModal from './POSModal';
+import RewardsPointsDashboard from './RewardsPointsDashboard';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
 
@@ -53,6 +54,7 @@ const Home: React.FC = () => {
     const [isMyPendingItemsModalOpen, setIsMyPendingItemsModalOpen] = useState(false);
     const [isStoreCreditModalOpen, setIsStoreCreditModalOpen] = useState(false);
     const [isPOSModalOpen, setIsPOSModalOpen] = useState(false);
+    const [isRewardsPointsDashboardOpen, setIsRewardsPointsDashboardOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
@@ -92,6 +94,10 @@ const Home: React.FC = () => {
     const [notificationsClearedAt, setNotificationsClearedAt] = useState<Date | null>(null);
     const [filtersOpen, setFiltersOpen] = useState(false); // For mobile filter collapse
     const filtersRef = useRef<HTMLDivElement>(null);
+
+    // State for new layout
+    const [filterCollapsed, setFilterCollapsed] = useState(true);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -144,7 +150,7 @@ const Home: React.FC = () => {
             if (adminMenuRef.current && !adminMenuRef.current.contains(event.target as Node)) {
                 setAdminMenuOpen(false);
             }
-            if (filtersRef.current && !filtersRef.current.contains(event.target as Node) && window.innerWidth < 1024) {
+            if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) {
                 setFiltersOpen(false);
             }
         };
@@ -639,6 +645,30 @@ const Home: React.FC = () => {
         return filtered;
     };
 
+    // Group items by category
+    const getItemsByCategory = () => {
+        const filteredItems = getFilteredAndSortedItems();
+        const categories: { [key: string]: ConsignmentItem[] } = {};
+        
+        filteredItems.forEach((item: ConsignmentItem) => {
+            const category = item.category || 'Uncategorized';
+            if (!categories[category]) {
+                categories[category] = [];
+            }
+            categories[category].push(item);
+        });
+        
+        // Sort categories by item count (most items first)
+        const sortedCategories = Object.entries(categories)
+            .sort(([, a], [, b]) => b.length - a.length)
+            .reduce((acc, [category, items]) => {
+                acc[category] = items;
+                return acc;
+            }, {} as { [key: string]: ConsignmentItem[] });
+        
+        return sortedCategories;
+    };
+
     if (loading) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-800 flex items-center justify-center">
@@ -1044,6 +1074,20 @@ const Home: React.FC = () => {
                                                                 {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
                                                             </span>
                                                         )}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            setIsRewardsPointsDashboardOpen(true);
+                                                            setAdminMenuOpen(false);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            <span>Rewards Points</span>
+                                                        </div>
                                                     </button>
                                                 </div>
                                             </div>
@@ -1514,10 +1558,10 @@ const Home: React.FC = () => {
                     <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
                         {/* Left Sidebar - Filters */}
                         <div ref={filtersRef} className="w-full lg:w-64 lg:flex-shrink-0">
-                            {/* Mobile Filter Toggle Button */}
+                            {/* Filter Toggle Button */}
                             <button
                                 onClick={() => setFiltersOpen(!filtersOpen)}
-                                className="w-full lg:hidden mb-4 bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between text-left"
+                                className="w-full mb-4 bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between text-left"
                             >
                                 <div className="flex items-center gap-2">
                                     <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1535,7 +1579,7 @@ const Home: React.FC = () => {
 
                             {/* Filter Panel */}
                             <div className={`bg-white rounded-lg shadow-sm border p-4 sm:p-6 lg:sticky lg:top-8 ${
-                                filtersOpen ? 'block' : 'hidden lg:block'
+                                filtersOpen ? 'block' : 'hidden'
                             }`}>
                                 <div className="flex justify-between items-center mb-4 sm:mb-6">
                                     <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filters</h3>
@@ -1774,14 +1818,82 @@ const Home: React.FC = () => {
                                                     </button>
                                                 )}
                                             </div>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                                                {filteredItems.map((item) => (
-                                                    <ItemCard 
-                                                        key={item.id} 
-                                                        item={item} 
-                                                        isAdmin={isAdmin}
-                                                        onClick={handleItemClick}
-                                                    />
+                                            {/* Category-Based Two-Row Horizontal Scrolling Layout */}
+                                            <div className="space-y-8">
+                                                {Object.entries(getItemsByCategory()).map(([category, items]) => (
+                                                    <div key={category} className="category-section">
+                                                        {/* Category Header */}
+                                                        <div className="flex items-center justify-between mb-4">
+                                                            <div className="flex items-center gap-3">
+                                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
+                                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Two-Row Horizontal Scrolling Container */}
+                                                        <div className="relative overflow-hidden">
+                                                            <div 
+                                                                className="pb-4 overflow-x-auto scrollbar-hide"
+                                                                data-category={category}
+                                                                style={{ 
+                                                                    scrollbarWidth: 'none',
+                                                                    msOverflowStyle: 'none',
+                                                                    WebkitOverflowScrolling: 'touch'
+                                                                }}
+                                                            >
+                                                                {/* Two-Row Grid */}
+                                                                <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
+                                                                    {items.map((item, index) => (
+                                                                        <div key={item.id} className="w-72">
+                                                                            <ItemCard 
+                                                                                item={item} 
+                                                                                isAdmin={isAdmin}
+                                                                                onClick={handleItemClick}
+                                                                            />
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            {/* Left Scroll Shadow */}
+                                                            <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-gray-50 to-transparent pointer-events-none z-10" />
+                                                            
+                                                            {/* Right Scroll Shadow */}
+                                                            <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none z-10" />
+                                                            
+                                                            {/* Scroll Arrows for Desktop */}
+                                                            <div className="hidden lg:block">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const container = document.querySelector(`[data-category="${category}"]`);
+                                                                        if (container) {
+                                                                            container.scrollBy({ left: -300, behavior: 'smooth' });
+                                                                        }
+                                                                    }}
+                                                                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
+                                                                >
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                                    </svg>
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const container = document.querySelector(`[data-category="${category}"]`);
+                                                                        if (container) {
+                                                                            container.scrollBy({ left: 300, behavior: 'smooth' });
+                                                                        }
+                                                                    }}
+                                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
+                                                                >
+                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 ))}
                                             </div>
                                         </div>
@@ -2271,6 +2383,14 @@ const Home: React.FC = () => {
                 isOpen={isPOSModalOpen}
                 onClose={() => setIsPOSModalOpen(false)}
             />
+
+            {isAdmin && (
+                <RewardsPointsDashboard 
+                    user={user}
+                    isOpen={isRewardsPointsDashboardOpen}
+                    onClose={() => setIsRewardsPointsDashboardOpen(false)}
+                />
+            )}
 
             <Checkout 
                 isOpen={isCheckoutOpen}

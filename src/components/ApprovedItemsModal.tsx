@@ -4,6 +4,8 @@ import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser } from '../types';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 import { apiService } from '../services/apiService';
+import BulkMakeLiveModal from './BulkMakeLiveModal';
+import BulkSendBackModal from './BulkSendBackModal';
 
 interface ApprovedItemsModalProps {
   isOpen: boolean;
@@ -26,7 +28,8 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   // Modal states
   const [showMakeLiveModal, setShowMakeLiveModal] = useState(false);
   const [showBulkMakeLiveModal, setShowBulkMakeLiveModal] = useState(false);
-  const [showBulkSendBackModal, setShowBulkSendBackModal] = useState(false);
+  const [showBulkMakeLiveProgressModal, setShowBulkMakeLiveProgressModal] = useState(false);
+  const [showBulkSendBackProgressModal, setShowBulkSendBackProgressModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
@@ -170,7 +173,25 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   // Bulk actions
   const handleBulkMakeLive = async () => {
     if (selectedItems.size === 0) return;
-    setShowBulkMakeLiveModal(true);
+    
+    // Get selected items for the progress modal
+    const itemsToMakeLive = approvedItems.filter(item => selectedItems.has(item.id));
+    setShowBulkMakeLiveProgressModal(true);
+  };
+
+  const handleBulkMakeLiveComplete = (processedItems: ConsignmentItem[]) => {
+    // Remove processed items from the approved list
+    setApprovedItems(prev => prev.filter(item => 
+      !processedItems.some(processed => processed.id === item.id)
+    ));
+    
+    // Clear selection and close modal
+    clearSelection();
+    setShowBulkMakeLiveProgressModal(false);
+    
+    // Show success message
+    setModalMessage(`${processedItems.length} item${processedItems.length > 1 ? 's are' : ' is'} now live for customers!`);
+    setShowSuccessModal(true);
   };
 
   const confirmBulkMakeLive = async () => {
@@ -214,46 +235,25 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
 
   const handleBulkSendBack = async () => {
     if (selectedItems.size === 0) return;
-    setShowBulkSendBackModal(true);
+    
+    // Get selected items for the progress modal
+    const itemsToSendBack = approvedItems.filter(item => selectedItems.has(item.id));
+    setShowBulkSendBackProgressModal(true);
   };
 
-  const confirmBulkSendBack = async () => {
-    if (selectedItems.size === 0) return;
+  const handleBulkSendBackComplete = (processedItems: ConsignmentItem[]) => {
+    // Remove processed items from the approved list
+    setApprovedItems(prev => prev.filter(item => 
+      !processedItems.some(processed => processed.id === item.id)
+    ));
     
-    await throttledAction('bulk-send-back', async () => {
-      setShowBulkSendBackModal(false);
-      setProcessingItemId('bulk');
-      let successCount = 0;
-      let failCount = 0;
-      
-      try {
-        // Process each selected item
-        for (const itemId of selectedItems) {
-          try {
-            await apiService.sendBackToPending(itemId);
-            successCount++;
-          } catch (error) {
-            console.error(`Failed to send item ${itemId} back to pending:`, error);
-            failCount++;
-          }
-        }
-        
-        // Remove successful items from the list
-        if (successCount > 0) {
-          setApprovedItems(prev => prev.filter(item => !selectedItems.has(item.id)));
-        }
-        
-        setModalMessage(`${successCount} items sent back to pending successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
-        setShowSuccessModal(true);
-        clearSelection();
-        setProcessingItemId(null);
-      } catch (error) {
-        console.error('Error in bulk send back:', error);
-        setModalMessage('Error processing bulk action. Please try again.');
-        setShowErrorModal(true);
-        setProcessingItemId(null);
-      }
-    });
+    // Clear selection and close modal
+    clearSelection();
+    setShowBulkSendBackProgressModal(false);
+    
+    // Show success message
+    setModalMessage(`${processedItems.length} item${processedItems.length > 1 ? 's have' : ' has'} been sent back to pending!`);
+    setShowSuccessModal(true);
   };
 
   // Print barcode from stored image
@@ -386,8 +386,8 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
             </div>
           ) : (
             <>
-              {/* Bulk Selection Controls */}
-              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              {/* Bulk Selection Controls - Sticky at Top */}
+              <div className="sticky top-0 z-10 mb-4 p-3 bg-gray-50 rounded-lg border-b border-gray-200 shadow-sm">
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <button
@@ -455,9 +455,13 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                 {approvedItems.map((item) => {
                   const timeInfo = calculateTimeRemaining(item.approvedAt!);
                   return (
-                    <div key={item.id} className={`mobile-admin-item-card bg-gradient-to-r from-orange-50 to-yellow-50 relative transition-all duration-200 ${
-                      selectedItems.has(item.id) ? 'ring-2 ring-orange-500 bg-orange-100' : ''
-                    }`}>
+                    <div 
+                      key={item.id} 
+                      onClick={() => toggleSelectItem(item.id)}
+                      className={`mobile-admin-item-card bg-gradient-to-r from-orange-50 to-yellow-50 relative transition-all duration-200 cursor-pointer hover:shadow-md ${
+                        selectedItems.has(item.id) ? 'ring-2 ring-orange-500 bg-orange-100' : 'hover:ring-1 hover:ring-orange-300'
+                      }`}
+                    >
                       {/* Selection Checkbox */}
                       <div className="absolute top-3 left-3 z-10">
                         <button
@@ -545,7 +549,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                               </div>
                               {item.barcodeImageUrl && (
                                 <button
-                                  onClick={() => printBarcode(item)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    printBarcode(item);
+                                  }}
                                   className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
                                 >
                                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -595,7 +602,8 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                                 </div>
                                 <div className="flex gap-1 mt-2">
                                   <button
-                                    onClick={() => {
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       navigator.clipboard.writeText(item.barcodeData!);
                                       // Show a brief success message
                                       const toast = document.createElement('div');
@@ -617,7 +625,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                                   </button>
                                   {item.barcodeImageUrl && (
                                     <button
-                                      onClick={() => printBarcode(item)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        printBarcode(item);
+                                      }}
                                       className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors flex items-center gap-1"
                                     >
                                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -644,7 +655,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                         {/* Action Buttons */}
                         <div className="mobile-admin-item-actions">
                           <button
-                            onClick={() => handleSendBackToPending(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendBackToPending(item);
+                            }}
                             disabled={processingItemId === item.id || isActionDisabled(`send-back-${item.id}`)}
                             className="mobile-admin-button mobile-admin-button-secondary disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -652,7 +666,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                              isActionProcessing(`send-back-${item.id}`) ? 'Sending...' : 'Send Back to Pending'}
                           </button>
                           <button
-                            onClick={() => handleMakeLiveClick(item)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMakeLiveClick(item);
+                            }}
                             disabled={processingItemId === item.id || isActionDisabled(`make-live-${item.id}`)}
                             className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -766,36 +783,14 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
         </div>
       )}
 
-      {/* Bulk Send Back Confirmation Modal */}
-      {showBulkSendBackModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mr-3">
-                <span className="text-gray-600 text-xl">↶</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Bulk Send Back to Pending</h3>
-            </div>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to send {selectedItems.size} items back to pending? They will need to be re-approved.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowBulkSendBackModal(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmBulkSendBack}
-                disabled={isActionDisabled('bulk-send-back')}
-                className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isActionProcessing('bulk-send-back') ? 'Processing...' : `Send ${selectedItems.size} Items Back`}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Bulk Send Back Progress Modal */}
+      {showBulkSendBackProgressModal && (
+        <BulkSendBackModal
+          isOpen={showBulkSendBackProgressModal}
+          onClose={() => setShowBulkSendBackProgressModal(false)}
+          items={approvedItems.filter(item => selectedItems.has(item.id))}
+          onComplete={handleBulkSendBackComplete}
+        />
       )}
 
       {/* Error Modal */}
@@ -821,6 +816,15 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
         </div>
       )}
 
+      {/* Bulk Make Live Progress Modal */}
+      {showBulkMakeLiveProgressModal && (
+        <BulkMakeLiveModal
+          isOpen={showBulkMakeLiveProgressModal}
+          onClose={() => setShowBulkMakeLiveProgressModal(false)}
+          items={approvedItems.filter(item => selectedItems.has(item.id))}
+          onComplete={handleBulkMakeLiveComplete}
+        />
+      )}
 
     </div>
   );

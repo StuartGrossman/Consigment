@@ -40,8 +40,7 @@ interface POSModalProps {
 
 const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
   const { user } = useAuth();
-  const [currentStep, setCurrentStep] = useState<'scanning' | 'item_confirmation' | 'checkout' | 'receipt'>('scanning');
-  const [scannedItem, setScannedItem] = useState<ConsignmentItem | null>(null);
+  const [currentStep, setCurrentStep] = useState<'scanning' | 'checkout' | 'receipt'>('scanning');
   
   // Scanning state
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -63,6 +62,9 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
     email: '',
     phone: ''
   });
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([]);
+  const [isSearchingCustomer, setIsSearchingCustomer] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('cash');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -215,10 +217,9 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
         const result = await apiService.lookupItemByBarcode(barcodeText);
         
         if (result.success && result.available) {
-          // Show item confirmation modal
-          setScannedItem(result.item);
-          setCurrentStep('item_confirmation');
-          console.log('✅ Item found:', result.item.title);
+          // Auto-add item to cart
+          addItemToCart(result.item);
+          console.log('✅ Item added to cart:', result.item.title);
         } else {
           console.log('❌ Item lookup failed:', result);
           setScanError(result.message || 'Item not available for sale');
@@ -470,6 +471,47 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
     });
   };
   
+  // Customer search functionality
+  const searchCustomers = async (query: string) => {
+    if (!query.trim() || query.length < 3) {
+      setCustomerSearchResults([]);
+      return;
+    }
+
+    setIsSearchingCustomer(true);
+    try {
+      const response = await fetch(`http://localhost:8080/api/admin/search-customers?q=${encodeURIComponent(query)}`, {
+        headers: {
+          'Authorization': `Bearer ${await user?.getIdToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const results = await response.json();
+        setCustomerSearchResults(results.customers || []);
+      } else {
+        console.error('Customer search failed:', response.status);
+        setCustomerSearchResults([]);
+      }
+    } catch (error) {
+      console.error('Error searching customers:', error);
+      setCustomerSearchResults([]);
+    } finally {
+      setIsSearchingCustomer(false);
+    }
+  };
+
+  const selectCustomer = (customer: any) => {
+    setCustomerInfo({
+      name: customer.displayName || customer.email || 'Unknown Customer',
+      email: customer.email || '',
+      phone: customer.phoneNumber || ''
+    });
+    setCustomerSearchQuery('');
+    setCustomerSearchResults([]);
+  };
+
   const validatePaymentForm = () => {
     if (!customerInfo.name.trim()) {
       setPaymentError('Customer name is required');
@@ -577,6 +619,9 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
     setBarcodeInput('');
     setPosCart([]);
     setCustomerInfo({ name: '', email: '', phone: '' });
+    setCustomerSearchQuery('');
+    setCustomerSearchResults([]);
+    setIsSearchingCustomer(false);
     setPaymentAmount('');
     setReceiptData(null);
     setScanError(null);
@@ -625,12 +670,12 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
             {['scanning', 'checkout', 'receipt'].map((step, index) => (
               <div
                 key={step}
-                className={`flex items-center ${index < ['scanning', 'checkout', 'receipt'].indexOf(currentStep === 'item_confirmation' ? 'scanning' : currentStep) ? 'text-green-200' : 
-                  (step === currentStep || (currentStep === 'item_confirmation' && step === 'scanning')) ? 'text-white' : 'text-orange-200'}`}
+                className={`flex items-center ${index < ['scanning', 'checkout', 'receipt'].indexOf(currentStep) ? 'text-green-200' : 
+                  step === currentStep ? 'text-white' : 'text-orange-200'}`}
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                  index < ['scanning', 'checkout', 'receipt'].indexOf(currentStep === 'item_confirmation' ? 'scanning' : currentStep) ? 'bg-green-500' :
-                  (step === currentStep || (currentStep === 'item_confirmation' && step === 'scanning')) ? 'bg-white text-orange-500' : 'bg-orange-400'
+                  index < ['scanning', 'checkout', 'receipt'].indexOf(currentStep) ? 'bg-green-500' :
+                  step === currentStep ? 'bg-white text-orange-500' : 'bg-orange-400'
                 }`}>
                   {index + 1}
                 </div>
@@ -872,18 +917,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                       }`}
                       autoFocus={!useCamera}
                     />
-                    <button
-                      type="button"
-                      onClick={generateTestItemWithBarcode}
-                      disabled={isScanning}
-                      className="px-4 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed font-medium shadow-lg hover:shadow-xl"
-                      title="Generate test item with barcode for testing"
-                    >
-                      <div className="flex items-center space-x-1">
-                        <span>🧪</span>
-                        <span className="hidden sm:inline">Test</span>
-                      </div>
-                    </button>
+
                     <button
                       type="submit"
                       disabled={!barcodeInput.trim() || isScanning || isActionDisabled('barcode-lookup')}
@@ -909,29 +943,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                 </div>
               </form>
               
-              {/* Debug Panel (only in development) */}
-              {import.meta.env.DEV && (
-                <div className="bg-blue-50 border border-blue-200 rounded-md p-3 text-xs">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <p><strong>Debug Info:</strong></p>
-                      <p>• Camera Loading: {cameraLoading ? '✅' : '❌'}</p>
-                      <p>• Camera Active: {useCamera ? '✅' : '❌'}</p>
-                      <p>• Video Ref: {videoRef.current ? '✅' : '❌'}</p>
-                      <p>• Video Stream: {videoRef.current?.srcObject ? '✅' : '❌'}</p>
-                    </div>
-                    <button
-                      onClick={debugDatabaseItems}
-                      disabled={isScanning}
-                      className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600 disabled:opacity-50"
-                      title="Check what items exist in database"
-                    >
-                      🔍 DB
-                    </button>
-                  </div>
-                  <p className="text-gray-500">Check browser console for detailed logs</p>
-                </div>
-              )}
+
 
               {/* Scan Error */}
               {scanError && (
@@ -980,97 +992,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
             </div>
           )}
           
-          {/* Item Confirmation Step */}
-          {currentStep === 'item_confirmation' && scannedItem && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-semibold text-gray-800 mb-2">Item Found!</h3>
-                <p className="text-gray-600">Would you like to add this item to the cart?</p>
-              </div>
-              
-              {/* Item Preview */}
-              <div className="bg-white border-2 border-orange-200 rounded-lg p-6">
-                <div className="flex space-x-4">
-                  <div className="flex-shrink-0">
-                    {scannedItem.images && scannedItem.images.length > 0 ? (
-                      <img
-                        src={scannedItem.images[0]}
-                        alt={scannedItem.title}
-                        className="w-24 h-24 object-cover rounded-lg"
-                      />
-                    ) : (
-                      <div className="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="text-lg font-semibold text-gray-800 mb-2">{scannedItem.title}</h4>
-                    <p className="text-gray-600 text-sm mb-3">{scannedItem.description}</p>
-                    <div className="space-y-1 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-500">Price:</span>
-                        <span className="font-medium text-green-600">${scannedItem.price.toFixed(2)}</span>
-                      </div>
-                      {scannedItem.brand && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Brand:</span>
-                          <span className="text-gray-700">{scannedItem.brand}</span>
-                        </div>
-                      )}
-                      {scannedItem.category && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Category:</span>
-                          <span className="text-gray-700">{scannedItem.category}</span>
-                        </div>
-                      )}
-                      {scannedItem.size && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-500">Size:</span>
-                          <span className="text-gray-700">{scannedItem.size}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Action Buttons */}
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => {
-                    setCurrentStep('scanning');
-                    setScannedItem(null);
-                  }}
-                  className="flex-1 px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors font-medium"
-                >
-                  Skip Item
-                </button>
-                <button
-                  onClick={() => {
-                    addItemToCart(scannedItem);
-                    setCurrentStep('scanning');
-                    setScannedItem(null);
-                    console.log('✅ Item added to cart:', scannedItem.title);
-                  }}
-                  className="flex-1 px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium flex items-center justify-center space-x-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <span>Add to Cart</span>
-                </button>
-              </div>
-            </div>
-          )}
-          
+
           {/* Checkout Step */}
           {currentStep === 'checkout' && (
             <div className="space-y-6">
@@ -1145,6 +1067,54 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                   {/* Customer Information */}
                   <div className="space-y-4 bg-blue-50 rounded-lg p-4">
                     <h4 className="font-medium text-gray-800">Customer Information</h4>
+                    
+                    {/* Customer Search */}
+                    <div className="relative">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Search Customer (by email or phone)
+                      </label>
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={customerSearchQuery}
+                          onChange={(e) => {
+                            setCustomerSearchQuery(e.target.value);
+                            searchCustomers(e.target.value);
+                          }}
+                          placeholder="Type email or phone to search..."
+                          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {isSearchingCustomer && (
+                          <div className="flex items-center px-3">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Search Results */}
+                      {customerSearchResults.length > 0 && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {customerSearchResults.map((customer, index) => (
+                            <div
+                              key={index}
+                              onClick={() => selectCustomer(customer)}
+                              className="px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                            >
+                              <div className="font-medium text-gray-900">
+                                {customer.displayName || customer.email}
+                              </div>
+                              <div className="text-sm text-gray-600">
+                                {customer.email && `📧 ${customer.email}`}
+                                {customer.email && customer.phoneNumber && ' • '}
+                                {customer.phoneNumber && `📱 ${customer.phoneNumber}`}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Manual Customer Entry */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
@@ -1153,6 +1123,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                           value={customerInfo.name}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, name: e.target.value }))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="Enter customer name"
                           required
                         />
                       </div>
@@ -1163,6 +1134,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                           value={customerInfo.email}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, email: e.target.value }))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="customer@email.com"
                         />
                       </div>
                       <div>
@@ -1172,9 +1144,18 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
                           value={customerInfo.phone}
                           onChange={(e) => setCustomerInfo(prev => ({ ...prev, phone: e.target.value }))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                          placeholder="(555) 123-4567"
                         />
                       </div>
                     </div>
+                    
+                    {customerInfo.email && (
+                      <div className="bg-green-100 border border-green-300 rounded-md p-3">
+                        <p className="text-sm text-green-700">
+                          🎯 <strong>Rewards eligible!</strong> This customer can earn points from this purchase.
+                        </p>
+                      </div>
+                    )}
                   </div>
                   
                   {/* Payment Method */}
