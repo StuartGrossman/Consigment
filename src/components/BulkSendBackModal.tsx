@@ -56,7 +56,7 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
         clearTimeout(timeoutId);
       };
     }
-  }, [isOpen, items.length]); // Fixed: Only depend on isOpen and items.length to prevent restart loops
+  }, [isOpen, processedItems.length, currentStep, isProcessing]); // Include all relevant dependencies to prevent restarts
 
   const initializeProcessedItems = () => {
     // Don't reinitialize if already processing to prevent restart loops
@@ -145,16 +145,34 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
       const endTime = Date.now();
       const totalTime = ((endTime - startTime) / 1000).toFixed(1);
       
+      // Calculate final counts
+      const finalCompletedCount = processedItems.filter(item => item.status === 'completed').length;
+      const finalErrorCount = processedItems.filter(item => item.status === 'error').length;
+      
       if (isCancelled) {
         console.log(`⏹️ Bulk send back processing cancelled after ${totalTime}s`);
-        console.log(`📊 Results before cancellation: ${completedCount} completed, ${errorCount} failed`);
+        console.log(`📊 Results before cancellation: ${finalCompletedCount} completed, ${finalErrorCount} failed`);
       } else {
         console.log(`✅ Bulk send back processing completed in ${totalTime}s`);
-        console.log(`📊 Final results: ${completedCount} completed, ${errorCount} failed`);
+        console.log(`📊 Final results: ${finalCompletedCount} completed, ${finalErrorCount} failed`);
       }
       
       setCurrentStep('completed');
       setIsProcessing(false);
+      
+      // Auto-complete after a brief delay to show completion status
+      if (!isCancelled) {
+        setTimeout(() => {
+          setProcessedItems(currentProcessedItems => {
+            const completedItems = currentProcessedItems
+              .filter(item => item.status === 'completed')
+              .map(item => item.item);
+            onComplete(completedItems);
+            return currentProcessedItems;
+          });
+          onClose();
+        }, 2000); // 2 second delay to show completion status
+      }
     }
   };
 
@@ -242,6 +260,12 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
   const handleCancel = () => {
     console.log('🛑 User cancelled bulk send back processing');
     setIsCancelled(true);
+    setIsProcessing(false);
+    setCurrentStep('completed');
+    // Close the modal after a brief delay to show cancellation status
+    setTimeout(() => {
+      onClose();
+    }, 1000);
   };
 
   const handleComplete = () => {
@@ -269,8 +293,8 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-gray-200 flex-shrink-0">
           <div className="flex justify-between items-start">
             <div className="flex-1 mr-6">
               <div className="flex items-center justify-between mb-2">
@@ -342,10 +366,10 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-hidden flex flex-col">
           {/* Error Summary */}
           {processingErrors.length > 0 && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-red-800 font-medium">⚠️ Validation Errors</h3>
@@ -370,10 +394,8 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
             </div>
           )}
 
-
-
           {/* Items List */}
-          <div className="max-h-96 overflow-y-auto space-y-3">
+          <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
             {processedItems.map((processedItem, index) => (
               <div
                 key={processedItem.item.id}
@@ -464,7 +486,7 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="p-6 border-t border-gray-200">
+        <div className="p-6 border-t border-gray-200 flex-shrink-0">
           <div className="flex justify-between">
             <div>
               {currentStep === 'completed' && completedCount > 0 && (
@@ -511,16 +533,21 @@ const BulkSendBackModal: React.FC<BulkSendBackModalProps> = ({
                   )}
                 </div>
               )}
-              {currentStep === 'completed' && (
+              {currentStep === 'completed' && !isCancelled && (
+                <div className="text-sm text-gray-600 flex items-center">
+                  <svg className="animate-spin h-4 w-4 mr-2 text-green-500" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span className="text-green-600">Processing completed! Auto-finishing...</span>
+                </div>
+              )}
+              {currentStep === 'completed' && isCancelled && (
                 <button
-                  onClick={handleComplete}
-                  className={`px-6 py-2 text-white rounded-lg transition-colors ${
-                    isCancelled 
-                      ? 'bg-yellow-500 hover:bg-yellow-600'
-                      : 'bg-orange-500 hover:bg-orange-600'
-                  }`}
+                  onClick={onClose}
+                  className="px-6 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 transition-colors"
                 >
-                  {isCancelled ? `Complete (${completedCount} Sent Back, Cancelled)` : `Complete (${completedCount} Sent Back)`}
+                  Close ({completedCount} Sent Back, Cancelled)
                 </button>
               )}
               {processingErrors.length > 0 && (

@@ -14,6 +14,8 @@ interface MyPendingItemsModalProps {
 const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClose, user }) => {
   const [myItems, setMyItems] = useState<ConsignmentItem[]>([]);
   const [filteredItems, setFilteredItems] = useState<ConsignmentItem[]>([]);
+  const [searchFilteredItems, setSearchFilteredItems] = useState<ConsignmentItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [editingItem, setEditingItem] = useState<ConsignmentItem | null>(null);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
@@ -30,7 +32,24 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
       item.status === 'pending' || item.status === 'rejected'
     );
     setFilteredItems(filtered);
+    setSearchFilteredItems(filtered);
   }, [myItems]);
+
+  // Filter items based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchFilteredItems(filteredItems);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = filteredItems.filter(item =>
+        item.title.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query) ||
+        (item.brand && item.brand.toLowerCase().includes(query)) ||
+        (item.category && item.category.toLowerCase().includes(query))
+      );
+      setSearchFilteredItems(filtered);
+    }
+  }, [filteredItems, searchQuery]);
 
   const fetchMyItems = async () => {
     if (!user) return;
@@ -193,10 +212,10 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
       <div className="mobile-admin-modal-content">
         <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-center">
-            <div>
+            <div className="flex-1">
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800">My Pending Items</h2>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                Track your pending, rejected, and returned items • Click to edit items
+                Track your pending, rejected, and returned items ({searchFilteredItems.length} items) • Click to edit items
               </p>
             </div>
             <button
@@ -211,6 +230,36 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
         </div>
 
         <div className="mobile-admin-modal-body">
+          {/* Search Bar */}
+          {!loading && filteredItems.length > 0 && (
+            <div className="mb-4">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by title, brand, or category..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
@@ -227,7 +276,7 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
             </div>
           ) : (
             <div className="space-y-4 sm:space-y-6">
-              {filteredItems.map((item) => (
+              {searchFilteredItems.map((item) => (
                 <div 
                   key={item.id} 
                   className="border border-gray-200 rounded-lg p-4 sm:p-6 bg-white transition-colors hover:bg-gray-50 cursor-pointer"

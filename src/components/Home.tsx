@@ -306,9 +306,7 @@ const Home: React.FC = () => {
     const userMenuRef = useRef<HTMLDivElement>(null);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
     const [alertsMenuOpen, setAlertsMenuOpen] = useState(false);
-    const [adminMenuOpen, setAdminMenuOpen] = useState(false);
     const alertsMenuRef = useRef<HTMLDivElement>(null);
-    const adminMenuRef = useRef<HTMLDivElement>(null);
     const [recentItems, setRecentItems] = useState<ConsignmentItem[]>([]);
     const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
     const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
@@ -386,22 +384,19 @@ const Home: React.FC = () => {
             if (alertsMenuRef.current && !alertsMenuRef.current.contains(event.target as Node)) {
                 setAlertsMenuOpen(false);
             }
-            if (adminMenuRef.current && !adminMenuRef.current.contains(event.target as Node)) {
-                setAdminMenuOpen(false);
-            }
             if (filtersRef.current && !filtersRef.current.contains(event.target as Node)) {
                 setFiltersOpen(false);
             }
         };
 
-        if (userMenuOpen || alertsMenuOpen || adminMenuOpen || filtersOpen) {
+        if (userMenuOpen || alertsMenuOpen || filtersOpen) {
             document.addEventListener('mousedown', handleClickOutside);
         }
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [userMenuOpen, alertsMenuOpen, adminMenuOpen, filtersOpen]);
+    }, [userMenuOpen, alertsMenuOpen, filtersOpen]);
 
     const checkAdminStatus = () => {
         if (!user) return;
@@ -1276,12 +1271,21 @@ const Home: React.FC = () => {
                             {/* List Item Button - Always icon */}
                             <button
                                 onClick={handleAddItem}
+<<<<<<< HEAD
                                 className="desktop-button-primary p-2"
                                 title="List Item"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
+=======
+                                            className="desktop-button-primary p-2"
+                                            title="List Item"
+                            >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                                            </svg>
+>>>>>>> feature-functionality
                             </button>
                             
                             {/* My Pending Items button for regular users - Always icon */}
@@ -1299,12 +1303,12 @@ const Home: React.FC = () => {
                             
                             {isAdmin && (
                                 <>
-                                    {/* Individual buttons for large screens (1100px+) */}
-                                    <div className="hidden xl:flex xl:gap-2">
+                                    {/* Individual icon buttons for all screens (sm+) */}
+                                    <div className="hidden sm:flex sm:gap-4">
                                         <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
-                                            title="Scan Items (POS)"
+                                            title="Scan Items"
                                         >
                                             <svg
                                                 xmlns="http://www.w3.org/2000/svg"
@@ -1327,11 +1331,29 @@ const Home: React.FC = () => {
                                                 />
                                             </svg>
                                         </button>
+                                        {/* Cart Icon positioned right after Scan */}
+                                        <button
+                                            onClick={() => setIsCartModalOpen(true)}
+                                            className="p-2 text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-blue-50 hover:bg-blue-100 relative"
+                                            title="Checkout"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L5 3H3m4 10v6a1 1 0 001 1h10a1 1 0 001-1v-6M9 19h.01M20 19h.01" />
+                                            </svg>
+                                            {getCartItemCount() > 0 && (
+                                                <span className="absolute -top-2 -right-2 bg-orange-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {getCartItemCount() > 9 ? '9+' : getCartItemCount()}
+                                                </span>
+                                            )}
+                                        </button>
                                         <button
                                             onClick={handleAdminModal}
-                                            className="desktop-button-secondary relative"
+                                            className="desktop-button-secondary relative p-2"
+                                            title="Pending Items"
                                         >
-                                            <span>Pending Items</span>
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
                                             {notificationCounts.pending > 0 && (
                                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                     {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
@@ -1340,9 +1362,12 @@ const Home: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={handleApprovedModal}
-                                            className="desktop-button-secondary relative"
+                                            className="desktop-button-secondary relative p-2"
+                                            title="Approved Items"
                                         >
-                                            <span>Approved Items</span>
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m4.5 12.75 6 6 9-13.5" />
+                                            </svg>
                                             {notificationCounts.approved > 0 && (
                                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                     {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
@@ -1351,124 +1376,33 @@ const Home: React.FC = () => {
                                         </button>
                                     </div>
 
-                                    {/* Dropdown for medium screens (640px-1100px) */}
-                                    <div ref={adminMenuRef} className="relative hidden sm:block xl:hidden">
-                                        <button
-                                            onClick={() => setAdminMenuOpen(!adminMenuOpen)}
-                                            className="desktop-button-secondary relative flex items-center gap-1"
-                                        >
-                                            <span>Actions</span>
-                                            <svg className={`w-4 h-4 transition-transform ${adminMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                                            </svg>
-                                            {(notificationCounts.pending > 0 || notificationCounts.approved > 0) && (
-                                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
-                                                    {Math.min(99, notificationCounts.pending + notificationCounts.approved)}
-                                                </span>
-                                            )}
-                                        </button>
-
-                                        {/* Actions Dropdown Menu */}
-                                        {adminMenuOpen && (
-                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                                                <div className="py-1">
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsPOSModalOpen(true);
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                            </svg>
-                                                            <span>Scan Items (POS)</span>
-                                                        </div>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            handleAdminModal();
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                                            </svg>
-                                                            <span>Pending Items</span>
-                                                        </div>
-                                                        {notificationCounts.pending > 0 && (
-                                                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                                                {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            handleApprovedModal();
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m4.5 12.75 6 6 9-13.5" />
-                                                            </svg>
-                                                            <span>Approved Items</span>
-                                                        </div>
-                                                        {notificationCounts.approved > 0 && (
-                                                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                                                {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsRewardsPointsDashboardOpen(true);
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            <span>Rewards Points</span>
-                                                        </div>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
                                     {/* Mobile/small screens - show icons only */}
                                     <div className="flex gap-1 sm:hidden">
-                                        {/* Mobile POS Scanner Button */}
-                                        <button
-                                            onClick={() => setIsMobileScannerOpen(true)}
-                                            className="p-2 text-green-600 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-green-50 hover:bg-green-100 relative"
-                                            title="📱 Mobile POS Scanner"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                            </svg>
-                                            {/* Mobile indicator badge */}
-                                            <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">📱</span>
-                                        </button>
-                                        
                                         {/* Desktop POS Button */}
                                         <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
-                                            title="🖥️ Desktop POS System"
+                                            title="Scan Items"
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                             </svg>
+                                        </button>
+                                        {/* Cart Icon positioned right after Scan */}
+                                        <button
+                                            onClick={() => setIsCartModalOpen(true)}
+                                            className="p-2 text-blue-600 hover:text-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-blue-50 hover:bg-blue-100 relative"
+                                            title="Checkout"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L5 3H3m4 10v6a1 1 0 001 1h10a1 1 0 001-1v-6M9 19h.01M20 19h.01" />
+                                            </svg>
+                                            {getCartItemCount() > 0 && (
+                                                <span className="absolute -top-1 -right-1 bg-orange-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                                    {getCartItemCount() > 9 ? '9+' : getCartItemCount()}
+                                                </span>
+                                            )}
                                         </button>
                                         <button
                                             onClick={handleAdminModal}
@@ -2614,11 +2548,16 @@ const Home: React.FC = () => {
 
             {isAdmin && (
                 <>
-                    <AdminModal 
-                        isOpen={isAdminModalOpen} 
-                        onClose={handleAdminModalClose}
-                        user={user}
-                    />
+                            <AdminModal
+          isOpen={isAdminModalOpen}
+          onClose={handleAdminModalClose}
+          user={user}
+          onDataChanged={() => {
+            fetchItems();
+            fetchRecentItems();
+            if (isAdmin) fetchNotificationCounts();
+          }}
+        />
                     <ApprovedItemsModal 
                         isOpen={isApprovedModalOpen} 
                         onClose={handleApprovedModalClose}

@@ -11,7 +11,11 @@ const getApiBaseUrl = () => {
     
     // Development - use localhost
     if (import.meta.env.DEV) {
+<<<<<<< HEAD
         return 'http://localhost:8001';
+=======
+        return 'http://localhost:8999';
+>>>>>>> feature-functionality
     }
     
     // Production - check if we're on Firebase hosting

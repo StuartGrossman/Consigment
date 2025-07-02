@@ -29,24 +29,42 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
   useEffect(() => {
     if (isOpen && item) {
-      // Initialize canvas dimensions before generating barcode
-      if (canvasRef.current) {
-        canvasRef.current.width = 300;
-        canvasRef.current.height = 100;
-      }
-      
-      generateBarcode();
       setIsConfirming(false);
+      
+      // Delay barcode generation to ensure canvas is mounted
+      const timeoutId = setTimeout(() => {
+        // Double-check canvas is available before generating
+        if (canvasRef.current) {
+          // Initialize canvas dimensions
+          canvasRef.current.width = 300;
+          canvasRef.current.height = 100;
+          generateBarcode();
+        } else {
+          console.warn('Canvas not yet available, retrying...');
+          // Retry after a short delay
+          setTimeout(() => {
+            if (canvasRef.current) {
+              canvasRef.current.width = 300;
+              canvasRef.current.height = 100;
+              generateBarcode();
+            }
+          }, 500);
+        }
+      }, 100); // Small delay to ensure DOM is ready
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [isOpen, item]);
 
   const generateBarcode = () => {
-    if (!item) return;
+    if (!item) {
+      console.warn('No item provided for barcode generation');
+      return;
+    }
 
     setIsGenerating(true);
     
-    // Add a brief delay for better UX progression
-    setTimeout(() => {
+    try {
       // Generate barcode data with timestamp and item info
       const now = new Date();
       const timestamp = now.getTime().toString();
@@ -58,41 +76,67 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
       
       setBarcodeData(barcodeValue);
 
-      // Generate barcode using jsbarcode
-      if (canvasRef.current) {
+      // Retry mechanism for canvas availability with exponential backoff
+      const tryGenerateBarcode = (attempt = 1, maxAttempts = 5) => {
+        if (!canvasRef.current) {
+          if (attempt < maxAttempts) {
+            console.warn(`⏳ Canvas not ready, attempt ${attempt}/${maxAttempts}. Retrying in ${100 * attempt}ms...`);
+            setTimeout(() => tryGenerateBarcode(attempt + 1, maxAttempts), 100 * attempt);
+            return;
+          } else {
+            console.error('❌ Canvas reference not available after multiple attempts');
+            setIsGenerating(false);
+            return;
+          }
+        }
+
         try {
+          console.log('🎨 Canvas available, generating barcode...');
+          
+          // Set canvas dimensions first
+          canvasRef.current.width = 320;
+          canvasRef.current.height = 120;
+
           // Clear the canvas first
           const ctx = canvasRef.current.getContext('2d');
           if (ctx) {
-            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
           }
           
-          // Generate the barcode
+          // Generate the barcode with improved settings
           JsBarcode(canvasRef.current, barcodeValue, {
             format: "CODE128",
             width: 2,
-            height: 80,
+            height: 60,
             displayValue: true,
-            fontSize: 12,
-            margin: 10,
+            fontSize: 14,
+            margin: 15,
             background: "#ffffff",
-            lineColor: "#000000"
+            lineColor: "#000000",
+            textAlign: "center",
+            textPosition: "bottom",
+            textMargin: 8
           });
           
           console.log('✅ Barcode generated successfully:', barcodeValue);
-          setIsGenerating(false);
-        } catch (error) {
-          console.error('❌ Error generating barcode:', error);
+          console.log('Canvas dimensions:', canvasRef.current.width, 'x', canvasRef.current.height);
+          
           setIsGenerating(false);
           
-          // Show error message to user
-          alert('Error generating barcode. Please try again.');
+        } catch (barcodeError) {
+          console.error('❌ Error generating barcode image:', barcodeError);
+          setIsGenerating(false);
         }
-      } else {
-        console.error('❌ Canvas reference not available');
-        setIsGenerating(false);
-      }
-    }, 800); // Brief delay for smooth UX
+      };
+
+      // Start the generation process with retry logic
+      tryGenerateBarcode();
+      
+    } catch (error) {
+      console.error('❌ Error in barcode generation setup:', error);
+      setIsGenerating(false);
+    }
   };
 
   const handlePrint = () => {
@@ -325,7 +369,10 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
   };
 
   const handleConfirmAndApprove = async () => {
-    if (!item || !barcodeData || !canvasRef.current) return;
+    if (!item || !barcodeData || !canvasRef.current) {
+      alert('Cannot approve item: Missing item data, barcode, or canvas element. Please try generating the barcode again.');
+      return;
+    }
 
     if (!user) {
       console.error('No authenticated user found');
@@ -333,8 +380,13 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
       return;
     }
 
-    console.log('Starting barcode confirmation process...');
-    console.log('User details:', {
+    console.log('🚀 Starting barcode confirmation process...');
+    console.log('📋 Item details:', {
+      id: item.id,
+      title: item.title,
+      barcodeData: barcodeData
+    });
+    console.log('👤 User details:', {
       uid: user.uid,
       email: user.email,
       isAdmin: isAdmin
@@ -350,7 +402,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
     
     try {
       // Ensure admin status is set in Firestore
-      console.log('Setting admin status in Firestore...');
+      console.log('🔐 Setting admin status in Firestore...');
       const userRef = doc(db, 'users', user.uid);
       await setDoc(userRef, {
         isAdmin: true,
@@ -363,57 +415,95 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
       // Generate and upload barcode image to Firebase Storage
       let barcodeImageUrl = '';
       
-      console.log('Uploading barcode image...');
-      await new Promise<void>((resolve) => {
-        canvasRef.current!.toBlob(async (blob) => {
-          if (blob) {
-            try {
-              const storageRef = ref(storage, `barcodes/${item.id}_${barcodeData}.png`);
-              await uploadBytes(storageRef, blob);
-              barcodeImageUrl = await getDownloadURL(storageRef);
-              console.log('Barcode image uploaded successfully:', barcodeImageUrl);
-            } catch (error) {
-              console.error('Error uploading barcode image:', error);
-            }
-          }
-          resolve();
-        }, 'image/png');
+      console.log('📤 Uploading barcode image to storage...');
+      
+      // Create blob from canvas with error handling
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvasRef.current!.toBlob((blob) => {
+          resolve(blob);
+        }, 'image/png', 1.0);
       });
 
+      if (!blob) {
+        throw new Error('Failed to create barcode image blob from canvas');
+      }
+
+      // Upload to Firebase Storage
+      const storageRef = ref(storage, `barcodes/${item.id}_${barcodeData}.png`);
+      const snapshot = await uploadBytes(storageRef, blob);
+      barcodeImageUrl = await getDownloadURL(snapshot.ref);
+      console.log('✅ Barcode image uploaded successfully:', barcodeImageUrl);
+
+      // Validate the upload was successful
+      if (!barcodeImageUrl || !barcodeImageUrl.startsWith('http')) {
+        throw new Error('Invalid barcode image URL received from storage');
+      }
+
       // Save barcode data and approve the item via server API
-      console.log('Attempting to update item via server API...');
-      console.log('Item ID:', item.id);
-      console.log('Barcode data:', barcodeData);
-      console.log('Barcode image URL:', barcodeImageUrl);
-      console.log('Current user admin status:', isAdmin);
+      console.log('🔄 Updating item via server API...');
+      console.log('📝 Update data:', {
+        itemId: item.id,
+        barcodeData: barcodeData,
+        barcodeImageUrl: barcodeImageUrl,
+        status: 'approved'
+      });
       
       // Use the server API to update the item with barcode data and approve it
-      await apiService.updateItemWithBarcode(item.id, {
+      const updateResult = await apiService.updateItemWithBarcode(item.id, {
         barcodeData: barcodeData,
         barcodeImageUrl: barcodeImageUrl,
         status: 'approved'
       });
 
-      console.log('Item updated successfully');
+      console.log('✅ Item updated successfully via API:', updateResult);
 
       // Log the action
-      await logUserAction(user, 'item_approved', 'Generated barcode and approved item', item.id, item.title);
+      await logUserAction(user, 'item_approved', `Generated barcode ${barcodeData} and approved item`, item.id, item.title);
 
-      // Call the parent callback
-      onConfirmPrint(item, barcodeData);
+      console.log('🎉 Item approval process completed successfully!');
+      console.log('📊 Summary:', {
+        itemId: item.id,
+        itemTitle: item.title,
+        barcodeData: barcodeData,
+        barcodeImageUrl: barcodeImageUrl,
+        status: 'approved'
+      });
+
+      // Call the parent callback with updated item data
+      const updatedItem = {
+        ...item,
+        status: 'approved' as const,
+        barcodeData: barcodeData,
+        barcodeImageUrl: barcodeImageUrl,
+        approvedAt: new Date(),
+        barcodeGeneratedAt: new Date()
+      };
+      
+      onConfirmPrint(updatedItem, barcodeData);
       onClose();
     } catch (error) {
-      console.error('Error updating item with barcode:', error);
-      console.error('Full error details:', {
+      console.error('❌ Error updating item with barcode:', error);
+      console.error('📋 Full error details:', {
         name: error instanceof Error ? error.name : 'Unknown',
         message: error instanceof Error ? error.message : 'Unknown error',
         code: (error as any)?.code,
-        details: (error as any)?.details
+        details: (error as any)?.details,
+        stack: error instanceof Error ? error.stack : 'No stack trace'
       });
       
       // Show user-friendly error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to confirm item approval: ${errorMessage}\n\nUser: ${user.email}\nAdmin Status: ${isAdmin}\nItem ID: ${item.id}\n\nPlease try again or contact support if the issue persists.`);
+      alert(`❌ Failed to approve item and generate barcode:
+
+${errorMessage}
+
+📋 Details:
+• User: ${user.email}
+• Admin Status: ${isAdmin}
+• Item ID: ${item.id}
+• Barcode Data: ${barcodeData}
+
+Please try again or contact support if the issue persists.`);
     } finally {
       setIsConfirming(false);
     }
@@ -423,7 +513,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[95vh] overflow-hidden">
         <div className="sticky top-0 bg-white p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div>
@@ -441,7 +531,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6 overflow-y-auto">
+        <div className="p-6 overflow-y-auto max-h-[calc(95vh-200px)]">
           {/* Item Information */}
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-3">{item.title}</h3>
@@ -475,46 +565,40 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
                 </div>
               </div>
             ) : (
-              <div className="bg-white border border-gray-200 rounded-lg p-6 inline-block">
-                <canvas ref={canvasRef} className="mx-auto" />
+              <div className="bg-white border border-gray-200 rounded-lg p-6 inline-block min-h-[140px] flex flex-col items-center justify-center">
+                <canvas 
+                  ref={canvasRef} 
+                  className="mx-auto"
+                  style={{ maxWidth: '100%', height: 'auto' }}
+                />
                 {barcodeData && (
-                  <div className="mt-3 text-sm text-gray-600">
-                    <p><strong>Barcode ID:</strong> {barcodeData}</p>
-                    <p><strong>Generated:</strong> {new Date().toLocaleString()}</p>
+                  <div className="mt-4 text-center">
+                    <p className="text-sm font-medium text-gray-800">
+                      <strong>Barcode ID:</strong> {barcodeData}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      <strong>Generated:</strong> {new Date().toLocaleString()}
+                    </p>
+                  </div>
+                )}
+                {!barcodeData && !isGenerating && (
+                  <div className="text-center text-gray-500 py-4">
+                    <div className="text-2xl mb-2">⚠️</div>
+                    <p className="text-sm">Barcode generation failed</p>
+                    <button
+                      onClick={generateBarcode}
+                      className="mt-2 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors text-sm"
+                    >
+                      Retry Generation
+                    </button>
                   </div>
                 )}
               </div>
             )}
           </div>
-
-          {/* Print Section */}
-          <div className="border-t border-gray-200 pt-6">
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-              <div className="flex-1">
-                <h4 className="text-lg font-semibold text-gray-800 mb-2">Print Label</h4>
-                <p className="text-sm text-gray-600">
-                  Print this barcode label and attach it to the item before adding to inventory.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-3 items-center">
-                <button
-                  onClick={handlePrint}
-                  disabled={isGenerating || !barcodeData}
-                  className="px-6 py-2 rounded-lg transition-colors font-medium flex items-center gap-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white disabled:text-gray-500"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print
-                </button>
-              </div>
-            </div>
-
-
-          </div>
         </div>
 
-        {/* Footer Actions */}
+        {/* Footer Actions - Fixed at bottom */}
         <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
           <div className="flex justify-between items-center">
             <button
@@ -532,7 +616,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
-                Print
+                Print Label
               </button>
               <button
                 onClick={handleConfirmAndApprove}
