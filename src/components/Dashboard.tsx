@@ -29,7 +29,6 @@ interface DashboardData {
 const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [activeModal, setActiveModal] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -83,8 +82,8 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
     // Calculate total revenue
     const totalRevenue = soldItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
     
-    // Get unique sellers who have actually sold items (not just submitted)
-    const activeSellers = new Set(soldItems.map(item => item.sellerId));
+    // Get unique sellers
+    const uniqueSellers = new Set(items.map(item => item.sellerId));
     
     // Calculate average item price
     const avgItemPrice = soldItems.length > 0 ? totalRevenue / soldItems.length : 0;
@@ -94,13 +93,11 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
     for (let i = 11; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
       
-      const monthItems = soldItems.filter(item => {
-        if (!item.soldAt) return false;
-        const soldDate = item.soldAt instanceof Date ? item.soldAt : new Date(item.soldAt);
-        return soldDate >= monthStart && soldDate <= monthEnd;
-      });
+      const monthItems = soldItems.filter(item => 
+        item.soldAt && item.soldAt >= monthStart && item.soldAt <= monthEnd
+      );
       
       const monthRevenue = monthItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
       
@@ -204,7 +201,7 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
     return {
       totalRevenue,
       totalItems: items.length,
-      activeUsers: activeSellers.size,
+      activeUsers: uniqueSellers.size,
       avgItemPrice,
       monthlyRevenue,
       categoryBreakdown,
@@ -309,56 +306,40 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
             </div>
           ) : dashboardData ? (
             <div className="space-y-8">
-              {/* Key Metrics - Now Clickable */}
+              {/* Key Metrics */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div 
-                  onClick={() => setActiveModal('revenue')}
-                  className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
-                >
+                <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-orange-100">Total Revenue</p>
                       <p className="text-3xl font-bold">${dashboardData.totalRevenue.toFixed(2)}</p>
-                      <p className="text-xs text-orange-200 mt-1">Click for details</p>
                     </div>
                     <div className="text-4xl opacity-80">💰</div>
                   </div>
                 </div>
-                <div 
-                  onClick={() => setActiveModal('items')}
-                  className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
-                >
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-blue-100">Total Items</p>
                       <p className="text-3xl font-bold">{dashboardData.totalItems}</p>
-                      <p className="text-xs text-blue-200 mt-1">Click for breakdown</p>
                     </div>
                     <div className="text-4xl opacity-80">📦</div>
                   </div>
                 </div>
-                <div 
-                  onClick={() => setActiveModal('sellers')}
-                  className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
-                >
+                <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-green-100">Active Sellers</p>
                       <p className="text-3xl font-bold">{dashboardData.activeUsers}</p>
-                      <p className="text-xs text-green-200 mt-1">Click for seller stats</p>
                     </div>
                     <div className="text-4xl opacity-80">👥</div>
                   </div>
                 </div>
-                <div 
-                  onClick={() => setActiveModal('pricing')}
-                  className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
-                >
+                <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-purple-100">Avg Item Price</p>
                       <p className="text-3xl font-bold">${dashboardData.avgItemPrice.toFixed(2)}</p>
-                      <p className="text-xs text-purple-200 mt-1">Click for price analysis</p>
                     </div>
                     <div className="text-4xl opacity-80">💲</div>
                   </div>
@@ -512,213 +493,6 @@ const Dashboard: React.FC<DashboardProps> = ({ isOpen, onClose, user }) => {
           )}
         </div>
       </div>
-
-      {/* Detail Modals */}
-      {activeModal && dashboardData && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-60 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex justify-between items-center">
-                <h3 className="text-2xl font-bold text-gray-800">
-                  {activeModal === 'revenue' && '💰 Revenue Details'}
-                  {activeModal === 'items' && '📦 Items Breakdown'}
-                  {activeModal === 'sellers' && '👥 Active Sellers Analysis'}
-                  {activeModal === 'pricing' && '💲 Pricing Analytics'}
-                </h3>
-                <button
-                  onClick={() => setActiveModal(null)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-            
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {activeModal === 'revenue' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                      <p className="text-orange-800 font-medium">Total Revenue</p>
-                      <p className="text-2xl font-bold text-orange-600">${dashboardData.totalRevenue.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-green-800 font-medium">Items Sold</p>
-                      <p className="text-2xl font-bold text-green-600">{dashboardData.monthlyRevenue.reduce((sum, m) => sum + m.items, 0)}</p>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-blue-800 font-medium">Avg Monthly Revenue</p>
-                      <p className="text-2xl font-bold text-blue-600">${(dashboardData.totalRevenue / 12).toFixed(2)}</p>
-                    </div>
-                  </div>
-                  <div className="bg-white border border-gray-200 rounded-xl p-6">
-                    <h4 className="text-lg font-semibold mb-4">Monthly Revenue Trend</h4>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <AreaChart data={dashboardData.monthlyRevenue}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="month" />
-                        <YAxis />
-                        <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, 'Revenue']} />
-                        <Area type="monotone" dataKey="revenue" stroke="#f97316" fill="#fed7aa" strokeWidth={3} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {activeModal === 'items' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-blue-800 font-medium">Total Items</p>
-                      <p className="text-2xl font-bold text-blue-600">{dashboardData.totalItems}</p>
-                    </div>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-green-800 font-medium">Sold Items</p>
-                      <p className="text-2xl font-bold text-green-600">{dashboardData.monthlyRevenue.reduce((sum, m) => sum + m.items, 0)}</p>
-                    </div>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <p className="text-yellow-800 font-medium">Pending Items</p>
-                      <p className="text-2xl font-bold text-yellow-600">{dashboardData.statusBreakdown.find(s => s.status === 'Pending')?.count || 0}</p>
-                    </div>
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <p className="text-purple-800 font-medium">Live Items</p>
-                      <p className="text-2xl font-bold text-purple-600">{dashboardData.statusBreakdown.find(s => s.status === 'Live')?.count || 0}</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <div className="bg-white border border-gray-200 rounded-xl p-6">
-                      <h4 className="text-lg font-semibold mb-4">Items Sold by Month</h4>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart data={dashboardData.monthlyRevenue}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="month" />
-                          <YAxis />
-                          <Tooltip />
-                          <Bar dataKey="items" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="bg-white border border-gray-200 rounded-xl p-6">
-                      <h4 className="text-lg font-semibold mb-4">Items by Status</h4>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <PieChart>
-                          <Pie
-                            data={dashboardData.statusBreakdown}
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                            label={({ status, count }) => `${status}: ${count}`}
-                          >
-                            {dashboardData.statusBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeModal === 'sellers' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-green-800 font-medium">Active Sellers</p>
-                      <p className="text-2xl font-bold text-green-600">{dashboardData.activeUsers}</p>
-                      <p className="text-sm text-green-600">Sellers who have sold items</p>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-blue-800 font-medium">Top Seller Revenue</p>
-                      <p className="text-2xl font-bold text-blue-600">${dashboardData.topSellers[0]?.revenue.toFixed(2) || '0.00'}</p>
-                    </div>
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <p className="text-purple-800 font-medium">Avg Revenue per Seller</p>
-                      <p className="text-2xl font-bold text-purple-600">${dashboardData.activeUsers > 0 ? (dashboardData.totalRevenue * 0.75 / dashboardData.activeUsers).toFixed(2) : '0.00'}</p>
-                    </div>
-                  </div>
-                  <div className="bg-white border border-gray-200 rounded-xl p-6">
-                    <h4 className="text-lg font-semibold mb-4">Top 10 Sellers by Revenue</h4>
-                    <div className="overflow-x-auto">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rank</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Revenue (75%)</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items Sold</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Avg per Item</th>
-                          </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {dashboardData.topSellers.map((seller, index) => (
-                            <tr key={index} className={index < 3 ? 'bg-yellow-50' : ''}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                {index === 0 && '🥇'} {index === 1 && '🥈'} {index === 2 && '🥉'} #{index + 1}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-medium">
-                                {seller.name}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">
-                                ${seller.revenue.toFixed(2)}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                {seller.items}
-                              </td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                ${seller.items > 0 ? (seller.revenue / seller.items).toFixed(2) : '0.00'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeModal === 'pricing' && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                      <p className="text-purple-800 font-medium">Average Item Price</p>
-                      <p className="text-2xl font-bold text-purple-600">${dashboardData.avgItemPrice.toFixed(2)}</p>
-                    </div>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-green-800 font-medium">Highest Category Avg</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        ${Math.max(...dashboardData.categoryBreakdown.map(c => c.count > 0 ? c.revenue / c.count : 0)).toFixed(2)}
-                      </p>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-blue-800 font-medium">Total Categories</p>
-                      <p className="text-2xl font-bold text-blue-600">{dashboardData.categoryBreakdown.length}</p>
-                    </div>
-                  </div>
-                  <div className="bg-white border border-gray-200 rounded-xl p-6">
-                    <h4 className="text-lg font-semibold mb-4">Revenue by Category</h4>
-                    <ResponsiveContainer width="100%" height={400}>
-                      <BarChart data={dashboardData.categoryBreakdown.slice(0, 10)}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="category" angle={-45} textAnchor="end" height={80} />
-                        <YAxis />
-                        <Tooltip formatter={(value: number) => [`$${value.toFixed(2)}`, 'Revenue']} />
-                        <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
