@@ -102,63 +102,51 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
             )}
 
             {/* Action Buttons Overlay - Centered on Image */}
-            {!isAdmin && item.status === 'live' && (
+            {!isAdmin && item.status === 'live' && user?.uid !== item.sellerId && (
               <div className={`absolute inset-0 flex items-center justify-center transition-all duration-300 ${
                 isHovered ? 'opacity-100 bg-black/20 backdrop-blur-[1px]' : 'opacity-0 pointer-events-none'
               }`}>
                 <div className={`flex gap-3 transform transition-all duration-300 ${
                   isHovered ? 'scale-100 translate-y-0' : 'scale-95 translate-y-2'
                 }`}>
-                  {user?.uid === item.sellerId ? (
-                    /* Your Listing Message */
-                    <div className="bg-blue-500/90 text-white py-3 px-6 rounded-xl font-semibold shadow-lg backdrop-blur-sm flex items-center gap-2.5">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-sm font-medium">Your Listing</span>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Bookmark Button */}
-                      <button
-                        onClick={handleBookmarkAction}
-                        disabled={isCartActionDisabled(`bookmark-action-${item.id}`)}
-                        className={`py-3 px-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2.5 shadow-lg backdrop-blur-sm ${
-                          isBookmarked(item.id)
-                            ? 'bg-red-500/90 text-white hover:bg-red-600/90'
-                            : 'bg-white/90 text-gray-700 hover:bg-white'
-                        } disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105`}
-                        title={isBookmarked(item.id) ? 'Remove from Bookmarks' : 'Add to Bookmarks'}
-                      >
-                        <svg className="w-5 h-5" fill={isBookmarked(item.id) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                        </svg>
-                        <span className="text-sm font-medium">
-                          {isBookmarked(item.id) ? 'Saved' : 'Save'}
-                        </span>
-                      </button>
-                      
-                      {/* Add to Cart Button */}
-                      <button
-                        onClick={handleCartAction}
-                        disabled={isCartActionDisabled(`cart-action-${item.id}`)}
-                        className={`py-3 px-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2.5 shadow-lg backdrop-blur-sm ${
-                          isInCart(item.id)
-                            ? 'bg-red-500/90 text-white hover:bg-red-600/90'
-                            : 'bg-orange-500/90 text-white hover:bg-orange-600/90'
-                        } disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105`}
-                        title={isInCart(item.id) ? 'Remove from Cart' : 'Add to Cart'}
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
-                        </svg>
-                        <span className="text-sm font-medium">
-                          {isCartActionProcessing(`cart-action-${item.id}`) ? 'Adding...' : 
-                           isInCart(item.id) ? 'Remove' : 'Add to Cart'}
-                        </span>
-                      </button>
-                    </>
-                  )}
+                  {/* Bookmark Button */}
+                  <button
+                    onClick={handleBookmarkAction}
+                    disabled={isCartActionDisabled(`bookmark-action-${item.id}`)}
+                    className={`py-3 px-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2.5 shadow-lg backdrop-blur-sm ${
+                      isBookmarked(item.id)
+                        ? 'bg-red-500/90 text-white hover:bg-red-600/90'
+                        : 'bg-white/90 text-gray-700 hover:bg-white'
+                    } disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105`}
+                    title={isBookmarked(item.id) ? 'Remove from Bookmarks' : 'Add to Bookmarks'}
+                  >
+                    <svg className="w-5 h-5" fill={isBookmarked(item.id) ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    <span className="text-sm font-medium">
+                      {isBookmarked(item.id) ? 'Saved' : 'Save'}
+                    </span>
+                  </button>
+                  
+                  {/* Add to Cart Button */}
+                  <button
+                    onClick={handleCartAction}
+                    disabled={isCartActionDisabled(`cart-action-${item.id}`)}
+                    className={`py-3 px-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center gap-2.5 shadow-lg backdrop-blur-sm ${
+                      isInCart(item.id)
+                        ? 'bg-red-500/90 text-white hover:bg-red-600/90'
+                        : 'bg-orange-500/90 text-white hover:bg-orange-600/90'
+                    } disabled:opacity-50 disabled:cursor-not-allowed transform hover:scale-105`}
+                    title={isInCart(item.id) ? 'Remove from Cart' : 'Add to Cart'}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                    </svg>
+                    <span className="text-sm font-medium">
+                      {isCartActionProcessing(`cart-action-${item.id}`) ? 'Adding...' : 
+                       isInCart(item.id) ? 'Remove' : 'Add to Cart'}
+                    </span>
+                  </button>
                 </div>
               </div>
             )}
@@ -214,7 +202,7 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
           {item.description}
         </p>
 
-        {/* Tags - Only show if there are tags, no extra space when empty */}
+        {/* Tags - Collapsed by default with expand option */}
         {tags.length > 0 && (
           <div className={`transition-all duration-300 ${isHovered ? 'opacity-100' : 'opacity-70'}`}>
             <div className="flex flex-wrap gap-1.5 items-center">
@@ -257,11 +245,16 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
         {/* Spacer to push footer to bottom */}
         <div className="flex-1"></div>
 
-        {/* Footer Info - Only show for admin users */}
-        {isAdmin && (
-          <div className="flex justify-between items-center text-xs text-gray-400 pt-2 border-t border-gray-100 mt-auto">
-            <span>Listed {new Date(item.createdAt).toLocaleDateString()}</span>
-            <span>{item.sellerName}</span>
+        {/* Footer Info - Always show when not hovering */}
+        <div className="flex justify-between items-center text-xs text-gray-400 pt-2 border-t border-gray-100 mt-auto">
+          <span>Listed {new Date(item.createdAt).toLocaleDateString()}</span>
+          <span>{item.sellerName}</span>
+        </div>
+        
+        {/* Message for own items */}
+        {!isAdmin && item.status === 'live' && user?.uid === item.sellerId && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+            <p className="text-sm text-blue-700 font-medium">Your Listing</p>
           </div>
         )}
       </div>
