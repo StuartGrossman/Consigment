@@ -13,6 +13,7 @@ import UserAnalyticsModal from './UserAnalyticsModal';
 import ApplicationTestModal from './ApplicationTestModal';
 import SoldItemsModal from './SoldItemsModal';
 import LoginModal from './LoginModal';
+import CategoryDashboard from './CategoryDashboard';
 import Dashboard from './Dashboard';
 import ItemDetailModal from './ItemDetailModal';
 import CartModal from './CartModal';
@@ -80,6 +81,7 @@ const Home: React.FC = () => {
     const [isRewardsPointsDashboardOpen, setIsRewardsPointsDashboardOpen] = useState(false);
     const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+    const [isCategoryDashboardOpen, setIsCategoryDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
     const [showActionsPage, setShowActionsPage] = useState(false);
@@ -465,6 +467,14 @@ const Home: React.FC = () => {
 
     const handleApplicationTestModalClose = () => {
         setIsApplicationTestModalOpen(false);
+    };
+
+    const handleCategoryDashboard = () => {
+        setIsCategoryDashboardOpen(true);
+    };
+
+    const handleCategoryDashboardClose = () => {
+        setIsCategoryDashboardOpen(false);
     };
 
 
@@ -1538,6 +1548,15 @@ const Home: React.FC = () => {
                                                         >
                                                             🧪 Application Test & Performance
                                                         </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleCategoryDashboard();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                                        >
+                                                            🏷️ Category Dashboard
+                                                        </button>
                                                     </>
                                                 )}
                                             
@@ -2123,6 +2142,11 @@ const Home: React.FC = () => {
                     <ApplicationTestModal 
                         isOpen={isApplicationTestModalOpen} 
                         onClose={handleApplicationTestModalClose}
+                    />
+
+                    <CategoryDashboard 
+                        isOpen={isCategoryDashboardOpen} 
+                        onClose={handleCategoryDashboardClose}
                     />
 
                 </>

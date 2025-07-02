@@ -17,6 +17,7 @@ interface NavigationProps {
     onOpenBookmarks: () => void;
     onOpenCart: () => void;
     onOpenApplicationTest: () => void;
+    onOpenCategoryDashboard: () => void;
     onItemClick: (item: ConsignmentItem) => void;
     onClearNotifications: () => void;
     getCartItemCount: () => number;
@@ -38,6 +39,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     onOpenBookmarks,
     onOpenCart,
     onOpenApplicationTest,
+    onOpenCategoryDashboard,
     onItemClick,
     onClearNotifications,
     getCartItemCount,
@@ -417,15 +419,24 @@ export const Navigation: React.FC<NavigationProps> = ({
                                                         >
                                                             ⚡ Actions Dashboard
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                onOpenApplicationTest();
-                                                                setUserMenuOpen(false);
-                                                            }}
-                                                            className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
-                                                        >
-                                                            🔬 Application Test & Performance
-                                                        </button>
+                                                                                                <button
+                                            onClick={() => {
+                                                onOpenApplicationTest();
+                                                setUserMenuOpen(false);
+                                            }}
+                                            className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                                        >
+                                            🔬 Application Test & Performance
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                onOpenCategoryDashboard();
+                                                setUserMenuOpen(false);
+                                            }}
+                                            className="w-full text-left px-3 py-3 sm:py-2 text-sm text-gray-700 hover:bg-gray-50 active:bg-gray-100 rounded-lg transition-colors touch-manipulation"
+                                        >
+                                            🏷️ Category Dashboard
+                                        </button>
                                                     </>
                                                 )}
                                                 
