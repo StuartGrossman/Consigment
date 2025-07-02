@@ -104,4 +104,230 @@
 
 .desktop-badge {
   @apply h-4 w-4 sm:h-5 sm:w-5 min-w-[16px] min-h-[16px] sm:min-w-[20px] sm:min-h-[20px] text-xs font-medium;
+}
+
+/* Performance Optimizations for Horizontal Scrolling */
+.category-scroll-container {
+  /* Enable GPU acceleration */
+  will-change: scroll-position;
+  transform: translate3d(0, 0, 0);
+  -webkit-overflow-scrolling: touch;
+  
+  /* Optimize scrolling performance */
+  scroll-behavior: smooth;
+  backface-visibility: hidden;
+  perspective: 1000px;
+  
+  /* Improve scroll performance */
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  
+  /* Reduce layout thrashing */
+  contain: layout style paint;
+  
+  /* Smooth horizontal momentum scrolling */
+  overscroll-behavior-x: contain;
+  scroll-padding: 16px;
+}
+
+.category-scroll-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Enhanced scroll performance for horizontal containers */
+.category-scroll-container:hover {
+  scroll-behavior: smooth;
+}
+
+.category-scroll-container:active {
+  scroll-behavior: auto; /* Faster response during active scrolling */
+}
+
+.category-grid {
+  /* GPU acceleration for grid items */
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  
+  /* Reduce repaints */
+  contain: layout style paint;
+  
+  /* Optimize for horizontal layout */
+  display: grid;
+  grid-template-rows: repeat(2, 1fr);
+  grid-auto-flow: column;
+  gap: 1rem;
+  width: max-content;
+}
+
+.item-card-container {
+  /* Optimize individual cards */
+  will-change: auto;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  
+  /* Isolate layout changes */
+  contain: layout style paint;
+  
+  /* Snap to grid for smooth scrolling */
+  scroll-snap-align: start;
+  
+  /* Prevent layout shifts */
+  box-sizing: border-box;
+  
+  /* Consistent dimensions */
+  width: 18rem; /* 288px */
+  min-height: 25rem; /* 400px */
+}
+
+/* Scroll state optimizations */
+.item-card-container[data-scrolling="true"] {
+  will-change: transform;
+  pointer-events: none; /* Disable interactions during scroll */
+}
+
+/* Optimize horizontal scroll performance */
+.category-section {
+  contain: layout style;
+  will-change: auto;
+}
+
+/* Enhanced horizontal scroll indicators */
+.scroll-arrow {
+  /* Optimize scroll buttons */
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  
+  /* Reduce hover repaints */
+  contain: layout;
+  
+  /* Better touch targets */
+  min-width: 44px;
+  min-height: 44px;
+  
+  /* Smooth transitions */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.scroll-arrow:hover {
+  transform: translate3d(0, 0, 0) scale(1.05);
+}
+
+/* Smooth scroll snap behavior */
+.category-grid > .item-card-container {
+  scroll-snap-align: start;
+  scroll-margin-left: 16px;
+}
+
+.category-banner {
+  /* Optimize category banners */
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  
+  /* Optimize background images */
+  background-attachment: scroll;
+  image-rendering: -webkit-optimize-contrast;
+  
+  /* Reduce compositing layers */
+  contain: paint;
+  
+  /* Smooth hover effects */
+  transition: transform 0.3s ease;
+}
+
+.category-banner:hover {
+  transform: translate3d(0, 0, 0) scale(1.02);
+}
+
+/* Hide scrollbars more efficiently */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Reduce repaints on hover */
+.optimized-hover {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.optimized-hover:hover {
+  transform: translateY(-2px);
+}
+
+/* Optimize gradients */
+.scroll-shadow {
+  will-change: opacity;
+  pointer-events: none;
+  backface-visibility: hidden;
+  contain: paint;
+}
+
+/* Optimized skeleton without animations to reduce CPU usage */
+.lazy-skeleton {
+  contain: layout style paint;
+  will-change: auto;
+  /* Removed animation for better performance */
+}
+
+/* Performance optimizations for smooth rendering */
+.performance-optimized {
+  contain: layout style paint;
+  will-change: auto;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+/* Scroll performance improvements */
+* {
+  /* Improve scroll performance globally */
+  scroll-behavior: auto !important; /* Disable smooth scroll during programmatic scrolling */
+}
+
+/* Optimize during scroll state */
+.scrolling .category-banner,
+.scrolling .item-card-container {
+  will-change: transform;
+  pointer-events: none;
+}
+
+.scrolling .lazy-skeleton {
+  animation-play-state: paused; /* Pause animations during scroll */
+}
+
+/* Optimize image rendering */
+img {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: optimize-contrast;
+  content-visibility: auto;
+  contain-intrinsic-size: 300px 225px;
+}
+
+/* Horizontal scroll momentum for mobile */
+@media (max-width: 768px) {
+  .category-scroll-container {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+  }
+  
+  .item-card-container {
+    scroll-snap-align: center;
+  }
+}
+
+/* Preload optimization for horizontal scrolling */
+.horizontal-preload {
+  content-visibility: auto;
+  contain-intrinsic-size: 288px 400px;
 } 
