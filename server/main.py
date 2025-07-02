@@ -38,9 +38,7 @@ app.add_middleware(
         "http://localhost:5174",
         "http://localhost:5175",
         "http://localhost:5176",
-        "http://localhost:5999",  # Current frontend port
         "http://localhost:6330",  # Server port
-        "http://localhost:7111",  # Current frontend port
         "http://localhost:7359",  # Previous app port
         "http://localhost:9498",  # Current app port
         "https://consignment-store-4a564.web.app",
@@ -1647,18 +1645,6 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
                         'createdAt': datetime.now(timezone.utc),
                         'description': f"Sale of \"{cart_item.title}\""
                     })
-                    
-                    # Award rewards points to seller (10 points per dollar)
-                    try:
-                        award_seller_points(
-                            seller_id=cart_item.seller_id,
-                            sale_amount=cart_item.price,
-                            item_id=cart_item.item_id,
-                            item_title=cart_item.title
-                        )
-                    except Exception as e:
-                        logger.error(f"Failed to award seller points for item {cart_item.item_id}: {e}")
-                        # Don't fail the whole payment for points issues
             
             # Create order record
             order_ref = db.collection('orders').document(order_id)
@@ -5118,7 +5104,6 @@ async def process_inhouse_sale(request: Request, admin_data: dict = Depends(veri
         
         # Process sale in batch transaction
         batch = db.batch()
-        items_for_points = []  # Track items for seller points awarding
         
         try:
             for validated_item in validated_items:
@@ -5186,33 +5171,10 @@ async def process_inhouse_sale(request: Request, admin_data: dict = Depends(veri
                         'createdAt': sale_timestamp,
                         'description': f"In-house sale of \"{item_data.get('title', 'Unknown')}\""
                     })
-                    
-                    # Award rewards points to seller for in-house sale (10 points per dollar)
-                    # Note: This will be processed after batch commit
-                    item_data_for_points = {
-                        'seller_id': seller_id,
-                        'sale_amount': unit_price,
-                        'item_id': item_id,
-                        'item_title': item_data.get('title', 'Unknown')
-                    }
-                    items_for_points.append(item_data_for_points)
             
             # Commit the batch transaction
             batch.commit()
             logger.info(f"Successfully processed in-house sale: {order_id}")
-            
-            # Award seller points after successful transaction
-            for item_points in items_for_points:
-                try:
-                    award_seller_points(
-                        seller_id=item_points['seller_id'],
-                        sale_amount=item_points['sale_amount'],
-                        item_id=item_points['item_id'],
-                        item_title=item_points['item_title']
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to award seller points for in-house sale item {item_points['item_id']}: {e}")
-                    # Don't fail the whole sale for points issues
             
             # Log admin action
             admin_action = {
@@ -5278,7 +5240,7 @@ async def process_inhouse_sale(request: Request, admin_data: dict = Depends(veri
 async def get_rewards_config(admin_data: dict = Depends(verify_admin_access)):
     """Get current rewards configuration"""
     try:
-        config_doc = db.collection('admin_settings').document('rewards_config').get()
+        config_doc = db.collection('system').document('rewards_config').get()
         if config_doc.exists:
             config_data = config_doc.to_dict()
             # Convert timestamps to datetime objects for consistent handling
@@ -5290,11 +5252,9 @@ async def get_rewards_config(admin_data: dict = Depends(verify_admin_access)):
                 "config": config_data
             }
         else:
-            # Return default configuration with 10 points per dollar
+            # Return default configuration
             default_config = {
-                "pointsPerDollar": 10.0,  # 10 points per dollar for buyers
-                "sellerPointsPerDollar": 10.0,  # 10 points per dollar for sellers
-                "pointsPerDollarSpent": 10,  # Legacy field for compatibility
+                "pointsPerDollarSpent": 1,
                 "refundPointsPercentage": 50,
                 "pointValueInUSD": 0.01,
                 "minimumRedemptionPoints": 100,
@@ -5305,7 +5265,7 @@ async def get_rewards_config(admin_data: dict = Depends(verify_admin_access)):
             }
             
             # Save default config
-            db.collection('admin_settings').document('rewards_config').set(default_config)
+            db.collection('system').document('rewards_config').set(default_config)
             
             return {
                 "success": True,
@@ -5351,7 +5311,7 @@ async def update_rewards_config(request: Request, admin_data: dict = Depends(ver
             )
         
         # Save to database
-        db.collection('admin_settings').document('rewards_config').set(config_data)
+        db.collection('system').document('rewards_config').set(config_data)
         
         logger.info(f"Rewards configuration updated by {admin_data.get('email')}")
         
@@ -5418,7 +5378,7 @@ async def get_rewards_analytics(admin_data: dict = Depends(verify_admin_access))
                 total_points += total_user_points
         
         # Get rewards config for calculations
-        config_doc = db.collection('admin_settings').document('rewards_config').get()
+        config_doc = db.collection('system').document('rewards_config').get()
         point_value = 0.01  # Default
         if config_doc.exists:
             config_data = config_doc.to_dict()
@@ -5530,7 +5490,7 @@ async def redeem_rewards_points(request: Request, user_data: dict = Depends(veri
         user_id = user_data.get('uid')
         
         # Get rewards config
-        config_doc = db.collection('admin_settings').document('rewards_config').get()
+        config_doc = db.collection('system').document('rewards_config').get()
         if not config_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -5625,7 +5585,7 @@ async def get_user_rewards_info(user_data: dict = Depends(verify_firebase_token)
         user_id = user_data.get('uid')
         
         # Get rewards config
-        config_doc = db.collection('admin_settings').document('rewards_config').get()
+        config_doc = db.collection('system').document('rewards_config').get()
         config_data = {}
         if config_doc.exists:
             config_data = config_doc.to_dict()
@@ -5668,9 +5628,9 @@ def award_purchase_points(user_id: str, purchase_amount: float):
         config_doc = db.collection('admin_settings').document('rewards_config').get()
         if config_doc.exists:
             config = config_doc.to_dict()
-            points_per_dollar = config.get('pointsPerDollar', 10.0)  # Default: 10 points per dollar
+            points_per_dollar = config.get('pointsPerDollar', 1.0)
         else:
-            points_per_dollar = 10.0  # Default: 10 points per dollar
+            points_per_dollar = 1.0  # Default: 1 point per dollar
         
         # Calculate points to award
         points_to_award = int(purchase_amount * points_per_dollar)
@@ -5712,63 +5672,6 @@ def award_purchase_points(user_id: str, purchase_amount: float):
             
     except Exception as e:
         logger.error(f"Error awarding purchase points to user {user_id}: {e}")
-        return False
-
-def award_seller_points(seller_id: str, sale_amount: float, item_id: str, item_title: str):
-    """Award points to a seller when their item is sold - Server-side only, secure"""
-    try:
-        # Security check: This function should only be called by server processes
-        # Never allow direct user calls to this function
-        
-        # Get current rewards configuration
-        config_doc = db.collection('admin_settings').document('rewards_config').get()
-        if config_doc.exists:
-            config = config_doc.to_dict()
-            seller_points_per_dollar = config.get('sellerPointsPerDollar', 10.0)  # 10 points per dollar for sellers
-        else:
-            seller_points_per_dollar = 10.0  # Default: 10 points per dollar
-        
-        # Calculate points to award (seller gets points based on sale amount)
-        points_to_award = int(sale_amount * seller_points_per_dollar)
-        
-        if points_to_award > 0 and seller_id and not seller_id.startswith('phone_'):
-            # Get seller's current points
-            user_doc = db.collection('users').document(seller_id).get()
-            if user_doc.exists:
-                current_points = user_doc.to_dict().get('rewardsPoints', 0)
-                new_total = current_points + points_to_award
-                
-                # Update seller's points
-                db.collection('users').document(seller_id).update({
-                    'rewardsPoints': new_total,
-                    'lastPointsUpdate': datetime.now(timezone.utc)
-                })
-                
-                # Create points transaction record
-                transaction = {
-                    'userId': seller_id,
-                    'type': 'earned_sale',
-                    'points': points_to_award,
-                    'description': f'Item sold: "{item_title}" - ${sale_amount:.2f}',
-                    'createdAt': datetime.now(timezone.utc),
-                    'itemId': item_id,
-                    'saleAmount': sale_amount,
-                    'balance_after': new_total
-                }
-                
-                db.collection('rewards_transactions').add(transaction)
-                
-                logger.info(f"🎯 SELLER REWARDS: Awarded {points_to_award} points to seller {seller_id} for selling '{item_title}' at ${sale_amount:.2f}")
-                return True
-            else:
-                logger.warning(f"Seller {seller_id} not found when trying to award sale points")
-                return False
-        else:
-            logger.info(f"No seller points awarded - invalid seller or amount too small: ${sale_amount:.2f}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error awarding seller points to seller {seller_id}: {e}")
         return False
 
 @app.get("/api/admin/orders")
@@ -6266,451 +6169,6 @@ async def get_or_create_pos_cart(request: Request):
         logger.error(f"Error getting or creating POS cart: {str(e)}")
         logger.error(f"Full traceback: {error_details}")
         raise HTTPException(status_code=500, detail=f"Failed to get or create POS cart: {str(e)}")
-
-# ================================
-# Category Management Endpoints
-# ================================
-
-@app.get("/api/categories")
-async def get_categories():
-    """Get all categories - Public endpoint, no authentication required"""
-    try:
-        # Get all categories
-        categories_ref = db.collection('categories')
-        categories = []
-        
-        for doc in categories_ref.stream():
-            category_data = doc.to_dict()
-            category_data['id'] = doc.id
-            # Convert datetime objects to strings
-            if 'createdAt' in category_data and hasattr(category_data['createdAt'], 'isoformat'):
-                category_data['createdAt'] = category_data['createdAt'].isoformat()
-            if 'updatedAt' in category_data and hasattr(category_data['updatedAt'], 'isoformat'):
-                category_data['updatedAt'] = category_data['updatedAt'].isoformat()
-            categories.append(category_data)
-        
-        # Sort by name
-        categories.sort(key=lambda x: x.get('name', ''))
-        
-        logger.info(f"Retrieved {len(categories)} categories (public access)")
-        return {"success": True, "categories": categories}
-        
-    except Exception as e:
-        logger.error(f"Error getting categories: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-@app.get("/api/categories/active")
-async def get_active_categories():
-    """Get only active categories - Public endpoint, no authentication required"""
-    try:
-        # Get active categories
-        categories_ref = db.collection('categories').where('isActive', '==', True)
-        categories = []
-        
-        for doc in categories_ref.stream():
-            category_data = doc.to_dict()
-            category_data['id'] = doc.id
-            # Convert datetime objects to strings
-            if 'createdAt' in category_data and hasattr(category_data['createdAt'], 'isoformat'):
-                category_data['createdAt'] = category_data['createdAt'].isoformat()
-            if 'updatedAt' in category_data and hasattr(category_data['updatedAt'], 'isoformat'):
-                category_data['updatedAt'] = category_data['updatedAt'].isoformat()
-            categories.append(category_data)
-        
-        # Sort by name
-        categories.sort(key=lambda x: x.get('name', ''))
-        
-        logger.info(f"Retrieved {len(categories)} active categories (public access)")
-        return {"success": True, "categories": categories}
-        
-    except Exception as e:
-        logger.error(f"Error getting active categories: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-@app.post("/api/categories")
-async def create_category(request: Request):
-    """Create a new category - Admin dashboard access"""
-    try:
-        data = await request.json()
-        
-        # Use a default admin context since this is accessed from admin dashboard
-        admin_data = {'uid': 'admin_dashboard', 'email': 'admin@dashboard'}
-        
-        # Validate required fields
-        required_fields = ['name', 'icon']
-        for field in required_fields:
-            if not data.get(field) or not data.get(field).strip():
-                raise HTTPException(status_code=400, detail=f"Missing required field: {field}")
-        
-        # Check if category name already exists
-        existing_categories = db.collection('categories').where('name', '==', data['name'].strip()).stream()
-        if any(existing_categories):
-            raise HTTPException(status_code=400, detail="Category with this name already exists")
-        
-        # Prepare category data
-        category_data = {
-            'name': data['name'].strip(),
-            'description': data.get('description', '').strip(),
-            'icon': data['icon'].strip(),
-            'bannerImage': data.get('bannerImage', ''),
-            'attributes': data.get('attributes', []),
-            'isActive': data.get('isActive', True),
-            'createdAt': datetime.now(timezone.utc),
-            'updatedAt': datetime.now(timezone.utc),
-            'createdBy': admin_data['uid']
-        }
-        
-        # Create category in Firestore
-        doc_ref = db.collection('categories').add(category_data)[1]
-        category_id = doc_ref.id
-        
-        # Log admin action
-        db.collection('adminActions').add({
-            'adminId': admin_data['uid'],
-            'action': 'category_created',
-            'details': f'Created category "{data["name"]}"',
-            'categoryId': category_id,
-            'timestamp': datetime.now(timezone.utc)
-        })
-        
-        # Log general action
-        db.collection('actionLogs').add({
-            'userId': admin_data['uid'],
-            'action': 'category_created',
-            'details': f'Created category "{data["name"]}"',
-            'categoryId': category_id,
-            'timestamp': datetime.now(timezone.utc),
-            'isAdmin': True
-        })
-        
-        logger.info(f"Successfully created category {category_id}: {data['name']}")
-        
-        # Return the created category with datetime converted to string
-        return_category = {**category_data, 'id': category_id}
-        if 'createdAt' in return_category and hasattr(return_category['createdAt'], 'isoformat'):
-            return_category['createdAt'] = return_category['createdAt'].isoformat()
-        if 'updatedAt' in return_category and hasattr(return_category['updatedAt'], 'isoformat'):
-            return_category['updatedAt'] = return_category['updatedAt'].isoformat()
-        
-        return {
-            "success": True,
-            "message": "Category created successfully",
-            "categoryId": category_id,
-            "category": return_category
-        }
-        
-    except Exception as e:
-        logger.error(f"Error creating category: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-@app.put("/api/categories/{category_id}")
-async def update_category(category_id: str, request: Request):
-    """Update an existing category - Admin dashboard access"""
-    try:
-        data = await request.json()
-        
-        # Use a default admin context since this is accessed from admin dashboard
-        admin_data = {'uid': 'admin_dashboard', 'email': 'admin@dashboard'}
-        
-        # Check if category exists
-        category_ref = db.collection('categories').document(category_id)
-        category_doc = category_ref.get()
-        
-        if not category_doc.exists:
-            raise HTTPException(status_code=404, detail="Category not found")
-        
-        current_category = category_doc.to_dict()
-        
-        # Check if new name conflicts with existing categories (excluding current)
-        if data.get('name') and data['name'].strip() != current_category.get('name'):
-            existing_categories = db.collection('categories').where('name', '==', data['name'].strip()).stream()
-            for doc in existing_categories:
-                if doc.id != category_id:
-                    raise HTTPException(status_code=400, detail="Category with this name already exists")
-        
-        # Prepare update data
-        update_data = {
-            'updatedAt': datetime.now(timezone.utc),
-            'updatedBy': admin_data['uid']
-        }
-        
-        # Update fields if provided
-        if data.get('name'):
-            update_data['name'] = data['name'].strip()
-        if 'description' in data:
-            update_data['description'] = data['description'].strip()
-        if data.get('icon'):
-            update_data['icon'] = data['icon'].strip()
-        if 'bannerImage' in data:
-            update_data['bannerImage'] = data['bannerImage']
-        if 'attributes' in data:
-            update_data['attributes'] = data['attributes']
-        if 'isActive' in data:
-            update_data['isActive'] = data['isActive']
-        
-        # Update category in Firestore
-        category_ref.update(update_data)
-        
-        # Get updated category
-        updated_category = category_ref.get().to_dict()
-        updated_category['id'] = category_id
-        
-        # Convert datetime objects to strings
-        if 'createdAt' in updated_category and hasattr(updated_category['createdAt'], 'isoformat'):
-            updated_category['createdAt'] = updated_category['createdAt'].isoformat()
-        if 'updatedAt' in updated_category and hasattr(updated_category['updatedAt'], 'isoformat'):
-            updated_category['updatedAt'] = updated_category['updatedAt'].isoformat()
-        
-        # Log admin action
-        db.collection('adminActions').add({
-            'adminId': admin_data['uid'],
-            'action': 'category_updated',
-            'details': f'Updated category "{updated_category["name"]}"',
-            'categoryId': category_id,
-            'timestamp': datetime.now(timezone.utc)
-        })
-        
-        # Log general action
-        db.collection('actionLogs').add({
-            'userId': admin_data['uid'],
-            'action': 'category_updated',
-            'details': f'Updated category "{updated_category["name"]}"',
-            'categoryId': category_id,
-            'timestamp': datetime.now(timezone.utc),
-            'isAdmin': True
-        })
-        
-        logger.info(f"Successfully updated category {category_id}: {updated_category['name']}")
-        
-        return {
-            "success": True,
-            "message": "Category updated successfully",
-            "category": updated_category
-        }
-        
-    except Exception as e:
-        logger.error(f"Error updating category: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-@app.delete("/api/categories/{category_id}")
-async def delete_category(category_id: str, request: Request):
-    """Delete a category - Admin dashboard access"""
-    try:
-        # Use a default admin context since this is accessed from admin dashboard
-        admin_data = {'uid': 'admin_dashboard', 'email': 'admin@dashboard'}
-        
-        # Check if category exists
-        category_ref = db.collection('categories').document(category_id)
-        category_doc = category_ref.get()
-        
-        if not category_doc.exists:
-            raise HTTPException(status_code=404, detail="Category not found")
-        
-        category_data = category_doc.to_dict()
-        category_name = category_data.get('name', 'Unknown')
-        
-        # Check if there are items using this category
-        items_with_category = db.collection('items').where('category', '==', category_name).limit(1).stream()
-        if any(items_with_category):
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Cannot delete category '{category_name}' because it has items associated with it. Please reassign or remove those items first."
-            )
-        
-        # Delete category
-        category_ref.delete()
-        
-        # Log admin action
-        db.collection('adminActions').add({
-            'adminId': admin_data['uid'],
-            'action': 'category_deleted',
-            'details': f'Deleted category "{category_name}"',
-            'categoryId': category_id,
-            'timestamp': datetime.now(timezone.utc)
-        })
-        
-        # Log general action
-        db.collection('actionLogs').add({
-            'userId': admin_data['uid'],
-            'action': 'category_deleted',
-            'details': f'Deleted category "{category_name}"',
-            'categoryId': category_id,
-            'timestamp': datetime.now(timezone.utc),
-            'isAdmin': True
-        })
-        
-        logger.info(f"Successfully deleted category {category_id}: {category_name}")
-        
-        return {
-            "success": True,
-            "message": f"Category '{category_name}' deleted successfully"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error deleting category: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
-@app.post("/api/categories/initialize-default")
-async def initialize_default_categories():
-    """Initialize default categories if none exist - Admin dashboard access"""
-    try:
-        # Use a default admin context since this is accessed from admin dashboard
-        admin_data = {'uid': 'admin_dashboard', 'email': 'admin@dashboard'}
-        
-        # Check if categories already exist
-        existing_categories = list(db.collection('categories').limit(1).stream())
-        if existing_categories:
-            all_categories = list(db.collection('categories').stream())
-            return {
-                "success": True,
-                "message": "Categories already exist",
-                "categoriesCount": len(all_categories)
-            }
-        
-        # Default categories with enhanced data
-        default_categories = [
-            {
-                'name': 'Climbing',
-                'description': 'Rock climbing and bouldering gear including ropes, harnesses, and climbing shoes',
-                'icon': '🧗',
-                'bannerImage': '/src/assets/category-images/climbing-action.jpg',
-                'attributes': ['difficulty', 'material', 'weight', 'size', 'brand', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Skiing',
-                'description': 'Alpine and cross-country skiing equipment including skis, boots, and poles',
-                'icon': '⛷️',
-                'bannerImage': '/src/assets/category-images/skiing-powder.jpg',
-                'attributes': ['skill_level', 'size', 'brand', 'length', 'width', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Hiking',
-                'description': 'Trail and backpacking gear including backpacks, boots, and navigation tools',
-                'icon': '🥾',
-                'bannerImage': '/src/assets/category-images/mountain-trail.jpg',
-                'attributes': ['capacity', 'weight', 'weather_rating', 'size', 'brand', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Camping',
-                'description': 'Camping and outdoor shelter equipment including tents, sleeping bags, and stoves',
-                'icon': '⛺',
-                'bannerImage': '/src/assets/category-images/campsite-evening.jpg',
-                'attributes': ['capacity', 'weight', 'season_rating', 'size', 'brand', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Mountaineering',
-                'description': 'High-altitude mountaineering gear including ice axes, crampons, and technical equipment',
-                'icon': '🏔️',
-                'bannerImage': '/src/assets/category-images/alpine-climbing.jpg',
-                'attributes': ['technical_rating', 'material', 'weight', 'size', 'brand', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Snowboarding',
-                'description': 'Snowboarding equipment and gear including boards, boots, and bindings',
-                'icon': '🏂',
-                'bannerImage': '/src/assets/category-images/snowboard-jump.jpg',
-                'attributes': ['size', 'flex', 'terrain_type', 'brand', 'length', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Water Sports',
-                'description': 'Water sports and rafting equipment including kayaks, paddles, and safety gear',
-                'icon': '🌊',
-                'bannerImage': '/src/assets/category-images/whitewater-rafting.jpg',
-                'attributes': ['size', 'material', 'water_rating', 'brand', 'capacity', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Cycling',
-                'description': 'Mountain biking and cycling gear including bikes, helmets, and accessories',
-                'icon': '🚵',
-                'bannerImage': '/src/assets/category-images/mountain-biking.jpg',
-                'attributes': ['size', 'type', 'terrain', 'brand', 'frame_material', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Apparel',
-                'description': 'Outdoor clothing and apparel including jackets, pants, and base layers',
-                'icon': '👕',
-                'bannerImage': '/src/assets/category-images/outdoor-clothing.jpg',
-                'attributes': ['size', 'material', 'weather_rating', 'brand', 'gender', 'condition'],
-                'isActive': True
-            },
-            {
-                'name': 'Footwear',
-                'description': 'Hiking boots and outdoor footwear for various terrains and conditions',
-                'icon': '🥾',
-                'bannerImage': '/src/assets/category-images/hiking-boots.jpg',
-                'attributes': ['size', 'type', 'waterproof', 'brand', 'gender', 'condition'],
-                'isActive': True
-            }
-        ]
-        
-        created_categories = []
-        for category_data in default_categories:
-            # Add metadata
-            category_data.update({
-                'createdAt': datetime.now(timezone.utc),
-                'updatedAt': datetime.now(timezone.utc),
-                'createdBy': admin_data['uid']
-            })
-            
-            # Create in Firestore
-            doc_ref = db.collection('categories').add(category_data)[1]
-            category_id = doc_ref.id
-            
-            created_categories.append({
-                'id': category_id,
-                'name': category_data['name'],
-                'icon': category_data['icon']
-            })
-        
-        # Log admin action
-        db.collection('adminActions').add({
-            'adminId': admin_data['uid'],
-            'action': 'default_categories_initialized',
-            'details': f'Initialized {len(created_categories)} default categories',
-            'timestamp': datetime.now(timezone.utc),
-            'categoriesCount': len(created_categories)
-        })
-        
-        # Log general action
-        db.collection('actionLogs').add({
-            'userId': admin_data['uid'],
-            'action': 'default_categories_initialized',
-            'details': f'Initialized {len(created_categories)} default categories',
-            'timestamp': datetime.now(timezone.utc),
-            'isAdmin': True
-        })
-        
-        logger.info(f"Successfully initialized {len(created_categories)} default categories")
-        
-        return {
-            "success": True,
-            "message": f"Successfully initialized {len(created_categories)} default categories",
-            "categories": created_categories
-        }
-        
-    except Exception as e:
-        logger.error(f"Error initializing default categories: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
