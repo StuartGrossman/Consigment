@@ -30,6 +30,7 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
         message: '',
         type: 'info' as 'success' | 'error' | 'info' | 'warning'
     });
+    const [activeModal, setActiveModal] = useState<string | null>(null);
 
     // Helper function to show notifications
     const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
@@ -257,28 +258,218 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                             </div>
                         ) : (
                             <div className="space-y-8">
-                                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
-                                    <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
-                                        <h3 className="text-lg font-semibold mb-2">Total Revenue</h3>
-                                        <p className="text-3xl font-bold">{formatCurrency(totalRevenue)}</p>
+                                {/* Enhanced Metrics Dashboard */}
+                                <div className="bg-gradient-to-br from-slate-50 to-white p-8 rounded-2xl border border-gray-100 shadow-sm mb-8">
+                                    <div className="text-center mb-8">
+                                        <h2 className="text-2xl font-bold text-gray-800 mb-2">📊 Sales Performance Dashboard</h2>
+                                        <p className="text-gray-600">Comprehensive overview of your consignment sales metrics</p>
                                     </div>
-                                    <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
-                                        <h3 className="text-lg font-semibold mb-2">Admin Earnings (25%)</h3>
-                                        <p className="text-3xl font-bold">{formatCurrency(totalAdminEarnings)}</p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                                        {/* Total Revenue */}
+                                        <div 
+                                            onClick={() => setActiveModal('revenue')}
+                                            className="bg-gradient-to-br from-emerald-500 to-green-600 rounded-2xl p-6 text-white cursor-pointer hover:shadow-2xl transform hover:scale-105 transition-all duration-300 relative overflow-hidden"
+                                        >
+                                            <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10"></div>
+                                            <div className="absolute bottom-0 left-0 w-16 h-16 bg-white bg-opacity-5 rounded-full -ml-8 -mb-8"></div>
+                                            
+                                            <div className="relative z-10">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="text-green-100">
+                                                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="text-green-200 text-sm font-medium">
+                                                        Total
+                                                    </div>
+                                                </div>
+                                                <h3 className="text-sm font-medium text-green-100 mb-2">Total Revenue</h3>
+                                                <p className="text-3xl font-bold mb-2">{formatCurrency(totalRevenue)}</p>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-green-200">
+                                                        Avg: {formatCurrency(soldItems.length > 0 ? totalRevenue / soldItems.length : 0)} per item
+                                                    </span>
+                                                    <div className="text-green-200 text-xs">Click for details →</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Admin Earnings */}
+                                        <div 
+                                            onClick={() => setActiveModal('admin-earnings')}
+                                            className="bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 text-white cursor-pointer hover:shadow-2xl transform hover:scale-105 transition-all duration-300 relative overflow-hidden"
+                                        >
+                                            <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10"></div>
+                                            <div className="absolute bottom-0 left-0 w-16 h-16 bg-white bg-opacity-5 rounded-full -ml-8 -mb-8"></div>
+                                            
+                                            <div className="relative z-10">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="text-orange-100">
+                                                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M10 2L3 7v11h4v-6h6v6h4V7l-7-5z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="text-orange-200 text-sm font-medium">
+                                                        25%
+                                                    </div>
+                                                </div>
+                                                <h3 className="text-sm font-medium text-orange-100 mb-2">Admin Earnings</h3>
+                                                <p className="text-3xl font-bold mb-2">{formatCurrency(totalAdminEarnings)}</p>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-orange-200">
+                                                        Store commission
+                                                    </span>
+                                                    <div className="text-orange-200 text-xs">View breakdown →</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* User Earnings */}
+                                        <div 
+                                            onClick={() => setActiveModal('user-earnings')}
+                                            className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl p-6 text-white cursor-pointer hover:shadow-2xl transform hover:scale-105 transition-all duration-300 relative overflow-hidden"
+                                        >
+                                            <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10"></div>
+                                            <div className="absolute bottom-0 left-0 w-16 h-16 bg-white bg-opacity-5 rounded-full -ml-8 -mb-8"></div>
+                                            
+                                            <div className="relative z-10">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="text-purple-100">
+                                                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="text-purple-200 text-sm font-medium">
+                                                        75%
+                                                    </div>
+                                                </div>
+                                                <h3 className="text-sm font-medium text-purple-100 mb-2">User Earnings</h3>
+                                                <p className="text-3xl font-bold mb-2">{formatCurrency(totalUserEarnings)}</p>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-purple-200">
+                                                        Seller payouts
+                                                    </span>
+                                                    <div className="text-purple-200 text-xs">See analysis →</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Items Sold */}
+                                        <div 
+                                            onClick={() => setActiveModal('items-sold')}
+                                            className="bg-gradient-to-br from-blue-500 to-cyan-600 rounded-2xl p-6 text-white cursor-pointer hover:shadow-2xl transform hover:scale-105 transition-all duration-300 relative overflow-hidden"
+                                        >
+                                            <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10"></div>
+                                            <div className="absolute bottom-0 left-0 w-16 h-16 bg-white bg-opacity-5 rounded-full -ml-8 -mb-8"></div>
+                                            
+                                            <div className="relative z-10">
+                                                <div className="flex items-center justify-between mb-3">
+                                                    <div className="text-blue-100">
+                                                        <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                                            <path fillRule="evenodd" d="M10 2L3 7v11h4v-6h6v6h4V7l-7-5z" clipRule="evenodd" />
+                                                        </svg>
+                                                    </div>
+                                                    <div className="text-blue-200 text-sm font-medium">
+                                                        Items
+                                                    </div>
+                                                </div>
+                                                <h3 className="text-sm font-medium text-blue-100 mb-2">Items Sold</h3>
+                                                <p className="text-3xl font-bold mb-2">{soldItems.length}</p>
+                                                <div className="flex items-center justify-between">
+                                                    <span className="text-xs text-blue-200">
+                                                        Successfully sold
+                                                    </span>
+                                                    <div className="text-blue-200 text-xs">View trends →</div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl p-6 text-white">
-                                        <h3 className="text-lg font-semibold mb-2">User Earnings (75%)</h3>
-                                        <p className="text-3xl font-bold">{formatCurrency(totalUserEarnings)}</p>
-                                    </div>
-                                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl p-6 text-white">
-                                        <h3 className="text-lg font-semibold mb-2">Items Sold</h3>
-                                        <p className="text-3xl font-bold">{soldItems.length}</p>
-                                    </div>
-                                    <div className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white">
-                                        <h3 className="text-lg font-semibold mb-2">Sale Types</h3>
-                                        <div className="text-sm space-y-1">
-                                            <div>In-Store: {soldItems.filter(item => item.saleType === 'in-store').length}</div>
-                                            <div>Online: {soldItems.filter(item => item.saleType === 'online').length}</div>
+
+                                    {/* Enhanced Sale Types Section */}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* Sale Type Breakdown */}
+                                        <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+                                            <div className="flex items-center mb-4">
+                                                <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center mr-3">
+                                                    <svg className="w-5 h-5 text-slate-600" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm0 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2z" clipRule="evenodd" />
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-gray-800">Sales Channels</h3>
+                                            </div>
+                                            
+                                            <div className="space-y-3">
+                                                {/* Online Sales */}
+                                                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                                                    <div className="flex items-center">
+                                                        <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
+                                                            <span className="text-white text-lg">🌐</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-800">Online Sales</p>
+                                                            <p className="text-sm text-gray-600">Digital marketplace</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-2xl font-bold text-blue-600">{soldItems.filter(item => item.saleType === 'online').length}</p>
+                                                        <p className="text-xs text-blue-500">
+                                                            {soldItems.length > 0 ? Math.round((soldItems.filter(item => item.saleType === 'online').length / soldItems.length) * 100) : 0}%
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {/* In-Store Sales */}
+                                                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-100">
+                                                    <div className="flex items-center">
+                                                        <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
+                                                            <span className="text-white text-lg">🏪</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-medium text-gray-800">In-Store Sales</p>
+                                                            <p className="text-sm text-gray-600">Physical location</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-2xl font-bold text-green-600">{soldItems.filter(item => item.saleType === 'in-store' || !item.saleType).length}</p>
+                                                        <p className="text-xs text-green-500">
+                                                            {soldItems.length > 0 ? Math.round((soldItems.filter(item => item.saleType === 'in-store' || !item.saleType).length / soldItems.length) * 100) : 0}%
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Quick Stats */}
+                                        <div className="bg-white rounded-xl p-6 border border-gray-200 shadow-sm">
+                                            <div className="flex items-center mb-4">
+                                                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                                                    <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z" />
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-gray-800">Quick Stats</h3>
+                                            </div>
+                                            
+                                            <div className="space-y-3">
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                                                    <span className="text-gray-600">Average Sale Price</span>
+                                                    <span className="font-semibold text-gray-800">{formatCurrency(soldItems.length > 0 ? totalRevenue / soldItems.length : 0)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                                                    <span className="text-gray-600">Revenue per Store %</span>
+                                                    <span className="font-semibold text-orange-600">{formatCurrency(totalAdminEarnings)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+                                                    <span className="text-gray-600">Revenue to Sellers</span>
+                                                    <span className="font-semibold text-purple-600">{formatCurrency(totalUserEarnings)}</span>
+                                                </div>
+                                                <div className="flex justify-between items-center py-2">
+                                                    <span className="text-gray-600">Total Transactions</span>
+                                                    <span className="font-semibold text-blue-600">{soldItems.length} sales</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -648,6 +839,187 @@ const SoldItemsModal: React.FC<SoldItemsModalProps> = ({ isOpen, onClose, user, 
                 message={notificationData.message}
                 type={notificationData.type}
             />
+
+            {/* Detail Modals for Metric Cards */}
+            {activeModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-70 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+                        <div className="p-6 border-b border-gray-200">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-2xl font-bold text-gray-800">
+                                    {activeModal === 'revenue' && '💰 Total Revenue Analysis'}
+                                    {activeModal === 'admin-earnings' && '🏪 Admin Earnings (25%) Breakdown'}
+                                    {activeModal === 'user-earnings' && '👥 User Earnings (75%) Analysis'}
+                                    {activeModal === 'items-sold' && '📦 Items Sold Trends'}
+                                </h3>
+                                <button
+                                    onClick={() => setActiveModal(null)}
+                                    className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                                >
+                                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                            {activeModal === 'revenue' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                            <p className="text-green-800 font-medium">Total Revenue</p>
+                                            <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRevenue)}</p>
+                                        </div>
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <p className="text-blue-800 font-medium">Average Sale Price</p>
+                                            <p className="text-2xl font-bold text-blue-600">{formatCurrency(soldItems.length > 0 ? totalRevenue / soldItems.length : 0)}</p>
+                                        </div>
+                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                            <p className="text-purple-800 font-medium">Monthly Average</p>
+                                            <p className="text-2xl font-bold text-purple-600">{formatCurrency(totalRevenue / 12)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                                        <h4 className="text-lg font-semibold mb-4">Monthly Revenue Trend</h4>
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <AreaChart data={chartData.monthlyData}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis tickFormatter={(value) => `$${value}`} />
+                                                <Tooltip formatter={(value: number) => [formatCurrency(value), 'Revenue']} />
+                                                <Area type="monotone" dataKey="revenue" stroke="#059669" fill="#10b981" strokeWidth={3} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeModal === 'admin-earnings' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                            <p className="text-orange-800 font-medium">Total Admin Earnings</p>
+                                            <p className="text-2xl font-bold text-orange-600">{formatCurrency(totalAdminEarnings)}</p>
+                                        </div>
+                                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                            <p className="text-green-800 font-medium">Revenue Share</p>
+                                            <p className="text-2xl font-bold text-green-600">25%</p>
+                                        </div>
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <p className="text-blue-800 font-medium">Monthly Average</p>
+                                            <p className="text-2xl font-bold text-blue-600">{formatCurrency(totalAdminEarnings / 12)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                                        <h4 className="text-lg font-semibold mb-4">Admin Earnings by Month</h4>
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <BarChart data={chartData.monthlyData.map(d => ({ ...d, adminEarnings: d.revenue * 0.25 }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis tickFormatter={(value) => `$${value}`} />
+                                                <Tooltip formatter={(value: number) => [formatCurrency(value), 'Admin Earnings']} />
+                                                <Bar dataKey="adminEarnings" fill="#f97316" radius={[4, 4, 0, 0]} />
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeModal === 'user-earnings' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                            <p className="text-purple-800 font-medium">Total User Earnings</p>
+                                            <p className="text-2xl font-bold text-purple-600">{formatCurrency(totalUserEarnings)}</p>
+                                        </div>
+                                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                            <p className="text-green-800 font-medium">Revenue Share</p>
+                                            <p className="text-2xl font-bold text-green-600">75%</p>
+                                        </div>
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <p className="text-blue-800 font-medium">Average per Seller</p>
+                                            <p className="text-2xl font-bold text-blue-600">
+                                                {formatCurrency(soldItems.length > 0 ? totalUserEarnings / new Set(soldItems.map(item => item.sellerId)).size : 0)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                                        <h4 className="text-lg font-semibold mb-4">User Earnings by Month</h4>
+                                        <ResponsiveContainer width="100%" height={400}>
+                                            <AreaChart data={chartData.monthlyData.map(d => ({ ...d, userEarnings: d.revenue * 0.75 }))}>
+                                                <CartesianGrid strokeDasharray="3 3" />
+                                                <XAxis dataKey="month" />
+                                                <YAxis tickFormatter={(value) => `$${value}`} />
+                                                <Tooltip formatter={(value: number) => [formatCurrency(value), 'User Earnings']} />
+                                                <Area type="monotone" dataKey="userEarnings" stroke="#8b5cf6" fill="#a855f7" strokeWidth={3} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeModal === 'items-sold' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                            <p className="text-blue-800 font-medium">Total Items Sold</p>
+                                            <p className="text-2xl font-bold text-blue-600">{soldItems.length}</p>
+                                        </div>
+                                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                                            <p className="text-green-800 font-medium">Online Sales</p>
+                                            <p className="text-2xl font-bold text-green-600">{soldItems.filter(item => item.saleType === 'online').length}</p>
+                                        </div>
+                                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                                            <p className="text-orange-800 font-medium">In-Store Sales</p>
+                                            <p className="text-2xl font-bold text-orange-600">{soldItems.filter(item => item.saleType === 'in-store').length}</p>
+                                        </div>
+                                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                                            <p className="text-purple-800 font-medium">Monthly Average</p>
+                                            <p className="text-2xl font-bold text-purple-600">{Math.round(soldItems.length / 12)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                        <div className="bg-white border border-gray-200 rounded-xl p-6">
+                                            <h4 className="text-lg font-semibold mb-4">Items Sold by Month</h4>
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <BarChart data={chartData.monthlyData}>
+                                                    <CartesianGrid strokeDasharray="3 3" />
+                                                    <XAxis dataKey="month" />
+                                                    <YAxis />
+                                                    <Tooltip />
+                                                    <Bar dataKey="items" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="bg-white border border-gray-200 rounded-xl p-6">
+                                            <h4 className="text-lg font-semibold mb-4">Sales by Type</h4>
+                                            <ResponsiveContainer width="100%" height={300}>
+                                                <PieChart>
+                                                    <Pie
+                                                        data={chartData.saleTypeData}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        outerRadius={100}
+                                                        fill="#8884d8"
+                                                        dataKey="count"
+                                                        label={({ type, count }: any) => `${type}: ${count}`}
+                                                    >
+                                                        {chartData.saleTypeData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 };

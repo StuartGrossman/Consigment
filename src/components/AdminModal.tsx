@@ -11,9 +11,10 @@ interface AdminModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: AuthUser | null;
+  onDataChanged?: () => void;
 }
 
-const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
+const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataChanged }) => {
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
@@ -141,6 +142,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
       // Remove successful items from the list
       if (successCount > 0) {
         setPendingItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+        // Trigger data refresh in parent component
+        onDataChanged?.();
       }
       
       setModalMessage(`${successCount} items rejected successfully${failCount > 0 ? `, ${failCount} failed` : ''}.`);
@@ -181,6 +184,9 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
     setPendingItems(prev => prev.filter(i => i.id !== item.id));
     setSelectedItem(null);
     
+    // Trigger data refresh in parent component
+    onDataChanged?.();
+    
     // Show success message
     setModalMessage(`"${item.title}" has been approved and moved to the approved items list. The barcode label has been generated and is ready for printing.`);
     setShowSuccessModal(true);
@@ -203,6 +209,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
         
         // Remove from pending list
         setPendingItems(prev => prev.filter(item => item.id !== selectedItem.id));
+        // Trigger data refresh in parent component
+        onDataChanged?.();
         setModalMessage('Item rejected.');
         setShowSuccessModal(true);
       } catch (error) {
@@ -702,6 +710,8 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           onComplete={(processedItems: ConsignmentItem[]) => {
             // Remove approved items from pending list
             setPendingItems(prev => prev.filter(item => !selectedItems.has(item.id)));
+            // Trigger data refresh in parent component
+            onDataChanged?.();
             clearSelection();
             setShowBulkBarcodeModal(false);
             setModalMessage(`Successfully approved ${processedItems.length} items with barcodes generated. Labels are ready for printing.`);
