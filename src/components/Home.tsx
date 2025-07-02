@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useCart } from '../hooks/useCart';
 import { collection, query, where, getDocs, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -41,6 +41,212 @@ import {
 } from '../assets/category-images';
 import { AnalyticsPage, InventoryPage, ActionsPage, UserHistoryPage } from '../pages';
 
+// Optimized lazy loading component with reduced jitter
+const LazyItemCard: React.FC<{
+    item: ConsignmentItem;
+    isAdmin: boolean;
+    onClick: (item: ConsignmentItem) => void;
+}> = React.memo(({ item, isAdmin, onClick }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    const observerRef = useRef<IntersectionObserver | null>(null);
+
+    useEffect(() => {
+        // Throttled intersection observer to reduce jitter
+        const handleIntersection = (entries: IntersectionObserverEntry[]) => {
+            const [entry] = entries;
+            if (entry.isIntersecting && !isLoaded) {
+                // Use requestAnimationFrame to batch DOM updates
+                requestAnimationFrame(() => {
+                    setIsVisible(true);
+                    setIsLoaded(true);
+                });
+            }
+        };
+
+        // Create observer with optimized settings
+        observerRef.current = new IntersectionObserver(handleIntersection, {
+            rootMargin: '100px', // Reduced from 150px to prevent premature loading
+            threshold: 0.01, // Lower threshold for better performance
+        });
+
+        if (ref.current) {
+            observerRef.current.observe(ref.current);
+        }
+
+        return () => {
+            if (observerRef.current) {
+                observerRef.current.disconnect();
+            }
+        };
+    }, [isLoaded]);
+
+    return (
+        <div 
+            ref={ref} 
+            className="w-full h-full performance-optimized"
+            style={{ containIntrinsicSize: '300px 400px' }} // Hint for layout
+        >
+            {isVisible ? (
+                <ItemCard 
+                    item={item} 
+                    isAdmin={isAdmin}
+                    onClick={onClick}
+                />
+            ) : (
+                // Optimized skeleton with fixed dimensions
+                <div className="group relative bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100 h-full flex flex-col will-change-auto">
+                    {/* Image Section Skeleton */}
+                    <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+                        <div className="w-full h-full bg-gray-200 opacity-60"></div>
+                    </div>
+                    
+                    {/* Content Section Skeleton */}
+                    <div className="p-4 space-y-3 flex-1 flex flex-col">
+                        {/* Price Skeleton */}
+                        <div className="h-8 w-20 bg-gray-200 rounded opacity-40"></div>
+                        
+                        {/* Title Skeleton */}
+                        <div className="space-y-2">
+                            <div className="h-5 bg-gray-200 rounded opacity-30"></div>
+                            <div className="h-5 bg-gray-200 rounded w-3/4 opacity-30"></div>
+                        </div>
+                        
+                        {/* Description Skeleton */}
+                        <div className="space-y-2">
+                            <div className="h-4 bg-gray-200 rounded opacity-20"></div>
+                            <div className="h-4 bg-gray-200 rounded w-5/6 opacity-20"></div>
+                        </div>
+                        
+                        {/* Tags Skeleton */}
+                        <div className="flex gap-1.5">
+                            <div className="h-6 w-16 bg-gray-200 rounded-full opacity-25"></div>
+                            <div className="h-6 w-12 bg-gray-200 rounded-full opacity-25"></div>
+                        </div>
+                        
+                        {/* Spacer */}
+                        <div className="flex-1"></div>
+                        
+                        {/* Footer Skeleton - Only for admin */}
+                        {isAdmin && (
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-100 mt-auto">
+                                <div className="h-3 w-16 bg-gray-200 rounded opacity-20"></div>
+                                <div className="h-3 w-20 bg-gray-200 rounded opacity-20"></div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+});
+
+// Horizontal scroll-aware lazy loading component
+const HorizontalLazyItemCard: React.FC<{
+    item: ConsignmentItem;
+    isAdmin: boolean;
+    onClick: (item: ConsignmentItem) => void;
+    category: string;
+}> = React.memo(({ item, isAdmin, onClick, category }) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const [isLoaded, setIsLoaded] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        // Find the scroll container for this specific row
+        const scrollContainer = ref.current?.closest('.flex.gap-4.overflow-x-auto');
+        
+        if (!scrollContainer || !ref.current) return;
+
+        let scrollTimeout: NodeJS.Timeout;
+        
+        const handleHorizontalScroll = () => {
+            if (isLoaded) return;
+            
+            // Clear existing timeout
+            clearTimeout(scrollTimeout);
+            
+            // Throttle scroll detection
+            scrollTimeout = setTimeout(() => {
+                if (!ref.current || isLoaded) return;
+                
+                // Check if this item is near the viewport
+                const containerRect = scrollContainer.getBoundingClientRect();
+                const itemRect = ref.current.getBoundingClientRect();
+                
+                // Load if item is within 200px of the visible area
+                const isNearVisible = itemRect.left < containerRect.right + 200;
+                
+                if (isNearVisible) {
+                    requestAnimationFrame(() => {
+                        setIsVisible(true);
+                        setIsLoaded(true);
+                    });
+                }
+            }, 100); // 100ms throttle
+        };
+
+        // Listen for horizontal scroll on the row container
+        scrollContainer.addEventListener('scroll', handleHorizontalScroll, { passive: true });
+        
+        // Also check immediately in case item is already in view
+        handleHorizontalScroll();
+
+        return () => {
+            scrollContainer.removeEventListener('scroll', handleHorizontalScroll);
+            clearTimeout(scrollTimeout);
+        };
+    }, [isLoaded]);
+
+    return (
+        <div 
+            ref={ref} 
+            className="w-full h-full performance-optimized"
+            style={{ containIntrinsicSize: '300px 400px' }}
+        >
+            {isVisible ? (
+                <ItemCard 
+                    item={item} 
+                    isAdmin={isAdmin}
+                    onClick={onClick}
+                />
+            ) : (
+                // Simplified skeleton for horizontal loading
+                <div className="group relative bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100 h-full flex flex-col">
+                    {/* Image Section Skeleton */}
+                    <div className="relative aspect-[4/3] bg-gray-100 overflow-hidden">
+                        <div className="w-full h-full bg-gray-200 opacity-50"></div>
+                    </div>
+                    
+                    {/* Content Section Skeleton */}
+                    <div className="p-4 space-y-3 flex-1 flex flex-col">
+                        <div className="h-8 w-20 bg-gray-200 rounded opacity-30"></div>
+                        <div className="space-y-2">
+                            <div className="h-5 bg-gray-200 rounded opacity-25"></div>
+                            <div className="h-5 bg-gray-200 rounded w-3/4 opacity-25"></div>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="h-4 bg-gray-200 rounded opacity-20"></div>
+                            <div className="h-4 bg-gray-200 rounded w-5/6 opacity-20"></div>
+                        </div>
+                        <div className="flex gap-1.5">
+                            <div className="h-6 w-16 bg-gray-200 rounded-full opacity-20"></div>
+                            <div className="h-6 w-12 bg-gray-200 rounded-full opacity-20"></div>
+                        </div>
+                        <div className="flex-1"></div>
+                        {isAdmin && (
+                            <div className="flex justify-between items-center pt-2 border-t border-gray-100 mt-auto">
+                                <div className="h-3 w-16 bg-gray-200 rounded opacity-15"></div>
+                                <div className="h-3 w-20 bg-gray-200 rounded opacity-15"></div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+});
 
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, signInWithPhone, verifyOTP, resendOTP, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin, switchingAdminMode, verificationId } = useAuth();
@@ -57,7 +263,6 @@ const Home: React.FC = () => {
             setShowInventoryPage(false);
             setShowAnalyticsPage(false);
             setCurrentPage('store');
-            console.log('🔄 Redirected from admin-only page back to store');
         }
     };
 
@@ -115,7 +320,8 @@ const Home: React.FC = () => {
         color: '',
         priceRange: '',
         sortBy: 'newest',
-        searchQuery: ''
+        searchQuery: '',
+        tags: ''
     });
     const [notificationCounts, setNotificationCounts] = useState({
         pending: 0,
@@ -130,6 +336,9 @@ const Home: React.FC = () => {
     const [filterCollapsed, setFilterCollapsed] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
+    
+    // Search bar collapse state
+    const [searchBarCollapsed, setSearchBarCollapsed] = useState(true);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -149,9 +358,7 @@ const Home: React.FC = () => {
     // Listen for item updates (e.g., after purchases)
     useEffect(() => {
         const handleItemsUpdated = (event: CustomEvent) => {
-            console.log('🔄 Items updated event received:', event.detail);
             if (event.detail?.action === 'purchase_completed') {
-                console.log('🛒 Purchase completed - refreshing items list');
                 fetchItems();
                 // Also refresh recent items and notification counts if needed
                 if (isAuthenticated && user) {
@@ -536,7 +743,6 @@ const Home: React.FC = () => {
         setShowOrderSuccess(true);
         
         // Refresh items list after successful purchase
-        console.log('🛒 Order completed successfully - refreshing items');
         fetchItems();
         
         // Hide success message after 5 seconds
@@ -592,7 +798,8 @@ const Home: React.FC = () => {
             color: '',
             priceRange: '',
             sortBy: 'newest',
-            searchQuery: ''
+            searchQuery: '',
+            tags: ''
         });
     };
 
@@ -631,6 +838,9 @@ const Home: React.FC = () => {
         }
         if (filters.color) {
             filtered = filtered.filter(item => item.color?.toLowerCase().includes(filters.color.toLowerCase()));
+        }
+        if (filters.tags) {
+            filtered = filtered.filter(item => item.tags?.includes(filters.tags));
         }
         if (filters.priceRange) {
             const [min, max] = filters.priceRange.split('-').map(Number);
@@ -786,6 +996,44 @@ const Home: React.FC = () => {
         };
         return fallbackIcons[categoryName] || '📦';
     };
+
+    // Debounced scroll state to reduce jitter
+    const [isScrolling, setIsScrolling] = useState(false);
+    const scrollTimeoutRef = useRef<NodeJS.Timeout>();
+
+    // Memoize expensive category calculations
+    const itemsByCategory = useMemo(() => {
+        return getItemsByCategory();
+    }, [items, filters, activeCategoryFilter]);
+
+    // Throttled scroll handler to reduce jitter
+    useEffect(() => {
+        const handleScroll = () => {
+            if (!isScrolling) {
+                setIsScrolling(true);
+            }
+            
+            // Clear existing timeout
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+            }
+            
+            // Set new timeout to detect scroll end
+            scrollTimeoutRef.current = setTimeout(() => {
+                setIsScrolling(false);
+            }, 150);
+        };
+
+        // Use passive event listener for better performance
+        window.addEventListener('scroll', handleScroll, { passive: true });
+        
+        return () => {
+            window.removeEventListener('scroll', handleScroll);
+            if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+            }
+        };
+    }, [isScrolling]);
 
     if (loading) {
         return (
@@ -1003,7 +1251,7 @@ const Home: React.FC = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className={`min-h-screen bg-gray-50 ${isScrolling ? 'scrolling' : ''}`}>
             {/* Main Store Content - Hidden when analytics page is shown */}
             {!showAnalyticsPage && !showInventoryPage && !showActionsPage && (
                 <>
@@ -1025,44 +1273,28 @@ const Home: React.FC = () => {
                         
                                 <div className="desktop-nav-actions">
                                     <div className="desktop-nav-buttons">
+                            {/* List Item Button - Always icon */}
                             <button
                                 onClick={handleAddItem}
-                                            className="desktop-button-primary"
+                                className="desktop-button-primary p-2"
+                                title="List Item"
                             >
-                                            <span className="hidden sm:inline">List Item</span>
-                                            <span className="sm:hidden">List</span>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
                             </button>
                             
-                            {/* My Pending Items button for regular users */}
+                            {/* My Pending Items button for regular users - Always icon */}
                             {!isAdmin && (
-                                <>
-                                    {/* Full text for large screens (1000px+) */}
-                                    <button
-                                        onClick={handleMyPendingItemsModal}
-                                        className="desktop-button-secondary hidden lg:inline-flex"
-                                    >
-                                        <span>My Pending Items</span>
-                                    </button>
-                                    
-                                    {/* Icon only for medium screens (640px-1000px) to prevent overlap */}
-                                    <button
-                                        onClick={handleMyPendingItemsModal}
-                                        className="desktop-button-secondary hidden sm:inline-flex lg:hidden p-2"
-                                        title="My Pending Items"
-                                    >
-                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                                        </svg>
-                                    </button>
-                                    
-                                    {/* Short text for small screens (<640px) */}
-                                    <button
-                                        onClick={handleMyPendingItemsModal}
-                                        className="desktop-button-secondary sm:hidden"
-                                    >
-                                        <span>My Items</span>
-                                    </button>
-                                </>
+                                <button
+                                    onClick={handleMyPendingItemsModal}
+                                    className="desktop-button-secondary p-2"
+                                    title="My Pending Items"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                    </svg>
+                                </button>
                             )}
                             
                             {isAdmin && (
@@ -1637,50 +1869,253 @@ const Home: React.FC = () => {
                         />
                     )}
 
-                    {/* Search Section - Prominent search bar below banner */}
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                        <div className="bg-white rounded-xl shadow-lg border p-6 sm:p-8">
-                            <div className="max-w-2xl mx-auto">
-                                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">
-                                    Find Your Perfect Gear
-                                </h2>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                    </div>
-                                    <input
-                                        type="text"
-                                        value={filters.searchQuery}
-                                        onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
-                                        placeholder="Search for outdoor gear, brands, categories..."
-                                        className="w-full pl-12 pr-12 py-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
-                                    />
-                                    {filters.searchQuery && (
-                                        <button
-                                            onClick={() => handleFilterChange('searchQuery', '')}
-                                            className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                    {/* Enhanced Collapsible Search Bar */}
+                    <div className="bg-white border-b border-gray-200 shadow-sm">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            {/* Search Bar Toggle and Basic Controls */}
+                            <div className="py-3 flex items-center justify-between">
+                                <div className="flex items-center gap-3 flex-1">
+                                    {/* Collapse/Expand Button */}
+                                    <button
+                                        onClick={() => setSearchBarCollapsed(!searchBarCollapsed)}
+                                        className="flex items-center gap-2 text-gray-600 hover:text-gray-800 transition-colors"
+                                        title={searchBarCollapsed ? "Expand filters" : "Collapse filters"}
+                                    >
+                                        <svg 
+                                            className={`w-4 h-4 transition-transform ${searchBarCollapsed ? 'rotate-90' : ''}`} 
+                                            fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                         >
-                                            <svg className="h-6 w-6 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                        <span className="text-sm font-medium">
+                                            {searchBarCollapsed ? 'Show Filters' : 'Hide Filters'}
+                                        </span>
+                                    </button>
+
+                                    {/* Compact Search Input (always visible) */}
+                                    <div className="relative flex-1 max-w-md">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                             </svg>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            value={filters.searchQuery}
+                                            onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
+                                            placeholder="Search gear, brands, categories..."
+                                            className="w-full pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        />
+                                        {filters.searchQuery && (
+                                            <button
+                                                onClick={() => handleFilterChange('searchQuery', '')}
+                                                className="absolute inset-y-0 right-0 pr-3 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                                            >
+                                                <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                </svg>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Active Filters Count */}
+                                    {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.tags || filters.searchQuery) && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                {[filters.category, filters.gender, filters.size, filters.brand, filters.color, filters.priceRange, filters.tags, filters.searchQuery].filter(Boolean).length} active
+                                            </span>
+                                            <button
+                                                onClick={clearFilters}
+                                                className="text-xs text-orange-600 hover:text-orange-700 underline"
+                                            >
+                                                Clear All
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Expandable Filter Options */}
+                            <div className={`overflow-hidden transition-all duration-300 ease-in-out ${
+                                searchBarCollapsed ? 'max-h-0 pb-0' : 'max-h-96 pb-4'
+                            }`}>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                                    {/* Category Filter */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.category}
+                                            onChange={(e) => handleFilterChange('category', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">All Categories</option>
+                                            <option value="Climbing">Climbing 🧗</option>
+                                            <option value="Skiing">Skiing ⛷️</option>
+                                            <option value="Hiking">Hiking 🥾</option>
+                                            <option value="Camping">Camping ⛺</option>
+                                            <option value="Mountaineering">Mountaineering 🏔️</option>
+                                            <option value="Snowboarding">Snowboarding 🏂</option>
+                                            <option value="Cycling">Cycling 🚵</option>
+                                            <option value="Water Sports">Water Sports 🚣</option>
+                                            <option value="Apparel">Apparel 👕</option>
+                                            <option value="Footwear">Footwear 👟</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Gender Filter */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.gender}
+                                            onChange={(e) => handleFilterChange('gender', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">All Genders</option>
+                                            <option value="Men">Men</option>
+                                            <option value="Women">Women</option>
+                                            <option value="Unisex">Unisex</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Size Filter */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.size}
+                                            onChange={(e) => handleFilterChange('size', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">All Sizes</option>
+                                            <option value="XS">XS</option>
+                                            <option value="S">S</option>
+                                            <option value="M">M</option>
+                                            <option value="L">L</option>
+                                            <option value="XL">XL</option>
+                                            <option value="XXL">XXL</option>
+                                            <option value="6">6</option>
+                                            <option value="7">7</option>
+                                            <option value="8">8</option>
+                                            <option value="9">9</option>
+                                            <option value="10">10</option>
+                                            <option value="11">11</option>
+                                            <option value="12">12</option>
+                                            <option value="13">13</option>
+                                            <option value="One Size">One Size</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Brand Filter */}
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            value={filters.brand}
+                                            onChange={(e) => handleFilterChange('brand', e.target.value)}
+                                            placeholder="Brand..."
+                                            className="w-full pl-3 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                        />
+                                    </div>
+
+                                    {/* Color Filter */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.color}
+                                            onChange={(e) => handleFilterChange('color', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">All Colors</option>
+                                            <option value="Black">Black</option>
+                                            <option value="White">White</option>
+                                            <option value="Gray">Gray</option>
+                                            <option value="Red">Red</option>
+                                            <option value="Blue">Blue</option>
+                                            <option value="Green">Green</option>
+                                            <option value="Yellow">Yellow</option>
+                                            <option value="Orange">Orange</option>
+                                            <option value="Purple">Purple</option>
+                                            <option value="Pink">Pink</option>
+                                            <option value="Brown">Brown</option>
+                                            <option value="Navy">Navy</option>
+                                            <option value="Burgundy">Burgundy</option>
+                                            <option value="Olive">Olive</option>
+                                            <option value="Tan">Tan</option>
+                                            <option value="Multicolor">Multicolor</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Price Range Filter */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.priceRange}
+                                            onChange={(e) => handleFilterChange('priceRange', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">Any Price</option>
+                                            <option value="0-25">Under $25</option>
+                                            <option value="25-50">$25 - $50</option>
+                                            <option value="50-100">$50 - $100</option>
+                                            <option value="100-200">$100 - $200</option>
+                                            <option value="200-500">$200 - $500</option>
+                                            <option value="500">$500+</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Second Row - Tags and Sort */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+                                    {/* Tags Filter */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.tags || ''}
+                                            onChange={(e) => handleFilterChange('tags', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="">All Tags</option>
+                                            {(() => {
+                                                // Extract all unique tags from items
+                                                const allTags = new Set<string>();
+                                                items.forEach(item => {
+                                                    if (item.tags && Array.isArray(item.tags)) {
+                                                        item.tags.forEach(tag => {
+                                                            if (tag && tag.trim()) {
+                                                                allTags.add(tag.trim());
+                                                            }
+                                                        });
+                                                    }
+                                                });
+                                                
+                                                // Sort tags alphabetically
+                                                return Array.from(allTags)
+                                                    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                                                    .map(tag => (
+                                                        <option key={tag} value={tag}>
+                                                            {tag} ({items.filter(item => item.tags?.includes(tag)).length})
+                                                        </option>
+                                                    ));
+                                            })()}
+                                        </select>
+                                    </div>
+
+                                    {/* Sort Options */}
+                                    <div className="relative">
+                                        <select
+                                            value={filters.sortBy}
+                                            onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                                            className="w-full pl-3 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 bg-white"
+                                        >
+                                            <option value="newest">Newest First</option>
+                                            <option value="oldest">Oldest First</option>
+                                            <option value="price-low">Price: Low to High</option>
+                                            <option value="price-high">Price: High to Low</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Clear Filters Button */}
+                                    {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.tags) && (
+                                        <button
+                                            onClick={clearFilters}
+                                            className="px-4 py-2 text-sm text-orange-600 hover:text-orange-700 border border-orange-200 hover:border-orange-300 rounded-lg transition-colors bg-orange-50 hover:bg-orange-100 font-medium"
+                                        >
+                                            Reset All Filters
                                         </button>
                                     )}
                                 </div>
-                                {filters.searchQuery && (
-                                    <div className="mt-3 text-center">
-                                        <p className="text-sm text-gray-600">
-                                            Searching through titles, descriptions, brands, categories, and more
-                                        </p>
-                                        <button
-                                            onClick={() => handleFilterChange('searchQuery', '')}
-                                            className="mt-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
-                                        >
-                                            Clear search
-                                        </button>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -1703,7 +2138,7 @@ const Home: React.FC = () => {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-1.414.924l-2-1A1 1 0 0110 17.414V13.414a1 1 0 00-.293-.707L3.293 6.293A1 1 0 013 5.586V4z" />
                                     </svg>
                                     <span className="font-medium text-gray-900">Filters</span>
-                                    {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery) && (
+                                    {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery || filters.tags) && (
                                         <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">Active</span>
                                     )}
                                 </div>
@@ -1870,12 +2305,6 @@ const Home: React.FC = () => {
                         {/* Main Content Area */}
                         <div className="flex-1">
                             <div className="mb-8">
-                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                                    <div>
-                                        <h2 className="text-2xl font-bold text-gray-900 mb-2">Available Gear</h2>
-                                        <p className="text-gray-600">Quality mountain equipment from fellow outdoor enthusiasts</p>
-                                    </div>
-                                </div>
 
                                 {/* Items Grid */}
                                 {loadingItems ? (
@@ -1925,34 +2354,7 @@ const Home: React.FC = () => {
                                         </div>
                                     ) : (
                                         <div>
-                                            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                                                <div className="text-sm text-gray-600">
-                                                    {filters.searchQuery ? (
-                                                        <span>
-                                                            Found <span className="font-semibold">{filteredItems.length}</span> results 
-                                                            {filteredItems.length !== items.length && (
-                                                                <span> of {items.length} total items</span>
-                                                            )}
-                                                            {filters.searchQuery && (
-                                                                <span> for "<span className="font-medium text-gray-900">{filters.searchQuery}</span>"</span>
-                                                            )}
-                                                        </span>
-                                                    ) : (
-                                                        <span>Showing {filteredItems.length} of {items.length} items</span>
-                                                    )}
-                                                </div>
-                                                {filters.searchQuery && (
-                                                    <button
-                                                        onClick={() => handleFilterChange('searchQuery', '')}
-                                                        className="text-xs text-orange-600 hover:text-orange-700 flex items-center gap-1"
-                                                    >
-                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                        Clear search
-                                                    </button>
-                                                )}
-                                            </div>
+
                                             {/* Category Filter Status */}
                                             {activeCategoryFilter && (
                                                 <div className="mb-6 flex items-center justify-between bg-orange-50 p-4 rounded-lg border border-orange-200">
@@ -1963,8 +2365,7 @@ const Home: React.FC = () => {
                                                         <span className="font-medium text-orange-900">Filtering by: {activeCategoryFilter}</span>
                                                         <span className="bg-orange-200 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
                                                             {(() => {
-                                                                const categoryData = getItemsByCategory();
-                                                                const count = categoryData[activeCategoryFilter]?.length || 0;
+                                                                const count = itemsByCategory[activeCategoryFilter]?.length || 0;
                                                                 return `${count} ${count === 1 ? 'item' : 'items'}`;
                                                             })()}
                                                         </span>
@@ -1981,44 +2382,58 @@ const Home: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            {/* Category-Based Two-Row Horizontal Scrolling Layout */}
+                                            {/* Category-Based Layout */}
                                             <div className="space-y-8">
-                                                {Object.entries(getItemsByCategory()).map(([category, items]) => (
-                                                    <div key={category} className="category-section">
-                                                        {/* Category Header with View All Button */}
-                                                        <div className="flex items-center justify-between mb-4">
-                                                            <div className="flex items-center gap-3">
-                                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
-                                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                {Object.entries(itemsByCategory)
+                                                    .filter(([category, items]) => {
+                                                        // Show all categories if no filter is active, or only the filtered category
+                                                        return items.length > 0 && (!activeCategoryFilter || category === activeCategoryFilter);
+                                                    })
+                                                    .map(([category, items]) => (
+                                                    <div key={category} className={`category-section ${isScrolling ? 'scrolling' : ''}`}>
+                                                        {/* Clickable Category Header */}
+                                                        <div 
+                                                            className="flex items-center gap-3 mb-4 cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors"
+                                                            onClick={() => {
+                                                                if (activeCategoryFilter === category) {
+                                                                    clearCategoryFilter();
+                                                                } else {
+                                                                    handleCategoryFilter(category);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <h2 className="text-xl font-bold text-gray-900">{category}</h2>
+                                                            <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                                {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                            </span>
+                                                            {items.length > 4 && !activeCategoryFilter && (
+                                                                <span className="bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                                    ↔️ Scrollable
                                                                 </span>
-                                                            </div>
-                                                            
-                                                            <button
-                                                                onClick={() => handleCategoryFilter(category)}
-                                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
-                                                                title={`View all ${category} items`}
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                </svg>
-                                                                View All
-                                                            </button>
+                                                            )}
+                                                            {activeCategoryFilter === category ? (
+                                                                <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                                    ✕ Close
+                                                                </span>
+                                                            ) : (
+                                                                <span className="bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                                    👆 Click to expand
+                                                                </span>
+                                                            )}
                                                         </div>
 
-                                                        {/* Category Banner */}
+                                                        {/* Optimized Category Banner */}
                                                         <div 
-                                                            className="relative h-36 mb-6 rounded-xl overflow-hidden shadow-lg cursor-pointer group"
+                                                            className="relative h-36 mb-6 rounded-xl overflow-hidden shadow-md cursor-pointer group category-banner"
                                                             style={{
                                                                 backgroundImage: `url(${getCategoryImage(category)})`,
                                                                 backgroundSize: 'cover',
-                                                                backgroundPosition: 'center',
+                                                                backgroundPosition: 'center'
                                                             }}
                                                             onClick={() => handleCategoryFilter(category)}
                                                         >
-                                                            {/* Overlay */}
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
+                                                            {/* Simplified Overlay */}
+                                                            <div className="absolute inset-0 bg-black/40 group-hover:bg-black/50 transition-colors duration-200"></div>
                                                             
                                                             {/* Content */}
                                                             <div className="relative h-full flex items-center px-6">
@@ -2026,81 +2441,126 @@ const Home: React.FC = () => {
                                                                     <div className="text-4xl">{getCategoryIcon(category)}</div>
                                                                     <div>
                                                                         <h3 className="text-xl font-bold text-white mb-1">Explore {category}</h3>
-                                                                        <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
+                                                                        <p className="text-white/90 text-sm">Discover quality gear for your adventures</p>
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </div>
 
-                                                        {/* Two-Row Horizontal Scrolling Container */}
-                                                        <div className="relative overflow-hidden">
-                                                            <div 
-                                                                className="pb-4 overflow-x-auto scrollbar-hide"
-                                                                data-category={category}
-                                                                style={{ 
-                                                                    scrollbarWidth: 'none',
-                                                                    msOverflowStyle: 'none',
-                                                                    WebkitOverflowScrolling: 'touch'
-                                                                }}
-                                                            >
-                                                                                                                {/* Two-Row Grid */}
-                                                <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
-                                                    {(() => {
-                                                        // Only show even number of items (pairs for 2-row grid)
-                                                        // Show maximum 16 items (8 pairs) in horizontal scroll for performance
-                                                        const maxItemsToShow = activeCategoryFilter ? items.length : 16;
-                                                        const itemsToShow = items.slice(0, maxItemsToShow);
-                                                        const evenItemsToShow = itemsToShow.length % 2 === 0 ? itemsToShow : itemsToShow.slice(0, -1);
-                                                        
-                                                        return evenItemsToShow.map((item, index) => (
-                                                            <div key={item.id} className="w-72">
-                                                                <ItemCard 
-                                                                    item={item} 
-                                                                    isAdmin={isAdmin}
-                                                                    onClick={handleItemClick}
+                                                                                                                {/* Category Items Layout */}
+                                                        {activeCategoryFilter === category ? (
+                                                            // Expanded view: Show all items in a vertical grid
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                                                                {items.map((item, index) => (
+                                                                    <div key={item.id} className="w-full">
+                                                                        <ItemCard 
+                                                                            item={item} 
+                                                                            isAdmin={isAdmin}
+                                                                            onClick={handleItemClick}
+                                                                        />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            // Compact view: Single horizontal scrolling row
+                                                            <div className="relative overflow-hidden">
+                                                                <div 
+                                                                    className="pb-4 overflow-x-auto scrollbar-hide category-scroll-container"
+                                                                    data-category={category}
+                                                                    style={{ 
+                                                                        width: '100%',
+                                                                        scrollbarWidth: 'none',
+                                                                        msOverflowStyle: 'none',
+                                                                        WebkitOverflowScrolling: 'touch'
+                                                                    }}
+                                                                >
+                                                                    <div className="flex gap-4">
+                                                                        {(() => {
+                                                                            // Show first 12 items in horizontal scroll
+                                                                            const initialVisibleCount = 8;
+                                                                            const maxItemsToShow = Math.min(items.length, 12);
+                                                                            const itemsToShow = items.slice(0, maxItemsToShow);
+                                                                            
+                                                                            return itemsToShow.map((item, index) => {
+                                                                                const isEagerLoad = index < initialVisibleCount;
+                                                                                
+                                                                                return (
+                                                                                    <div 
+                                                                                        key={item.id} 
+                                                                                        className="w-72 min-h-[400px] flex-shrink-0"
+                                                                                        data-lazy={!isEagerLoad}
+                                                                                        data-index={index}
+                                                                                    >
+                                                                                        {isEagerLoad ? (
+                                                                                            <ItemCard 
+                                                                                                item={item} 
+                                                                                                isAdmin={isAdmin}
+                                                                                                onClick={handleItemClick}
+                                                                                            />
+                                                                                        ) : (
+                                                                                            <HorizontalLazyItemCard
+                                                                                                item={item}
+                                                                                                isAdmin={isAdmin}
+                                                                                                onClick={handleItemClick}
+                                                                                                category={category}
+                                                                                            />
+                                                                                        )}
+                                                                                    </div>
+                                                                                );
+                                                                            });
+                                                                        })()}
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                {/* Scroll Shadows */}
+                                                                <div 
+                                                                    className="absolute top-0 left-0 w-4 h-full z-10 scroll-shadow"
+                                                                    style={{ 
+                                                                        background: 'linear-gradient(90deg, rgb(249 250 251) 0%, transparent 100%)'
+                                                                    }}
                                                                 />
-                                                            </div>
-                                                        ));
-                                                    })()}
-                                                </div>
-                                                            </div>
-                                                            
-                                                            {/* Left Scroll Shadow */}
-                                                            <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-gray-50 to-transparent pointer-events-none z-10" />
-                                                            
-                                                            {/* Right Scroll Shadow */}
-                                                            <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none z-10" />
-                                                            
-                                                            {/* Scroll Arrows for Desktop */}
-                                                            <div className="hidden lg:block">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const container = document.querySelector(`[data-category="${category}"]`);
-                                                                        if (container) {
-                                                                            container.scrollBy({ left: -300, behavior: 'smooth' });
-                                                                        }
+                                                                <div 
+                                                                    className="absolute top-0 right-0 w-4 h-full z-10 scroll-shadow"
+                                                                    style={{ 
+                                                                        background: 'linear-gradient(270deg, rgb(249 250 251) 0%, transparent 100%)'
                                                                     }}
-                                                                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
-                                                                >
-                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                                                    </svg>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const container = document.querySelector(`[data-category="${category}"]`);
-                                                                        if (container) {
-                                                                            container.scrollBy({ left: 300, behavior: 'smooth' });
-                                                                        }
-                                                                    }}
-                                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
-                                                                >
-                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                                    </svg>
-                                                                </button>
+                                                                />
+                                                                
+                                                                {/* Scroll Arrows for single row */}
+                                                                {items.length > 4 && (
+                                                                    <div className="hidden lg:block">
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const container = document.querySelector(`[data-category="${category}"]`);
+                                                                                if (container) {
+                                                                                    container.scrollBy({ left: -300, behavior: 'smooth' });
+                                                                                }
+                                                                            }}
+                                                                            className="absolute left-1 top-1/2 -translate-y-1/2 bg-white hover:bg-gray-50 text-gray-600 rounded-full p-1.5 shadow-md hover:shadow-lg transition-shadow z-20 scroll-arrow"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                                            </svg>
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                const container = document.querySelector(`[data-category="${category}"]`);
+                                                                                if (container) {
+                                                                                    container.scrollBy({ left: 300, behavior: 'smooth' });
+                                                                                }
+                                                                            }}
+                                                                            className="absolute right-1 top-1/2 -translate-y-1/2 bg-white hover:bg-gray-50 text-gray-600 rounded-full p-1.5 shadow-md hover:shadow-lg transition-shadow z-20 scroll-arrow"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
