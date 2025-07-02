@@ -6,6 +6,8 @@ import BarcodeGenerationModal from './BarcodeGenerationModal';
 import BulkBarcodeGenerationModal from './BulkBarcodeGenerationModal';
 import { apiService } from '../services/apiService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
+import { useCategories } from '../hooks/useCategories';
+import { Category } from '../services/apiService';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -14,6 +16,7 @@ interface AdminModalProps {
 }
 
 const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
+  const { categories } = useCategories(true); // Only get active categories
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
@@ -633,6 +636,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
           onSave={handleSaveEdit}
           onCancel={() => setEditingItem(null)}
           isProcessing={processingItemId === editingItem.id}
+          categories={categories}
         />
       )}
 
@@ -721,9 +725,10 @@ interface EditItemModalProps {
   onSave: (item: ConsignmentItem) => void;
   onCancel: () => void;
   isProcessing: boolean;
+  categories: Category[];
 }
 
-const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, isProcessing }) => {
+const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, isProcessing, categories }) => {
   const [title, setTitle] = useState(item.title);
   const [description, setDescription] = useState(item.description);
   const [price, setPrice] = useState(item.price.toString());
@@ -823,16 +828,11 @@ const EditItemModal: React.FC<EditItemModalProps> = ({ item, onSave, onCancel, i
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select Category</option>
-                  <option value="Climbing">Climbing 🧗</option>
-                  <option value="Skiing">Skiing ⛷️</option>
-                  <option value="Hiking">Hiking 🥾</option>
-                  <option value="Camping">Camping ⛺</option>
-                  <option value="Mountaineering">Mountaineering 🏔️</option>
-                  <option value="Snowboarding">Snowboarding 🏂</option>
-                  <option value="Cycling">Cycling 🚵</option>
-                  <option value="Water Sports">Water Sports 🚣</option>
-                  <option value="Apparel">Apparel 👕</option>
-                  <option value="Footwear">Footwear 👟</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name} {cat.icon}
+                    </option>
+                  ))}
                 </select>
               </div>
 

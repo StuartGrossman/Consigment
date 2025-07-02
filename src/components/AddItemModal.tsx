@@ -7,6 +7,7 @@ import { useRateLimiter } from '../hooks/useRateLimiter';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import NotificationModal from './NotificationModal';
+import { useCategories } from '../hooks/useCategories';
 
 interface AddItemModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface AddItemModalProps {
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) => {
   const { isAdmin } = useAuth();
+  const { categories, loading: categoriesLoading } = useCategories(true); // Only get active categories
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
@@ -463,19 +465,17 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                   id="category"
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={categoriesLoading}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 >
-                  <option value="">Select Category</option>
-                  <option value="Climbing">Climbing 🧗</option>
-                  <option value="Skiing">Skiing ⛷️</option>
-                  <option value="Hiking">Hiking 🥾</option>
-                  <option value="Camping">Camping ⛺</option>
-                  <option value="Mountaineering">Mountaineering 🏔️</option>
-                  <option value="Snowboarding">Snowboarding 🏂</option>
-                  <option value="Cycling">Cycling 🚵</option>
-                  <option value="Water Sports">Water Sports 🚣</option>
-                  <option value="Apparel">Apparel 👕</option>
-                  <option value="Footwear">Footwear 👟</option>
+                  <option value="">
+                    {categoriesLoading ? 'Loading categories...' : 'Select Category'}
+                  </option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name} {cat.icon}
+                    </option>
+                  ))}
                 </select>
               </div>
 

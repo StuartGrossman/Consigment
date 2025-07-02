@@ -1,17 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-
-interface Category {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  bannerImage: string;
-  attributes: string[];
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+import { apiService, Category, CreateCategoryData, UpdateCategoryData } from '../services/apiService';
 
 interface CategoryDashboardProps {
   isOpen: boolean;
@@ -48,120 +37,21 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
   const fetchCategories = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      const mockCategories: Category[] = [
-        {
-          id: '1',
-          name: 'Climbing',
-          description: 'Rock climbing and bouldering gear',
-          icon: '🧗',
-          bannerImage: '/src/assets/category-images/climbing-action.jpg',
-          attributes: ['difficulty', 'material', 'weight'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '2',
-          name: 'Skiing',
-          description: 'Alpine and cross-country skiing equipment',
-          icon: '⛷️',
-          bannerImage: '/src/assets/category-images/skiing-powder.jpg',
-          attributes: ['skill_level', 'size', 'brand'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '3',
-          name: 'Hiking',
-          description: 'Trail and backpacking gear',
-          icon: '🥾',
-          bannerImage: '/src/assets/category-images/mountain-trail.jpg',
-          attributes: ['capacity', 'weight', 'weather_rating'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '4',
-          name: 'Camping',
-          description: 'Camping and outdoor shelter equipment',
-          icon: '⛺',
-          bannerImage: '/src/assets/category-images/campsite-evening.jpg',
-          attributes: ['capacity', 'weight', 'season_rating'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '5',
-          name: 'Mountaineering',
-          description: 'High-altitude mountaineering gear',
-          icon: '🏔️',
-          bannerImage: '/src/assets/category-images/alpine-climbing.jpg',
-          attributes: ['technical_rating', 'material', 'weight'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '6',
-          name: 'Snowboarding',
-          description: 'Snowboarding equipment and gear',
-          icon: '🏂',
-          bannerImage: '/src/assets/category-images/snowboard-jump.jpg',
-          attributes: ['size', 'flex', 'terrain_type'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '7',
-          name: 'Water Sports',
-          description: 'Water sports and rafting equipment',
-          icon: '🌊',
-          bannerImage: '/src/assets/category-images/whitewater-rafting.jpg',
-          attributes: ['size', 'material', 'water_rating'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '8',
-          name: 'Cycling',
-          description: 'Mountain biking and cycling gear',
-          icon: '🚵',
-          bannerImage: '/src/assets/category-images/mountain-biking.jpg',
-          attributes: ['size', 'type', 'terrain'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '9',
-          name: 'Apparel',
-          description: 'Outdoor clothing and apparel',
-          icon: '👕',
-          bannerImage: '/src/assets/category-images/outdoor-clothing.jpg',
-          attributes: ['size', 'material', 'weather_rating'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
-        },
-        {
-          id: '10',
-          name: 'Footwear',
-          description: 'Hiking boots and outdoor footwear',
-          icon: '🥾',
-          bannerImage: '/src/assets/category-images/hiking-boots.jpg',
-          attributes: ['size', 'type', 'waterproof'],
-          isActive: true,
-          createdAt: '2024-01-01',
-          updatedAt: '2024-01-01'
+      const categoriesData = await apiService.getCategories();
+      setCategories(categoriesData);
+      
+      // Auto-initialize default categories if none exist
+      if (categoriesData.length === 0) {
+        console.log('No categories found, auto-initializing defaults...');
+        try {
+          await apiService.initializeDefaultCategories();
+          const newCategoriesData = await apiService.getCategories();
+          setCategories(newCategoriesData);
+          console.log('✅ Default categories initialized successfully');
+        } catch (initError) {
+          console.error('Failed to auto-initialize categories:', initError);
         }
-      ];
-      setCategories(mockCategories);
+      }
     } catch (error) {
       console.error('Error fetching categories:', error);
     } finally {
@@ -203,15 +93,30 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
     try {
       setLoading(true);
       
-      // TODO: Implement actual save logic
-      console.log('Saving category:', formData);
-      console.log('Image file:', imageFile);
+      // Auto-generate icon if not provided
+      if (!formData.icon.trim()) {
+        setFormData(prev => ({ ...prev, icon: '📦' })); // Default category icon
+      }
       
-      // Mock save success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const categoryData: CreateCategoryData | UpdateCategoryData = {
+        name: formData.name.trim() || 'New Category',
+        description: formData.description.trim(),
+        icon: formData.icon.trim() || '📦',
+        bannerImage: imagePreview || '',
+        attributes: formData.attributes,
+        isActive: formData.isActive
+      };
       
-      fetchCategories();
+      if (isCreating) {
+        await apiService.createCategory(categoryData as CreateCategoryData);
+      } else if (isEditing && selectedCategory) {
+        await apiService.updateCategory(selectedCategory.id, categoryData);
+      }
+      
+      // Refresh categories and reset form
+      await fetchCategories();
       handleCancel();
+      
     } catch (error) {
       console.error('Error saving category:', error);
     } finally {
@@ -220,22 +125,25 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
   };
 
   const handleDeleteCategory = async (categoryId: string) => {
-    if (!confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
+    const category = categories.find(c => c.id === categoryId);
+    const categoryName = category?.name || 'Unknown';
+    
+    if (!confirm(`Delete "${categoryName}" category?`)) {
       return;
     }
     
     try {
       setLoading(true);
-      // TODO: Implement actual delete logic
-      console.log('Deleting category:', categoryId);
-      await new Promise(resolve => setTimeout(resolve, 500));
-      fetchCategories();
+      await apiService.deleteCategory(categoryId);
+      await fetchCategories();
     } catch (error) {
       console.error('Error deleting category:', error);
     } finally {
       setLoading(false);
     }
   };
+
+
 
   const handleCancel = () => {
     setIsCreating(false);
@@ -316,7 +224,7 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
               <div className="flex gap-2 mb-3">
                 <button
                   onClick={handleCreateCategory}
-                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -356,32 +264,33 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
                       }`}
                       onClick={() => handleEditCategory(category)}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-2xl">{category.icon}</span>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{category.name}</h3>
-                            <p className="text-sm text-gray-600 truncate">{category.description}</p>
+                      <div className="flex items-start justify-between min-h-0">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <span className="text-2xl flex-shrink-0">{category.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-gray-900 truncate">{category.name}</h3>
+                            <p className="text-sm text-gray-600 truncate leading-tight">{category.description}</p>
                             <div className="flex flex-wrap gap-1 mt-1">
-                              {category.attributes.slice(0, 3).map((attr, index) => (
-                                <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              {category.attributes.slice(0, 2).map((attr, index) => (
+                                <span key={index} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded truncate">
                                   {attr}
                                 </span>
                               ))}
-                              {category.attributes.length > 3 && (
-                                <span className="text-xs text-gray-500">+{category.attributes.length - 3}</span>
+                              {category.attributes.length > 2 && (
+                                <span className="text-xs text-gray-500">+{category.attributes.length - 2}</span>
                               )}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <span className={`w-2 h-2 rounded-full ${category.isActive ? 'bg-green-500' : 'bg-gray-400'}`}></span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteCategory(category.id);
                             }}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                            title={`Delete ${category.name}`}
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19 7-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -409,7 +318,7 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
                     {/* Basic Info */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Category Name *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
                         <input
                           type="text"
                           value={formData.name}
@@ -419,15 +328,29 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Icon (Emoji) *</label>
-                        <input
-                          type="text"
-                          value={formData.icon}
-                          onChange={(e) => setFormData(prev => ({ ...prev, icon: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="🧗"
-                          maxLength={2}
-                        />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Icon (Emoji)</label>
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={formData.icon}
+                            onChange={(e) => setFormData(prev => ({ ...prev, icon: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="🧗"
+                            maxLength={2}
+                          />
+                          <div className="flex flex-wrap gap-1">
+                            {['🧗', '⛷️', '🥾', '⛺', '🏔️', '🏂', '🌊', '🚵', '👕', '🎯', '⚽', '🏃', '🤸', '🏋️', '🏐', '🏈'].map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => setFormData(prev => ({ ...prev, icon: emoji }))}
+                                className={`p-2 text-lg rounded border hover:bg-gray-50 ${formData.icon === emoji ? 'bg-blue-50 border-blue-300' : 'border-gray-200'}`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     </div>
 
@@ -550,21 +473,38 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
             {/* Action Buttons */}
             {(isCreating || isEditing) && (
               <div className="border-t border-gray-200 p-4 bg-gray-50">
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={handleCancel}
-                    className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSaveCategory}
-                    disabled={loading || !formData.name.trim() || !formData.icon.trim()}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                  >
-                    {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
-                    {isCreating ? 'Create Category' : 'Save Changes'}
-                  </button>
+                <div className="flex justify-between items-center">
+                  {isEditing && selectedCategory ? (
+                    <button
+                      onClick={() => handleDeleteCategory(selectedCategory.id)}
+                      disabled={loading}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19 7-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      Delete Category
+                    </button>
+                  ) : (
+                    <div></div>
+                  )}
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleCancel}
+                      className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveCategory}
+                      disabled={loading}
+                      className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    >
+                      {loading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>}
+                      {isCreating ? 'Create Category' : 'Save Changes'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

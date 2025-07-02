@@ -11,7 +11,7 @@ const getApiBaseUrl = () => {
     
     // Development - use localhost
     if (import.meta.env.DEV) {
-        return 'http://localhost:8080';
+        return 'http://localhost:8001';
     }
     
     // Production - check if we're on Firebase hosting
@@ -60,6 +60,34 @@ interface PaymentResponse {
     message: string;
 }
 
+// Category Management Types
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  bannerImage: string;
+  attributes: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+  updatedBy?: string;
+}
+
+export interface CreateCategoryData {
+  name: string;
+  description?: string;
+  icon: string;
+  bannerImage?: string;
+  attributes?: string[];
+  isActive?: boolean;
+}
+
+export interface UpdateCategoryData extends Partial<CreateCategoryData> {
+  // All fields are optional for updates
+}
+
 class ApiService {
     private async getAuthToken(): Promise<string> {
         try {
@@ -85,7 +113,10 @@ class ApiService {
         };
 
         // Add authentication for admin endpoints, create-item endpoint, user endpoints, and shared cart endpoints
-        if (endpoint.includes('/admin/') || endpoint.includes('/api/create-item') || endpoint.includes('/api/user/') || endpoint.includes('/api/shared-cart/')) {
+        if (endpoint.includes('/admin/') || 
+            endpoint.includes('/api/create-item') || 
+            endpoint.includes('/api/user/') || 
+            endpoint.includes('/api/shared-cart/')) {
             try {
                 const token = await this.getAuthToken();
                 headers['Authorization'] = `Bearer ${token}`;
@@ -1105,6 +1136,122 @@ class ApiService {
             return await response.json();
         } catch (error) {
             console.error('❌ Failed to get user shared carts:', error);
+            throw error;
+        }
+    }
+
+    // Category Management API Functions
+    async getCategories(): Promise<Category[]> {
+        try {
+            const response = await this.makeRequest('/api/categories', {
+                method: 'GET'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.categories;
+            }
+            throw new Error(result.message || 'Failed to fetch categories');
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+            throw error;
+        }
+    }
+
+    async getActiveCategories(): Promise<Category[]> {
+        try {
+            const response = await this.makeRequest('/api/categories/active', {
+                method: 'GET'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.categories;
+            }
+            throw new Error(result.message || 'Failed to fetch active categories');
+        } catch (error) {
+            console.error('Error fetching active categories:', error);
+            throw error;
+        }
+    }
+
+    async createCategory(categoryData: CreateCategoryData): Promise<Category> {
+        try {
+            const response = await this.makeRequest('/api/categories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(categoryData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.category;
+            }
+            throw new Error(result.message || 'Failed to create category');
+        } catch (error) {
+            console.error('Error creating category:', error);
+            throw error;
+        }
+    }
+
+    async updateCategory(categoryId: string, updateData: UpdateCategoryData): Promise<Category> {
+        try {
+            const response = await this.makeRequest(`/api/categories/${categoryId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.category;
+            }
+            throw new Error(result.message || 'Failed to update category');
+        } catch (error) {
+            console.error('Error updating category:', error);
+            throw error;
+        }
+    }
+
+    async deleteCategory(categoryId: string): Promise<void> {
+        try {
+            const response = await this.makeRequest(`/api/categories/${categoryId}`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to delete category');
+            }
+        } catch (error) {
+            console.error('Error deleting category:', error);
+            throw error;
+        }
+    }
+
+    async initializeDefaultCategories(): Promise<Category[]> {
+        try {
+            const response = await this.makeRequest('/api/categories/initialize-default', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.categories || [];
+            }
+            throw new Error(result.message || 'Failed to initialize default categories');
+        } catch (error) {
+            console.error('Error initializing default categories:', error);
             throw error;
         }
     }
