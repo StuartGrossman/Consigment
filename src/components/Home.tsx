@@ -6,6 +6,7 @@ import { db } from '../config/firebase';
 import { ConsignmentItem } from '../types';
 import { logUserAction } from '../services/firebaseService';
 import ItemCard from './ItemCard';
+import { useCategories } from '../hooks/useCategories';
 import AddItemModal from './AddItemModal';
 import AdminModal from './AdminModal';
 import ApprovedItemsModal from './ApprovedItemsModal';
@@ -13,6 +14,7 @@ import UserAnalyticsModal from './UserAnalyticsModal';
 import ApplicationTestModal from './ApplicationTestModal';
 import SoldItemsModal from './SoldItemsModal';
 import LoginModal from './LoginModal';
+import CategoryDashboard from './CategoryDashboard';
 import Dashboard from './Dashboard';
 import ItemDetailModal from './ItemDetailModal';
 import CartModal from './CartModal';
@@ -43,6 +45,9 @@ import { AnalyticsPage, InventoryPage, ActionsPage, UserHistoryPage } from '../p
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, signInWithPhone, verifyOTP, resendOTP, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin, switchingAdminMode, verificationId } = useAuth();
     const { getCartItemCount, getBookmarkCount, cleanupBookmarks, switchUser } = useCart();
+    const { categories: realCategories } = useCategories();
+    
+    // Categories loaded - no more console spam!
     
     // Handle redirecting away from admin-only pages when exiting admin mode
     const handleExitAdmin = () => {
@@ -80,6 +85,7 @@ const Home: React.FC = () => {
     const [isRewardsPointsDashboardOpen, setIsRewardsPointsDashboardOpen] = useState(false);
     const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+    const [isCategoryDashboardOpen, setIsCategoryDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
     const [showActionsPage, setShowActionsPage] = useState(false);
@@ -467,6 +473,14 @@ const Home: React.FC = () => {
         setIsApplicationTestModalOpen(false);
     };
 
+    const handleCategoryDashboard = () => {
+        setIsCategoryDashboardOpen(true);
+    };
+
+    const handleCategoryDashboardClose = () => {
+        setIsCategoryDashboardOpen(false);
+    };
+
 
 
     const handleSoldItemsModal = () => {
@@ -671,7 +685,7 @@ const Home: React.FC = () => {
         return filtered;
     };
 
-    // Group items by category
+    // Group items by REAL categories from Category Management Dashboard
     const getItemsByCategory = () => {
         const filteredItems = getFilteredAndSortedItems();
         
@@ -683,18 +697,26 @@ const Home: React.FC = () => {
             return { [activeCategoryFilter]: categoryItems };
         }
         
-        const categories: { [key: string]: ConsignmentItem[] } = {};
+        // Use ONLY real categories from the category management system
+        const categoriesWithItems: { [key: string]: ConsignmentItem[] } = {};
         
-        filteredItems.forEach((item: ConsignmentItem) => {
-            const category = item.category || 'Uncategorized';
-            if (!categories[category]) {
-                categories[category] = [];
+        // Get only active real categories
+        const activeRealCategories = realCategories.filter(cat => cat.isActive);
+        
+        // For each real category, find matching items
+        activeRealCategories.forEach((realCategory) => {
+            const matchingItems = filteredItems.filter(item => 
+                item.category === realCategory.name
+            );
+            
+            // Only include categories that have items
+            if (matchingItems.length > 0) {
+                categoriesWithItems[realCategory.name] = matchingItems;
             }
-            categories[category].push(item);
         });
         
         // Sort categories by item count (most items first)
-        const sortedCategories = Object.entries(categories)
+        const sortedCategories = Object.entries(categoriesWithItems)
             .sort(([, a], [, b]) => b.length - a.length)
             .reduce((acc, [category, items]) => {
                 acc[category] = items;
@@ -719,8 +741,15 @@ const Home: React.FC = () => {
     };
 
     // Category image mapping
-    const getCategoryImage = (category: string) => {
-        const categoryImages: { [key: string]: string } = {
+    // Get real category data from database
+    const getCategoryImage = (categoryName: string) => {
+        const realCategory = realCategories.find(cat => cat.name === categoryName);
+        if (realCategory && realCategory.bannerImage) {
+            return realCategory.bannerImage;
+        }
+        
+        // Fallback to hardcoded images if no real category data
+        const fallbackImages: { [key: string]: string } = {
             'Climbing': climbingAction,
             'Mountaineering': alpineClimbing,
             'Hiking': mountainTrail,
@@ -732,12 +761,18 @@ const Home: React.FC = () => {
             'Apparel': outdoorClothing,
             'Footwear': hikingBoots,
         };
-        return categoryImages[category] || mountainTrail;
+        return fallbackImages[categoryName] || mountainTrail;
     };
 
-    // Category icon mapping
-    const getCategoryIcon = (category: string) => {
-        const categoryIcons: { [key: string]: string } = {
+    // Get real category icon from database
+    const getCategoryIcon = (categoryName: string) => {
+        const realCategory = realCategories.find(cat => cat.name === categoryName);
+        if (realCategory && realCategory.icon) {
+            return realCategory.icon;
+        }
+        
+        // Fallback to hardcoded icons if no real category data
+        const fallbackIcons: { [key: string]: string } = {
             'Climbing': '🧗',
             'Skiing': '⛷️',
             'Hiking': '🥾',
@@ -749,7 +784,7 @@ const Home: React.FC = () => {
             'Apparel': '👕',
             'Footwear': '👟',
         };
-        return categoryIcons[category] || '📦';
+        return fallbackIcons[categoryName] || '📦';
     };
 
     if (loading) {
@@ -1538,6 +1573,15 @@ const Home: React.FC = () => {
                                                         >
                                                             🧪 Application Test & Performance
                                                         </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleCategoryDashboard();
+                                                                setUserMenuOpen(false);
+                                                            }}
+                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                                        >
+                                                            🏷️ Category Dashboard
+                                                        </button>
                                                     </>
                                                 )}
                                             
@@ -2123,6 +2167,11 @@ const Home: React.FC = () => {
                     <ApplicationTestModal 
                         isOpen={isApplicationTestModalOpen} 
                         onClose={handleApplicationTestModalClose}
+                    />
+
+                    <CategoryDashboard 
+                        isOpen={isCategoryDashboardOpen} 
+                        onClose={handleCategoryDashboardClose}
                     />
 
                 </>

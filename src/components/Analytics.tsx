@@ -29,6 +29,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
   const [isShippedItemsModalOpen, setIsShippedItemsModalOpen] = useState(false);
   const [isUnshippedItemsModalOpen, setIsUnshippedItemsModalOpen] = useState(false);
   const [isRefundsModalOpen, setIsRefundsModalOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<string | null>(null);
 
   // Muted color palette
   const COLORS = ['#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0', '#f1f5f9'];
@@ -224,31 +225,47 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     console.log('📊 Found', soldItems.length, 'sold items');
     
     const totalRevenue = soldItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
-    const uniqueSellers = new Set(items.map(item => item.sellerId));
+    // Get unique sellers who have actually sold items (not just submitted)
+    const activeSellers = new Set(soldItems.map(item => item.sellerId));
+    console.log('📊 Active sellers (who have sold items):', activeSellers.size);
     const avgItemPrice = soldItems.length > 0 ? totalRevenue / soldItems.length : 0;
     
-    // Monthly revenue data (last 12 months) - improved calculation
+    // Monthly revenue data (last 12 months) - improved calculation with better date handling
     const monthlyRevenue = [];
     for (let i = 11; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
-      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+      const monthEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+      
+      console.log(`📊 Processing month ${date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}: ${monthStart} to ${monthEnd}`);
       
       const monthItems = soldItems.filter(item => {
-        // Better date handling - use soldAt if available, otherwise createdAt
+        // Use soldAt if available, otherwise fall back to createdAt
         const itemDate = item.soldAt || item.createdAt;
-        return itemDate && itemDate >= monthStart && itemDate <= monthEnd;
+        if (!itemDate) {
+          console.warn('Item has no valid date:', item.id);
+          return false;
+        }
+        
+        const isInRange = itemDate >= monthStart && itemDate <= monthEnd;
+        if (isInRange) {
+          console.log(`📊 Item ${item.id} sold on ${itemDate} included in month ${date.toLocaleDateString('en-US', { month: 'short' })}`);
+        }
+        return isInRange;
       });
       
       const monthRevenue = monthItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0);
       
+      console.log(`📊 Month ${date.toLocaleDateString('en-US', { month: 'short' })}: ${monthItems.length} items, $${monthRevenue} revenue`);
+      
       monthlyRevenue.push({
         month: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
         revenue: monthRevenue,
-        items: monthItems.length
+        items: monthItems.length,
+        fullDate: date // Keep for debugging
       });
     }
-    console.log('📊 Monthly revenue data:', monthlyRevenue);
+    console.log('📊 Final monthly revenue data:', monthlyRevenue);
 
     // Category breakdown - ensure we have data
     const categoryMap = new Map<string, {count: number, revenue: number}>();
@@ -305,11 +322,12 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     const result = {
       totalRevenue,
       totalItems: items.length,
-      activeUsers: uniqueSellers.size,
+      activeUsers: activeSellers.size,
       avgItemPrice,
       monthlyRevenue,
       categoryBreakdown,
-      statusBreakdown
+      statusBreakdown,
+      soldItems: soldItems.length // Add this for better tracking
     };
     
     console.log('📊 Final dashboard data:', result);
@@ -501,23 +519,39 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
             {/* Dashboard Tab */}
             {activeTab === 'dashboard' && dashboardData && (
               <div className="space-y-8">
-                {/* KPI Cards */}
+                {/* KPI Cards - Now Clickable */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white">
+                  <div 
+                    onClick={() => setActiveModal('revenue')}
+                    className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
                     <h3 className="text-lg font-semibold mb-2">Total Revenue</h3>
                     <p className="text-3xl font-bold">{formatCurrency(dashboardData.totalRevenue)}</p>
+                    <p className="text-xs text-slate-200 mt-1">Click for details</p>
                   </div>
-                  <div className="bg-gradient-to-r from-gray-500 to-gray-600 rounded-xl p-6 text-white">
+                  <div 
+                    onClick={() => setActiveModal('items')}
+                    className="bg-gradient-to-r from-gray-500 to-gray-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
                     <h3 className="text-lg font-semibold mb-2">Total Items</h3>
                     <p className="text-3xl font-bold">{dashboardData.totalItems}</p>
+                    <p className="text-xs text-gray-200 mt-1">Click for breakdown</p>
                   </div>
-                  <div className="bg-gradient-to-r from-zinc-500 to-zinc-600 rounded-xl p-6 text-white">
+                  <div 
+                    onClick={() => setActiveModal('sellers')}
+                    className="bg-gradient-to-r from-zinc-500 to-zinc-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
                     <h3 className="text-lg font-semibold mb-2">Active Sellers</h3>
                     <p className="text-3xl font-bold">{dashboardData.activeUsers}</p>
+                    <p className="text-xs text-zinc-200 mt-1">Click for seller stats</p>
                   </div>
-                  <div className="bg-gradient-to-r from-stone-500 to-stone-600 rounded-xl p-6 text-white">
+                  <div 
+                    onClick={() => setActiveModal('pricing')}
+                    className="bg-gradient-to-r from-stone-500 to-stone-600 rounded-xl p-6 text-white cursor-pointer hover:shadow-lg transform hover:scale-105 transition-all duration-200"
+                  >
                     <h3 className="text-lg font-semibold mb-2">Avg Item Price</h3>
                     <p className="text-3xl font-bold">{formatCurrency(dashboardData.avgItemPrice)}</p>
+                    <p className="text-xs text-stone-200 mt-1">Click for price analysis</p>
                   </div>
                 </div>
 
@@ -1049,6 +1083,201 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
             setActiveTab('dashboard'); // Reset to dashboard when closing
           }}
         />
+
+        {/* Detail Modals for KPI Cards */}
+        {activeModal && dashboardData && (
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-60 p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-bold text-gray-800">
+                    {activeModal === 'revenue' && '💰 Revenue Analysis'}
+                    {activeModal === 'items' && '📦 Items Breakdown'}
+                    {activeModal === 'sellers' && '👥 Active Sellers Dashboard'}
+                    {activeModal === 'pricing' && '💲 Pricing Analytics'}
+                  </h3>
+                  <button
+                    onClick={() => setActiveModal(null)}
+                    className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                  >
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
+                {activeModal === 'revenue' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        <p className="text-slate-800 font-medium">Total Revenue</p>
+                        <p className="text-2xl font-bold text-slate-600">{formatCurrency(dashboardData.totalRevenue)}</p>
+                      </div>
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-green-800 font-medium">Items Sold</p>
+                        <p className="text-2xl font-bold text-green-600">{dashboardData.monthlyRevenue.reduce((sum: number, m: any) => sum + m.items, 0)}</p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-blue-800 font-medium">Avg Monthly Revenue</p>
+                        <p className="text-2xl font-bold text-blue-600">{formatCurrency(dashboardData.totalRevenue / 12)}</p>
+                      </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                      <h4 className="text-lg font-semibold mb-4">Monthly Revenue Trend</h4>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <AreaChart data={dashboardData.monthlyRevenue}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="month" />
+                          <YAxis />
+                          <Tooltip formatter={(value: number) => [formatCurrency(value), 'Revenue']} />
+                          <Area type="monotone" dataKey="revenue" stroke="#64748b" fill="#94a3b8" strokeWidth={3} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {activeModal === 'items' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-blue-800 font-medium">Total Items</p>
+                        <p className="text-2xl font-bold text-blue-600">{dashboardData.totalItems}</p>
+                      </div>
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-green-800 font-medium">Sold Items</p>
+                        <p className="text-2xl font-bold text-green-600">{dashboardData.monthlyRevenue.reduce((sum: number, m: any) => sum + m.items, 0)}</p>
+                      </div>
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-yellow-800 font-medium">Pending Items</p>
+                        <p className="text-2xl font-bold text-yellow-600">{dashboardData.statusBreakdown.find((s: any) => s.status === 'Pending')?.count || 0}</p>
+                      </div>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <p className="text-purple-800 font-medium">Live Items</p>
+                        <p className="text-2xl font-bold text-purple-600">{dashboardData.statusBreakdown.find((s: any) => s.status === 'Live')?.count || 0}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <div className="bg-white border border-gray-200 rounded-xl p-6">
+                        <h4 className="text-lg font-semibold mb-4">Items Sold by Month</h4>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={dashboardData.monthlyRevenue}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="month" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="items" fill="#64748b" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="bg-white border border-gray-200 rounded-xl p-6">
+                        <h4 className="text-lg font-semibold mb-4">Items by Status</h4>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={dashboardData.statusBreakdown}
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={100}
+                              fill="#8884d8"
+                              dataKey="value"
+                              label={({ status, count }: any) => `${status}: ${count}`}
+                            >
+                              {dashboardData.statusBreakdown.map((entry: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeModal === 'sellers' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-green-800 font-medium">Active Sellers</p>
+                        <p className="text-2xl font-bold text-green-600">{dashboardData.activeUsers}</p>
+                        <p className="text-sm text-green-600">Sellers who have sold items</p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-blue-800 font-medium">Total Revenue</p>
+                        <p className="text-2xl font-bold text-blue-600">{formatCurrency(dashboardData.totalRevenue)}</p>
+                      </div>
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <p className="text-purple-800 font-medium">Avg Revenue per Seller</p>
+                        <p className="text-2xl font-bold text-purple-600">{formatCurrency(dashboardData.activeUsers > 0 ? (dashboardData.totalRevenue * 0.75) / dashboardData.activeUsers : 0)}</p>
+                        <p className="text-xs text-purple-600">75% of total revenue</p>
+                      </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                      <h4 className="text-lg font-semibold mb-4">Seller Performance Analysis</h4>
+                      <div className="text-center py-8 text-gray-500">
+                        <div className="text-4xl mb-4">👥</div>
+                        <h5 className="text-lg font-medium mb-2">Active Sellers Identified</h5>
+                        <p>We track sellers who have successfully sold items through the platform.</p>
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h6 className="font-medium text-gray-900">Total Active Sellers</h6>
+                            <p className="text-2xl font-bold text-green-600">{dashboardData.activeUsers}</p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h6 className="font-medium text-gray-900">Total Items Sold</h6>
+                            <p className="text-2xl font-bold text-blue-600">{dashboardData.monthlyRevenue.reduce((sum: number, m: any) => sum + m.items, 0)}</p>
+                          </div>
+                          <div className="bg-gray-50 p-4 rounded-lg">
+                            <h6 className="font-medium text-gray-900">Average Items per Seller</h6>
+                            <p className="text-2xl font-bold text-purple-600">
+                              {dashboardData.activeUsers > 0 ? Math.round(dashboardData.monthlyRevenue.reduce((sum: number, m: any) => sum + m.items, 0) / dashboardData.activeUsers) : 0}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeModal === 'pricing' && (
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                        <p className="text-purple-800 font-medium">Average Item Price</p>
+                        <p className="text-2xl font-bold text-purple-600">{formatCurrency(dashboardData.avgItemPrice)}</p>
+                      </div>
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <p className="text-green-800 font-medium">Highest Category Avg</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {formatCurrency(Math.max(...dashboardData.categoryBreakdown.map((c: any) => c.count > 0 ? c.revenue / c.count : 0)))}
+                        </p>
+                      </div>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                        <p className="text-blue-800 font-medium">Total Categories</p>
+                        <p className="text-2xl font-bold text-blue-600">{dashboardData.categoryBreakdown.length}</p>
+                      </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl p-6">
+                      <h4 className="text-lg font-semibold mb-4">Revenue by Category</h4>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={dashboardData.categoryBreakdown.slice(0, 10)}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="category" angle={-45} textAnchor="end" height={80} />
+                          <YAxis />
+                          <Tooltip formatter={(value: number) => [formatCurrency(value), 'Revenue']} />
+                          <Bar dataKey="revenue" fill="#64748b" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

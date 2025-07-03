@@ -612,12 +612,6 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
   const handleCancel = () => {
     console.log('🛑 User cancelled bulk barcode processing');
     setIsCancelled(true);
-    setIsProcessing(false);
-    setCurrentStep('completed');
-    // Close the modal after a brief delay to show cancellation status
-    setTimeout(() => {
-      onClose();
-    }, 1000);
   };
 
   const handleComplete = () => {
@@ -761,8 +755,8 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-gray-200 flex-shrink-0">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        <div className="p-6 border-b border-gray-200">
           <div className="flex justify-between items-start">
             <div className="flex-1 mr-6">
               <div className="flex items-center justify-between mb-2">
@@ -843,10 +837,10 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6 flex-1 overflow-hidden flex flex-col">
+        <div className="p-6">
           {/* Error Summary */}
           {processingErrors.length > 0 && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-red-800 font-medium">⚠️ Validation Errors</h3>
@@ -871,8 +865,10 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
             </div>
           )}
 
+
+
           {/* Items List */}
-          <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
+          <div className="max-h-96 overflow-y-auto space-y-3">
             {processedItems.map((processedItem, index) => (
               <div
                 key={processedItem.item.id}
@@ -971,7 +967,7 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="p-6 border-t border-gray-200 flex-shrink-0">
+        <div className="p-6 border-t border-gray-200">
           <div className="flex justify-between">
             <div>
               {currentStep === 'completed' && completedCount > 0 && (

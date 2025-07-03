@@ -15,8 +15,6 @@ interface ApprovedItemsModalProps {
 
 const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose, user }) => {
   const [approvedItems, setApprovedItems] = useState<ConsignmentItem[]>([]);
-  const [filteredItems, setFilteredItems] = useState<ConsignmentItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
   
@@ -43,23 +41,6 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
     }
   }, [isOpen, user]);
 
-  // Filter items based on search query
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredItems(approvedItems);
-    } else {
-      const query = searchQuery.toLowerCase();
-      const filtered = approvedItems.filter(item =>
-        item.title.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query) ||
-        (item.brand && item.brand.toLowerCase().includes(query)) ||
-        (item.category && item.category.toLowerCase().includes(query)) ||
-        (item.barcodeData && item.barcodeData.toLowerCase().includes(query))
-      );
-      setFilteredItems(filtered);
-    }
-  }, [approvedItems, searchQuery]);
-
   const fetchApprovedItems = async () => {
     setLoading(true);
     try {
@@ -84,7 +65,6 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       // Sort by approval date (newest first)
       items.sort((a, b) => (b.approvedAt?.getTime() || 0) - (a.approvedAt?.getTime() || 0));
       setApprovedItems(items);
-      setFilteredItems(items);
     } catch (error) {
       console.error('Error fetching approved items:', error);
     } finally {
@@ -105,7 +85,7 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
   };
 
   const selectAllItems = () => {
-    const allIds = new Set(filteredItems.map(item => item.id));
+    const allIds = new Set(approvedItems.map(item => item.id));
     setSelectedItems(allIds);
     setShowBulkActions(true);
   };
@@ -205,14 +185,13 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       !processedItems.some(processed => processed.id === item.id)
     ));
     
-    // Clear selection and close all modals
+    // Clear selection and close modal
     clearSelection();
     setShowBulkMakeLiveProgressModal(false);
     
-    // Close the main modal after a brief delay to allow processing to complete
-    setTimeout(() => {
-      onClose();
-    }, 500);
+    // Show success message
+    setModalMessage(`${processedItems.length} item${processedItems.length > 1 ? 's are' : ' is'} now live for customers!`);
+    setShowSuccessModal(true);
   };
 
   const confirmBulkMakeLive = async () => {
@@ -268,14 +247,13 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       !processedItems.some(processed => processed.id === item.id)
     ));
     
-    // Clear selection and close all modals
+    // Clear selection and close modal
     clearSelection();
     setShowBulkSendBackProgressModal(false);
     
-    // Close the main modal after a brief delay to allow processing to complete
-    setTimeout(() => {
-      onClose();
-    }, 500);
+    // Show success message
+    setModalMessage(`${processedItems.length} item${processedItems.length > 1 ? 's have' : ' has'} been sent back to pending!`);
+    setShowSuccessModal(true);
   };
 
   // Print barcode from stored image
@@ -374,10 +352,10 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
       <div className="mobile-admin-modal-content">
         <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-center">
-            <div className="flex-1">
+            <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Approved Items</h2>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                Employee preview before going live ({filteredItems.length} items)
+                Employee preview before going live
               </p>
             </div>
             <button
@@ -392,36 +370,6 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
         </div>
 
         <div className="mobile-admin-modal-body">
-          {/* Search Bar */}
-          {!loading && approvedItems.length > 0 && (
-            <div className="mb-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  placeholder="Search by title, brand, category, or barcode..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  >
-                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
@@ -443,35 +391,35 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={selectedItems.size === filteredItems.length && filteredItems.length > 0 ? clearSelection : selectAllItems}
+                      onClick={selectedItems.size === approvedItems.length ? clearSelection : selectAllItems}
                       className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       <div className={`w-4 h-4 border-2 rounded flex items-center justify-center ${
-                        selectedItems.size === filteredItems.length && filteredItems.length > 0
+                        selectedItems.size === approvedItems.length 
                           ? 'bg-orange-500 border-orange-500' 
                           : selectedItems.size > 0 
                             ? 'bg-orange-200 border-orange-400' 
                             : 'border-gray-300'
                       }`}>
-                        {selectedItems.size === filteredItems.length && filteredItems.length > 0 && (
+                        {selectedItems.size === approvedItems.length && (
                           <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                           </svg>
                         )}
-                        {selectedItems.size > 0 && selectedItems.size < filteredItems.length && (
+                        {selectedItems.size > 0 && selectedItems.size < approvedItems.length && (
                           <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                         )}
                       </div>
                       <span>
                         {selectedItems.size === 0 ? 'Select All' : 
-                         selectedItems.size === filteredItems.length ? 'Deselect All' : 
+                         selectedItems.size === approvedItems.length ? 'Deselect All' : 
                          `${selectedItems.size} Selected`}
                       </span>
                     </button>
                     
                     {selectedItems.size > 0 && (
                       <span className="text-sm text-gray-600">
-                        {selectedItems.size} of {filteredItems.length} items selected
+                        {selectedItems.size} of {approvedItems.length} items selected
                       </span>
                     )}
                   </div>
@@ -504,7 +452,7 @@ const ApprovedItemsModal: React.FC<ApprovedItemsModalProps> = ({ isOpen, onClose
                 </div>
               </div>
               <div className="space-y-4 sm:space-y-6">
-                {filteredItems.map((item) => {
+                {approvedItems.map((item) => {
                   const timeInfo = calculateTimeRemaining(item.approvedAt!);
                   return (
                     <div 
