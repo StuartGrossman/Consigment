@@ -1040,8 +1040,8 @@ const Home: React.FC = () => {
                             
                             {isAdmin && (
                                 <>
-                                    {/* Individual buttons for large screens (1100px+) */}
-                                    <div className="hidden xl:flex xl:gap-4">
+                                    {/* Individual buttons for all screens (640px+) */}
+                                    <div className="hidden sm:flex sm:gap-4">
                                         <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
@@ -1096,100 +1096,18 @@ const Home: React.FC = () => {
                                                 </span>
                                             )}
                                         </button>
-                                    </div>
-
-                                    {/* Dropdown for medium screens (640px-1100px) */}
-                                    <div ref={adminMenuRef} className="relative hidden sm:block xl:hidden">
                                         <button
-                                            onClick={() => setAdminMenuOpen(!adminMenuOpen)}
+                                            onClick={() => setIsRewardsPointsDashboardOpen(true)}
                                             className="desktop-button-secondary relative flex items-center justify-center p-2"
-                                            title="Admin Actions"
+                                            title="Rewards Points Dashboard"
                                         >
                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                                             </svg>
-                                            {(notificationCounts.pending > 0 || notificationCounts.approved > 0) && (
-                                                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
-                                                    {Math.min(99, notificationCounts.pending + notificationCounts.approved)}
-                                                </span>
-                                            )}
                                         </button>
-
-                                        {/* Actions Dropdown Menu */}
-                                        {adminMenuOpen && (
-                                            <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
-                                                <div className="py-1">
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsPOSModalOpen(true);
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                            </svg>
-                                                            <span>Scan Items (POS)</span>
-                                                        </div>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            handleAdminModal();
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                                                            </svg>
-                                                            <span>Pending Items</span>
-                                                        </div>
-                                                        {notificationCounts.pending > 0 && (
-                                                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                                                {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            handleApprovedModal();
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m4.5 12.75 6 6 9-13.5" />
-                                                            </svg>
-                                                            <span>Approved Items</span>
-                                                        </div>
-                                                        {notificationCounts.approved > 0 && (
-                                                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
-                                                                {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
-                                                            </span>
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            setIsRewardsPointsDashboardOpen(true);
-                                                            setAdminMenuOpen(false);
-                                                        }}
-                                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center justify-between"
-                                                    >
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                            </svg>
-                                                            <span>Rewards Points</span>
-                                                        </div>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
+
+
 
                                     {/* Mobile/small screens - show icons only */}
                                     <div className="flex gap-3 sm:hidden">
@@ -1232,6 +1150,15 @@ const Home: React.FC = () => {
                                                     {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
                                                 </span>
                                             )}
+                                        </button>
+                                        <button
+                                            onClick={() => setIsRewardsPointsDashboardOpen(true)}
+                                            className="desktop-button-secondary relative p-2"
+                                            title="Rewards Points Dashboard"
+                                        >
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                                            </svg>
                                         </button>
                                     </div>
                                 </>

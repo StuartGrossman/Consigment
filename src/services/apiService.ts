@@ -9,9 +9,9 @@ const getApiBaseUrl = () => {
         return import.meta.env.VITE_API_BASE_URL;
     }
     
-    // Development - use localhost
+    // Development - use localhost with correct port
     if (import.meta.env.DEV) {
-        return 'http://localhost:8080';
+        return 'http://localhost:8983';
     }
     
     // Production - check if we're on Firebase hosting
@@ -1101,10 +1101,110 @@ class ApiService {
         total_carts: number;
     }> {
         try {
-            const response = await this.makeRequest('/api/shared-cart/user-carts');
+            const response = await this.makeRequest('/api/shared-cart/my-carts');
             return await response.json();
         } catch (error) {
             console.error('❌ Failed to get user shared carts:', error);
+            throw error;
+        }
+    }
+
+    async getActiveCategories(): Promise<Category[]> {
+        try {
+            // For now, return hardcoded categories since we don't have a backend endpoint
+            // This method exists to satisfy the useCategories hook
+            return [
+                {
+                    id: 'hiking',
+                    name: 'Hiking',
+                    description: 'Hiking gear and accessories',
+                    icon: '🥾',
+                    bannerImage: '/mountain-trail.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'climbing',
+                    name: 'Climbing',
+                    description: 'Rock climbing and mountaineering equipment',
+                    icon: '🧗',
+                    bannerImage: '/alpine-climbing.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'camping',
+                    name: 'Camping',
+                    description: 'Camping gear and outdoor equipment',
+                    icon: '⛺',
+                    bannerImage: '/campsite-evening.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'skiing',
+                    name: 'Skiing',
+                    description: 'Ski equipment and winter gear',
+                    icon: '⛷️',
+                    bannerImage: '/skiing-powder.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'snowboarding',
+                    name: 'Snowboarding',
+                    description: 'Snowboard equipment and accessories',
+                    icon: '🏂',
+                    bannerImage: '/snowboard-jump.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'water-sports',
+                    name: 'Water Sports',
+                    description: 'Kayaking, rafting, and water gear',
+                    icon: '🚣',
+                    bannerImage: '/whitewater-rafting.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'cycling',
+                    name: 'Cycling',
+                    description: 'Mountain bikes and cycling gear',
+                    icon: '🚵',
+                    bannerImage: '/mountain-biking.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'apparel',
+                    name: 'Apparel',
+                    description: 'Outdoor clothing and accessories',
+                    icon: '👕',
+                    bannerImage: '/outdoor-clothing.jpg',
+                    attributes: [],
+                    isActive: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+        } catch (error) {
+            console.error('❌ Failed to get categories:', error);
             throw error;
         }
     }

@@ -19,6 +19,8 @@ interface AdminModalProps {
 const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataChanged }) => {
   const { categories } = useCategories(true); // Only get active categories
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
+  const [filteredItems, setFilteredItems] = useState<ConsignmentItem[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
   
@@ -49,6 +51,24 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
       fetchPendingItems();
     }
   }, [isOpen, user]);
+
+  // Filter items based on search query
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredItems(pendingItems);
+    } else {
+      const query = searchQuery.toLowerCase();
+      const filtered = pendingItems.filter(item =>
+        item.title.toLowerCase().includes(query) ||
+        item.description.toLowerCase().includes(query) ||
+        (item.brand && item.brand.toLowerCase().includes(query)) ||
+        (item.category && item.category.toLowerCase().includes(query)) ||
+        (item.sellerName && item.sellerName.toLowerCase().includes(query)) ||
+        (item.barcodeData && item.barcodeData.toLowerCase().includes(query))
+      );
+      setFilteredItems(filtered);
+    }
+  }, [pendingItems, searchQuery]);
 
   const fetchPendingItems = async () => {
     setLoading(true);
@@ -96,7 +116,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
   };
 
   const selectAllItems = () => {
-    const allIds = new Set(pendingItems.map(item => item.id));
+    const allIds = new Set(filteredItems.map(item => item.id));
     setSelectedItems(allIds);
     setShowBulkActions(true);
   };
@@ -273,7 +293,12 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
       <div className="mobile-admin-modal-content">
         <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-center">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Manage Pending Items</h2>
+            <div className="flex-1">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800">Manage Pending Items</h2>
+              <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                Review and approve items for consignment ({filteredItems.length} items)
+              </p>
+            </div>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
@@ -283,57 +308,42 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
               </svg>
             </button>
           </div>
-          
-
-          {/* Bulk Actions Header */}
-          {pendingItems.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-2 items-center">
-              <button
-                onClick={selectedItems.size === pendingItems.length ? clearSelection : selectAllItems}
-                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                {selectedItems.size === pendingItems.length ? 'Deselect All' : 'Select All'}
-              </button>
-              
-              {selectedItems.size > 0 && (
-                <span className="text-sm text-gray-600">
-                  {selectedItems.size} item{selectedItems.size > 1 ? 's' : ''} selected
-                </span>
-              )}
-            </div>
-          )}
-          
-          {/* Bulk Action Buttons */}
-          {showBulkActions && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                onClick={handleBulkApprove}
-                disabled={processingItemId === 'bulk' || isActionDisabled('bulk-approve')}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                {processingItemId === 'bulk' ? 'Processing...' : `Approve ${selectedItems.size} Item${selectedItems.size > 1 ? 's' : ''}`}
-              </button>
-              <button
-                onClick={handleBulkReject}
-                disabled={processingItemId === 'bulk' || isActionDisabled('bulk-reject')}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                {`Reject ${selectedItems.size} Item${selectedItems.size > 1 ? 's' : ''}`}
-              </button>
-              <button
-                onClick={clearSelection}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="mobile-admin-modal-body">
+          {/* Search Bar */}
+          {!loading && pendingItems.length > 0 && (
+            <div className="mb-4">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Search by title, brand, category, seller, or barcode..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          
           {loading ? (
             <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-500"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
             </div>
           ) : pendingItems.length === 0 ? (
             <div className="text-center py-12">
@@ -346,131 +356,211 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
               <p className="text-gray-400 text-sm mt-2">All items have been processed!</p>
             </div>
           ) : (
-            <div className="space-y-4 sm:space-y-6">
-              {pendingItems.map((item) => (
-                <div 
-                  key={item.id} 
-                  className={`mobile-admin-item-card cursor-pointer transition-all duration-200 ${
-                    selectedItems.has(item.id) 
-                      ? 'ring-2 ring-orange-500 bg-orange-50 border-orange-200' 
-                      : 'hover:bg-gray-50 hover:border-gray-300'
-                  }`}
-                  onClick={() => toggleSelectItem(item.id)}
-                >
-                  <div className="mobile-admin-item-layout">
-                    {/* Selection Checkbox */}
-                    <div className="flex items-start">
-                      <input
-                        type="checkbox"
-                        checked={selectedItems.has(item.id)}
-                        onChange={(e) => e.stopPropagation()}
-                        className="mt-2 h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded pointer-events-none"
-                      />
-                    </div>
-                    
-                    {/* Images */}
-                    <div className="mobile-admin-item-image">
-                      {(item.images && item.images.length > 0) ? (
-                        <div className="relative">
-                          <img
-                            src={item.images[0]}
-                            alt={item.title}
-                            className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg"
-                          />
-                          {item.images.length > 1 && (
-                            <div className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
-                              +{item.images.length - 1}
-                            </div>
+            <>
+              {/* Bulk Selection Controls - Sticky at Top */}
+              {filteredItems.length > 0 && (
+                <div className="sticky top-0 z-10 mb-4 p-3 bg-gray-50 rounded-lg border-b border-gray-200 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={selectedItems.size === filteredItems.length && filteredItems.length > 0 ? clearSelection : selectAllItems}
+                        className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className={`w-4 h-4 border-2 rounded flex items-center justify-center ${
+                          selectedItems.size === filteredItems.length && filteredItems.length > 0
+                            ? 'bg-orange-500 border-orange-500' 
+                            : selectedItems.size > 0 
+                              ? 'bg-orange-200 border-orange-400' 
+                              : 'border-gray-300'
+                        }`}>
+                          {selectedItems.size === filteredItems.length && filteredItems.length > 0 && (
+                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                          {selectedItems.size > 0 && selectedItems.size < filteredItems.length && (
+                            <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
                           )}
                         </div>
-                      ) : (
-                        <div className="w-32 h-32 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <div className="text-center">
-                            <svg className="w-8 h-8 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <p className="text-xs text-gray-500">No Image</p>
-                          </div>
-                        </div>
+                        <span>
+                          {selectedItems.size === 0 ? 'Select All' : 
+                           selectedItems.size === filteredItems.length ? 'Deselect All' : 
+                           `${selectedItems.size} Selected`}
+                        </span>
+                      </button>
+                      
+                      {selectedItems.size > 0 && (
+                        <span className="text-sm text-gray-600">
+                          {selectedItems.size} of {filteredItems.length} items selected
+                        </span>
                       )}
                     </div>
-
-                    {/* Content */}
-                    <div className="mobile-admin-item-content">
-                      <h3 className="mobile-admin-item-title">{item.title}</h3>
-                      <p className="mobile-admin-item-description">{item.description}</p>
+                    
+                    {/* Bulk Action Buttons */}
+                    {showBulkActions && (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={handleBulkApprove}
+                          disabled={processingItemId === 'bulk' || isActionDisabled('bulk-approve')}
+                          className="px-3 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        >
+                          {processingItemId === 'bulk' ? 'Processing...' : `📄 Approve ${selectedItems.size} Item${selectedItems.size > 1 ? 's' : ''}`}
+                        </button>
+                        <button
+                          onClick={handleBulkReject}
+                          disabled={processingItemId === 'bulk' || isActionDisabled('bulk-reject')}
+                          className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                        >
+                          {`❌ Reject ${selectedItems.size} Item${selectedItems.size > 1 ? 's' : ''}`}
+                        </button>
+                        <button
+                          onClick={clearSelection}
+                          className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4 sm:space-y-6">
+                {filteredItems.map((item) => (
+                  <div 
+                    key={item.id} 
+                    className={`mobile-admin-item-card relative transition-all duration-200 cursor-pointer hover:shadow-md ${
+                      selectedItems.has(item.id) 
+                        ? 'ring-2 ring-orange-500 bg-orange-50 border-orange-200' 
+                        : 'hover:bg-gray-50 hover:border-gray-300 hover:ring-1 hover:ring-orange-300'
+                    }`}
+                    onClick={() => toggleSelectItem(item.id)}
+                  >
+                    <div className="mobile-admin-item-layout">
+                      {/* Selection Checkbox */}
+                      <div className="absolute top-3 left-3 z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleSelectItem(item.id);
+                          }}
+                          className={`w-6 h-6 border-2 rounded flex items-center justify-center transition-colors ${
+                            selectedItems.has(item.id)
+                              ? 'bg-orange-500 border-orange-500'
+                              : 'bg-white border-gray-300 hover:border-orange-400'
+                          }`}
+                        >
+                          {selectedItems.has(item.id) && (
+                            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
                       
-                      <div className="mobile-admin-item-details">
-                        <div>
-                          <span className="font-medium text-gray-900">${item.price}</span>
-                        </div>
-                        <div>
-                          <span className="text-gray-500">By: </span>
-                          <span className="text-gray-700">{item.sellerName}</span>
-                        </div>
-                        {item.category && (
-                          <div>
-                            <span className="text-gray-500">Category: </span>
-                            <span className="text-gray-700">{item.category}</span>
+                      {/* Images */}
+                      <div className="mobile-admin-item-image">
+                        {(item.images && item.images.length > 0) ? (
+                          <div className="relative">
+                            <img
+                              src={item.images[0]}
+                              alt={item.title}
+                              className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-lg"
+                            />
+                            {item.images.length > 1 && (
+                              <div className="absolute bottom-1 right-1 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-xs">
+                                +{item.images.length - 1}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-32 h-32 bg-gray-200 rounded-lg flex items-center justify-center">
+                            <div className="text-center">
+                              <svg className="w-8 h-8 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              <p className="text-xs text-gray-500">No Image</p>
+                            </div>
                           </div>
                         )}
-                        {item.size && (
-                          <div>
-                            <span className="text-gray-500">Size: </span>
-                            <span className="text-gray-700">{item.size}</span>
-                          </div>
-                        )}
-                        {item.brand && (
-                          <div>
-                            <span className="text-gray-500">Brand: </span>
-                            <span className="text-gray-700">{item.brand}</span>
-                          </div>
-                        )}
-                        <div>
-                          <span className="text-gray-500">Submitted: </span>
-                          <span className="text-gray-700">{item.createdAt.toLocaleDateString()}</span>
-                        </div>
                       </div>
 
-                      <div className="mobile-admin-item-actions">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(item);
-                          }}
-                          disabled={processingItemId === item.id || isActionDisabled(`edit-${item.id}`)}
-                          className="mobile-admin-button mobile-admin-button-edit disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {isActionProcessing(`edit-${item.id}`) ? 'Opening...' : 'Edit Details'}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleApproveClick(item);
-                          }}
-                          disabled={processingItemId === item.id || isActionDisabled(`approve-${item.id}`)}
-                          className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {processingItemId === item.id ? 'Processing...' : 
-                           isActionProcessing(`approve-${item.id}`) ? 'Opening...' : 'Approve Item'}
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRejectClick(item);
-                          }}
-                          disabled={processingItemId === item.id || isActionDisabled(`reject-${item.id}`)}
-                          className="mobile-admin-button mobile-admin-button-reject disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {processingItemId === item.id ? 'Processing...' : 
-                           isActionProcessing(`reject-${item.id}`) ? 'Opening...' : 'Reject Item'}
-                        </button>
+                      {/* Content */}
+                      <div className="mobile-admin-item-content">
+                        <h3 className="mobile-admin-item-title">{item.title}</h3>
+                        <p className="mobile-admin-item-description">{item.description}</p>
+                        
+                        <div className="mobile-admin-item-details">
+                          <div>
+                            <span className="font-medium text-gray-900">${item.price}</span>
+                          </div>
+                          <div>
+                            <span className="text-gray-500">By: </span>
+                            <span className="text-gray-700">{item.sellerName}</span>
+                          </div>
+                          {item.category && (
+                            <div>
+                              <span className="text-gray-500">Category: </span>
+                              <span className="text-gray-700">{item.category}</span>
+                            </div>
+                          )}
+                          {item.size && (
+                            <div>
+                              <span className="text-gray-500">Size: </span>
+                              <span className="text-gray-700">{item.size}</span>
+                            </div>
+                          )}
+                          {item.brand && (
+                            <div>
+                              <span className="text-gray-500">Brand: </span>
+                              <span className="text-gray-700">{item.brand}</span>
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-gray-500">Submitted: </span>
+                            <span className="text-gray-700">{item.createdAt.toLocaleDateString()}</span>
+                          </div>
+                        </div>
+
+                        <div className="mobile-admin-item-actions">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEdit(item);
+                            }}
+                            disabled={processingItemId === item.id || isActionDisabled(`edit-${item.id}`)}
+                            className="mobile-admin-button mobile-admin-button-edit disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isActionProcessing(`edit-${item.id}`) ? 'Opening...' : 'Edit Details'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleApproveClick(item);
+                            }}
+                            disabled={processingItemId === item.id || isActionDisabled(`approve-${item.id}`)}
+                            className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {processingItemId === item.id ? 'Processing...' : 
+                             isActionProcessing(`approve-${item.id}`) ? 'Opening...' : 'Approve Item'}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRejectClick(item);
+                            }}
+                            disabled={processingItemId === item.id || isActionDisabled(`reject-${item.id}`)}
+                            className="mobile-admin-button mobile-admin-button-reject disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {processingItemId === item.id ? 'Processing...' : 
+                             isActionProcessing(`reject-${item.id}`) ? 'Opening...' : 'Reject Item'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
