@@ -11,7 +11,7 @@ const getApiBaseUrl = () => {
     
     // Development - use localhost
     if (import.meta.env.DEV) {
-        return 'http://localhost:8001';
+        return 'http://localhost:2394';
     }
     
     // Production - check if we're on Firebase hosting
@@ -1264,7 +1264,7 @@ export interface Category {
   description: string;
   icon: string;
   bannerImage: string;
-  attributes: any[];
+  attributes: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

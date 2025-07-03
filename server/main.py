@@ -43,6 +43,7 @@ app.add_middleware(
         "http://localhost:7123",  # Frontend port
         "http://localhost:7359",  # Previous app port
         "http://localhost:9498",  # Current app port
+        "http://localhost:9999",  # Frontend port for this session
         "https://consignment-store-4a564.web.app",
         "https://consignment-store-4a564.firebaseapp.com"
     ],
