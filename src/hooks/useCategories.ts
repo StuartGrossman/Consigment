@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { apiService } from '../services/apiService';
-import { Category } from '../types';
+import { apiService, Category } from '../services/apiService';
 
 export const useCategories = (activeOnly: boolean = false) => {
   const [categories, setCategories] = useState<Category[]>([]);
