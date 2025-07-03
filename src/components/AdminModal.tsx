@@ -16,12 +16,8 @@ interface AdminModalProps {
   onDataChanged?: () => void;
 }
 
-<<<<<<< HEAD
-const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
-  const { categories } = useCategories(true); // Only get active categories
-=======
 const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataChanged }) => {
->>>>>>> feature-functionality
+  const { categories } = useCategories(true); // Only get active categories
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);
