@@ -15,6 +15,7 @@ import ApplicationTestModal from './ApplicationTestModal';
 import SoldItemsModal from './SoldItemsModal';
 import LoginModal from './LoginModal';
 import CategoryDashboard from './CategoryDashboard';
+import CategoryManagement from './CategoryManagement';
 import Dashboard from './Dashboard';
 import ItemDetailModal from './ItemDetailModal';
 import CartModal from './CartModal';
@@ -86,6 +87,7 @@ const Home: React.FC = () => {
     const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [isCategoryDashboardOpen, setIsCategoryDashboardOpen] = useState(false);
+    const [isCategoryManagementOpen, setIsCategoryManagementOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
     const [showActionsPage, setShowActionsPage] = useState(false);
@@ -479,6 +481,14 @@ const Home: React.FC = () => {
 
     const handleCategoryDashboardClose = () => {
         setIsCategoryDashboardOpen(false);
+    };
+
+    const handleCategoryManagement = () => {
+        setIsCategoryManagementOpen(true);
+    };
+
+    const handleCategoryManagementClose = () => {
+        setIsCategoryManagementOpen(false);
     };
 
 
@@ -1502,15 +1512,24 @@ const Home: React.FC = () => {
                                                         >
                                                             🧪 Application Test & Performance
                                                         </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                handleCategoryDashboard();
-                                                                setUserMenuOpen(false);
-                                                            }}
-                                                            className="mobile-user-menu-item mobile-user-menu-item-default"
-                                                        >
-                                                            🏷️ Category Dashboard
-                                                        </button>
+                                                                                                <button
+                                            onClick={() => {
+                                                handleCategoryDashboard();
+                                                setUserMenuOpen(false);
+                                            }}
+                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                        >
+                                            🏷️ Category Dashboard
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                handleCategoryManagement();
+                                                setUserMenuOpen(false);
+                                            }}
+                                            className="mobile-user-menu-item mobile-user-menu-item-default"
+                                        >
+                                            🔧 Category Management
+                                        </button>
                                                     </>
                                                 )}
                                             
@@ -2101,6 +2120,11 @@ const Home: React.FC = () => {
                     <CategoryDashboard 
                         isOpen={isCategoryDashboardOpen} 
                         onClose={handleCategoryDashboardClose}
+                    />
+
+                    <CategoryManagement 
+                        isOpen={isCategoryManagementOpen} 
+                        onClose={handleCategoryManagementClose}
                     />
 
                 </>

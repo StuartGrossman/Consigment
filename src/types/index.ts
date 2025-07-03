@@ -158,4 +158,22 @@ export interface Category {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CreateCategoryData {
+  name: string;
+  description: string;
+  icon: string;
+  bannerImage: string;
+  attributes: string[];
+  isActive: boolean;
+}
+
+export interface UpdateCategoryData {
+  name?: string;
+  description?: string;
+  icon?: string;
+  bannerImage?: string;
+  attributes?: string[];
+  isActive?: boolean;
 } 

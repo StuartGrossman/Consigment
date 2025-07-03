@@ -1,6 +1,7 @@
 import { auth, db } from '../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { logUserAction } from './firebaseService';
+import { Category, CreateCategoryData, UpdateCategoryData } from '../types';
 
 // Detect environment and use appropriate API URL
 const getApiBaseUrl = () => {
@@ -60,33 +61,7 @@ interface PaymentResponse {
     message: string;
 }
 
-// Category Management Types
-export interface Category {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  bannerImage: string;
-  attributes: string[];
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  createdBy?: string;
-  updatedBy?: string;
-}
 
-export interface CreateCategoryData {
-  name: string;
-  description?: string;
-  icon: string;
-  bannerImage?: string;
-  attributes?: string[];
-  isActive?: boolean;
-}
-
-export interface UpdateCategoryData extends Partial<CreateCategoryData> {
-  // All fields are optional for updates
-}
 
 class ApiService {
     private async getAuthToken(): Promise<string> {
@@ -1140,118 +1115,216 @@ class ApiService {
         }
     }
 
+    // Private method for hardcoded fallback categories
+    private getHardcodedCategories(): Category[] {
+        return [
+            {
+                id: 'hiking',
+                name: 'Hiking',
+                description: 'Hiking gear and accessories',
+                icon: '🥾',
+                bannerImage: '/mountain-trail.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'climbing',
+                name: 'Climbing',
+                description: 'Rock climbing and mountaineering equipment',
+                icon: '🧗',
+                bannerImage: '/alpine-climbing.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'camping',
+                name: 'Camping',
+                description: 'Camping gear and outdoor equipment',
+                icon: '⛺',
+                bannerImage: '/campsite-evening.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'skiing',
+                name: 'Skiing',
+                description: 'Ski equipment and winter gear',
+                icon: '⛷️',
+                bannerImage: '/skiing-powder.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'snowboarding',
+                name: 'Snowboarding',
+                description: 'Snowboard equipment and accessories',
+                icon: '🏂',
+                bannerImage: '/snowboard-jump.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'water-sports',
+                name: 'Water Sports',
+                description: 'Kayaking, rafting, and water gear',
+                icon: '🚣',
+                bannerImage: '/whitewater-rafting.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'cycling',
+                name: 'Cycling',
+                description: 'Mountain bikes and cycling gear',
+                icon: '🚵',
+                bannerImage: '/mountain-biking.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            },
+            {
+                id: 'apparel',
+                name: 'Apparel',
+                description: 'Outdoor clothing and accessories',
+                icon: '👕',
+                bannerImage: '/outdoor-clothing.jpg',
+                attributes: [],
+                isActive: true,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            }
+        ];
+    }
+
+    // Category Management API Functions with fallback
+    async getCategories(): Promise<Category[]> {
+        try {
+            const response = await this.makeRequest('/api/categories', {
+                method: 'GET'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.categories;
+            }
+            throw new Error(result.message || 'Failed to fetch categories');
+        } catch (error) {
+            console.warn('Backend categories unavailable, using hardcoded fallback:', error);
+            return this.getHardcodedCategories();
+        }
+    }
+
     async getActiveCategories(): Promise<Category[]> {
         try {
-            // For now, return hardcoded categories since we don't have a backend endpoint
-            // This method exists to satisfy the useCategories hook
-            return [
-                {
-                    id: 'hiking',
-                    name: 'Hiking',
-                    description: 'Hiking gear and accessories',
-                    icon: '🥾',
-                    bannerImage: '/mountain-trail.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'climbing',
-                    name: 'Climbing',
-                    description: 'Rock climbing and mountaineering equipment',
-                    icon: '🧗',
-                    bannerImage: '/alpine-climbing.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'camping',
-                    name: 'Camping',
-                    description: 'Camping gear and outdoor equipment',
-                    icon: '⛺',
-                    bannerImage: '/campsite-evening.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'skiing',
-                    name: 'Skiing',
-                    description: 'Ski equipment and winter gear',
-                    icon: '⛷️',
-                    bannerImage: '/skiing-powder.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'snowboarding',
-                    name: 'Snowboarding',
-                    description: 'Snowboard equipment and accessories',
-                    icon: '🏂',
-                    bannerImage: '/snowboard-jump.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'water-sports',
-                    name: 'Water Sports',
-                    description: 'Kayaking, rafting, and water gear',
-                    icon: '🚣',
-                    bannerImage: '/whitewater-rafting.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'cycling',
-                    name: 'Cycling',
-                    description: 'Mountain bikes and cycling gear',
-                    icon: '🚵',
-                    bannerImage: '/mountain-biking.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'apparel',
-                    name: 'Apparel',
-                    description: 'Outdoor clothing and accessories',
-                    icon: '👕',
-                    bannerImage: '/outdoor-clothing.jpg',
-                    attributes: [],
-                    isActive: true,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }
-            ];
+            const response = await this.makeRequest('/api/categories/active', {
+                method: 'GET'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.categories;
+            }
+            throw new Error(result.message || 'Failed to fetch active categories');
         } catch (error) {
-            console.error('❌ Failed to get categories:', error);
+            console.warn('Backend categories unavailable, using hardcoded fallback:', error);
+            return this.getHardcodedCategories();
+        }
+    }
+
+    async createCategory(categoryData: CreateCategoryData): Promise<Category> {
+        try {
+            const response = await this.makeRequest('/api/categories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(categoryData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.category;
+            }
+            throw new Error(result.message || 'Failed to create category');
+        } catch (error) {
+            console.error('Error creating category:', error);
             throw error;
+        }
+    }
+
+    async updateCategory(categoryId: string, updateData: UpdateCategoryData): Promise<Category> {
+        try {
+            const response = await this.makeRequest(`/api/categories/${categoryId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(updateData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.category;
+            }
+            throw new Error(result.message || 'Failed to update category');
+        } catch (error) {
+            console.error('Error updating category:', error);
+            throw error;
+        }
+    }
+
+    async deleteCategory(categoryId: string): Promise<void> {
+        try {
+            const response = await this.makeRequest(`/api/categories/${categoryId}`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.message || 'Failed to delete category');
+            }
+        } catch (error) {
+            console.error('Error deleting category:', error);
+            throw error;
+        }
+    }
+
+    async initializeDefaultCategories(): Promise<Category[]> {
+        try {
+            const response = await this.makeRequest('/api/categories/initialize-default', {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                return result.categories || [];
+            }
+            throw new Error(result.message || 'Failed to initialize default categories');
+        } catch (error) {
+            console.warn('Could not initialize backend categories, using hardcoded fallback:', error);
+            return this.getHardcodedCategories();
         }
     }
 }
 
 export const apiService = new ApiService();
-export interface Category {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  bannerImage: string;
-  attributes: string[];
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export type { PaymentRequest, PaymentResponse, CartItem, CustomerInfo }; 
