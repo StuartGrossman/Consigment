@@ -989,7 +989,7 @@ const Home: React.FC = () => {
                         </div>
                         
                                 <div className="desktop-nav-actions">
-                                    <div className="desktop-nav-buttons">
+                                    <div className="desktop-nav-buttons gap-4">
                             <button
                                 onClick={handleAddItem}
                                             className="desktop-button-primary flex items-center justify-center p-2"
@@ -1041,7 +1041,7 @@ const Home: React.FC = () => {
                             {isAdmin && (
                                 <>
                                     {/* Individual buttons for large screens (1100px+) */}
-                                    <div className="hidden xl:flex xl:gap-2">
+                                    <div className="hidden xl:flex xl:gap-4">
                                         <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
@@ -1070,9 +1070,12 @@ const Home: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={handleAdminModal}
-                                            className="desktop-button-secondary relative"
+                                            className="desktop-button-secondary relative flex items-center justify-center p-2"
+                                            title="Pending Items"
                                         >
-                                            <span>Pending Items</span>
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                            </svg>
                                             {notificationCounts.pending > 0 && (
                                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                     {notificationCounts.pending > 9 ? '9+' : notificationCounts.pending}
@@ -1081,9 +1084,12 @@ const Home: React.FC = () => {
                                         </button>
                                         <button
                                             onClick={handleApprovedModal}
-                                            className="desktop-button-secondary relative"
+                                            className="desktop-button-secondary relative flex items-center justify-center p-2"
+                                            title="Approved Items"
                                         >
-                                            <span>Approved Items</span>
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m4.5 12.75 6 6 9-13.5" />
+                                            </svg>
                                             {notificationCounts.approved > 0 && (
                                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
                                                     {notificationCounts.approved > 9 ? '9+' : notificationCounts.approved}
@@ -1096,11 +1102,11 @@ const Home: React.FC = () => {
                                     <div ref={adminMenuRef} className="relative hidden sm:block xl:hidden">
                                         <button
                                             onClick={() => setAdminMenuOpen(!adminMenuOpen)}
-                                            className="desktop-button-secondary relative flex items-center gap-1"
+                                            className="desktop-button-secondary relative flex items-center justify-center p-2"
+                                            title="Admin Actions"
                                         >
-                                            <span>Actions</span>
-                                            <svg className={`w-4 h-4 transition-transform ${adminMenuOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
                                             </svg>
                                             {(notificationCounts.pending > 0 || notificationCounts.approved > 0) && (
                                                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
@@ -1186,20 +1192,8 @@ const Home: React.FC = () => {
                                     </div>
 
                                     {/* Mobile/small screens - show icons only */}
-                                    <div className="flex gap-1 sm:hidden">
-                                        {/* Mobile POS Scanner Button */}
-                                        <button
-                                            onClick={() => setIsMobileScannerOpen(true)}
-                                            className="p-2 text-green-600 hover:text-green-800 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-green-50 hover:bg-green-100 relative"
-                                            title="📱 Mobile POS Scanner"
-                                        >
-                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-                                            </svg>
-                                            {/* Mobile indicator badge */}
-                                            <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold">📱</span>
-                                        </button>
-                                        
+                                    <div className="flex gap-3 sm:hidden">
+
                                         {/* Desktop POS Button */}
                                         <button
                                             onClick={() => setIsPOSModalOpen(true)}
@@ -1244,7 +1238,7 @@ const Home: React.FC = () => {
                             )}
                                     </div>
                             
-                                    <div className="desktop-nav-icons">
+                                    <div className="desktop-nav-icons gap-4">
                             {/* Bookmarks Icon - Only for non-admin users */}
                             {!isAdmin && (
                                 <button
