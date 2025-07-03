@@ -146,4 +146,16 @@ export interface RefundRecord {
   originalBuyerName?: string;
   sellerName: string;
   sellerId: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  bannerImage: string;
+  attributes: any[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 } 

@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { ConsignmentItem, AuthUser } from '../types';
+import { ConsignmentItem, AuthUser, Category } from '../types';
 import BarcodeGenerationModal from './BarcodeGenerationModal';
 import BulkBarcodeGenerationModal from './BulkBarcodeGenerationModal';
 import { apiService } from '../services/apiService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 import { useCategories } from '../hooks/useCategories';
-import { Category } from '../services/apiService';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -16,12 +15,8 @@ interface AdminModalProps {
   onDataChanged?: () => void;
 }
 
-<<<<<<< HEAD
-const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user }) => {
-  const { categories } = useCategories(true); // Only get active categories
-=======
 const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataChanged }) => {
->>>>>>> feature-functionality
+  const { categories } = useCategories(true); // Only get active categories
   const [pendingItems, setPendingItems] = useState<ConsignmentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingItemId, setProcessingItemId] = useState<string | null>(null);

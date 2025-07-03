@@ -1108,6 +1108,38 @@ class ApiService {
             throw error;
         }
     }
+
+    async getCategories(): Promise<any[]> {
+        try {
+            const response = await this.makeRequest('/api/categories');
+            return await response.json();
+        } catch (error) {
+            console.error('❌ Failed to get categories:', error);
+            // Return fallback categories
+            return [
+                { id: 'climbing', name: 'Climbing', description: 'Rock climbing and bouldering gear', icon: '🧗', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'skiing', name: 'Skiing', description: 'Alpine and cross-country skiing equipment', icon: '⛷️', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'hiking', name: 'Hiking', description: 'Trail and backpacking gear', icon: '🥾', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'camping', name: 'Camping', description: 'Camping and outdoor shelter equipment', icon: '⛺', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'mountaineering', name: 'Mountaineering', description: 'High-altitude mountaineering gear', icon: '🏔️', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'snowboarding', name: 'Snowboarding', description: 'Snowboarding equipment and gear', icon: '🏂', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'cycling', name: 'Cycling', description: 'Mountain biking and cycling gear', icon: '🚵', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'water-sports', name: 'Water Sports', description: 'Water sports and rafting equipment', icon: '🌊', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'apparel', name: 'Apparel', description: 'Outdoor clothing and apparel', icon: '👕', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' },
+                { id: 'footwear', name: 'Footwear', description: 'Hiking boots and outdoor footwear', icon: '👟', bannerImage: '', attributes: [], isActive: true, createdAt: '', updatedAt: '' }
+            ];
+        }
+    }
+
+    async getActiveCategories(): Promise<any[]> {
+        try {
+            const categories = await this.getCategories();
+            return categories.filter(category => category.isActive);
+        } catch (error) {
+            console.error('❌ Failed to get active categories:', error);
+            throw error;
+        }
+    }
 }
 
 export const apiService = new ApiService();
