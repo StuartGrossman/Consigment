@@ -1027,21 +1027,26 @@ const Home: React.FC = () => {
                                     <div className="desktop-nav-buttons">
                             <button
                                 onClick={handleAddItem}
-                                            className="desktop-button-primary"
+                                            className="desktop-button-primary flex items-center justify-center p-2"
+                                title="List Item for Consignment"
                             >
-                                            <span className="hidden sm:inline">List Item</span>
-                                            <span className="sm:hidden">List</span>
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                </svg>
                             </button>
                             
                             {/* My Pending Items button for regular users */}
                             {!isAdmin && (
                                 <>
-                                    {/* Full text for large screens (1000px+) */}
+                                    {/* Icon only for large screens (1000px+) */}
                                     <button
                                         onClick={handleMyPendingItemsModal}
-                                        className="desktop-button-secondary hidden lg:inline-flex"
+                                        className="desktop-button-secondary hidden lg:inline-flex items-center justify-center p-2"
+                                        title="My Pending Items"
                                     >
-                                        <span>My Pending Items</span>
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                        </svg>
                                     </button>
                                     
                                     {/* Icon only for medium screens (640px-1000px) to prevent overlap */}
@@ -1055,12 +1060,15 @@ const Home: React.FC = () => {
                                         </svg>
                                     </button>
                                     
-                                    {/* Short text for small screens (<640px) */}
+                                    {/* Icon only for small screens (<640px) */}
                                     <button
                                         onClick={handleMyPendingItemsModal}
-                                        className="desktop-button-secondary sm:hidden"
+                                        className="desktop-button-secondary sm:hidden flex items-center justify-center p-2"
+                                        title="My Pending Items"
                                     >
-                                        <span>My Items</span>
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                                        </svg>
                                     </button>
                                 </>
                             )}
