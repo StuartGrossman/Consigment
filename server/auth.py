@@ -1,3 +1,9 @@
+"""
+Authentication Module for Summit Gear Exchange API
+
+This module handles user authentication, authorization, and admin verification.
+"""
+
 from fastapi import HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from firebase_admin import auth
@@ -6,11 +12,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Security 
+# Security
 security = HTTPBearer()
 
+
 async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
-    """Verify Firebase token from Authorization header"""
+    """
+    Verify Firebase token from Authorization header
+    
+    Args:
+        credentials: HTTP authorization credentials
+        
+    Returns:
+        dict: User data containing uid, email, name, and server status
+        
+    Raises:
+        HTTPException: If token verification fails
+    """
     if not credentials:
         # For payment processing, we'll use server-side admin credentials
         # This allows the server to process payments on behalf of users
@@ -39,8 +57,20 @@ async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depe
             detail="Invalid authentication token"
         )
 
+
 async def verify_admin_access(user_data: dict = Depends(verify_firebase_token)):
-    """Verify user has admin privileges"""
+    """
+    Verify user has admin privileges
+    
+    Args:
+        user_data: User data from token verification
+        
+    Returns:
+        dict: User data if admin access is granted
+        
+    Raises:
+        HTTPException: If admin access is denied
+    """
     # Server admin always has access
     if user_data.get('is_server'):
         return user_data
@@ -68,33 +98,129 @@ async def verify_admin_access(user_data: dict = Depends(verify_firebase_token)):
             detail="Unable to verify admin access"
         )
 
-async def get_user_by_uid(user_uid: str):
-    """Get user document from Firestore by UID"""
-    try:
-        user_doc = db.collection('users').document(user_uid).get()
-        if user_doc.exists:
-            return user_doc.to_dict()
-        return None
-    except Exception as e:
-        logger.error(f"Error fetching user {user_uid}: {e}")
-        return None
 
-async def is_user_admin(user_uid: str) -> bool:
-    """Check if user has admin privileges"""
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Get current authenticated user (required auth)
+    
+    Args:
+        credentials: HTTP authorization credentials (required)
+        
+    Returns:
+        dict: User data
+        
+    Raises:
+        HTTPException: If authentication fails
+    """
     try:
-        user_data = await get_user_by_uid(user_uid)
-        return user_data and user_data.get('isAdmin', False)
+        decoded_token = auth.verify_id_token(credentials.credentials)
+        return {
+            'uid': decoded_token.get('uid'),
+            'email': decoded_token.get('email'),
+            'name': decoded_token.get('name', 'Unknown'),
+            'is_server': False
+        }
     except Exception as e:
-        logger.error(f"Error checking admin status for user {user_uid}: {e}")
+        logger.error(f"Required authentication failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+
+
+async def verify_user_or_admin(user_data: dict = Depends(verify_firebase_token)):
+    """
+    Verify user is either the owner of the resource or an admin
+    
+    Args:
+        user_data: User data from token verification
+        
+    Returns:
+        dict: User data with admin status
+    """
+    # Check if user is admin
+    is_admin = False
+    if user_data.get('is_server'):
+        is_admin = True
+    else:
+        try:
+            user_uid = user_data.get('uid')
+            user_doc = db.collection('users').document(user_uid).get()
+            if user_doc.exists and user_doc.to_dict().get('isAdmin'):
+                is_admin = True
+        except Exception as e:
+            logger.error(f"Error checking admin status: {e}")
+    
+    user_data['is_admin'] = is_admin
+    return user_data
+
+
+def require_user_ownership_or_admin(resource_user_id: str, current_user: dict):
+    """
+    Verify user owns the resource or is an admin
+    
+    Args:
+        resource_user_id: User ID associated with the resource
+        current_user: Current authenticated user data
+        
+    Raises:
+        HTTPException: If access is denied
+    """
+    if current_user.get('is_server') or current_user.get('is_admin'):
+        return True
+    
+    if current_user.get('uid') != resource_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied - insufficient permissions"
+        )
+    
+    return True
+
+
+async def check_user_ban_status(user_id: str) -> bool:
+    """
+    Check if user is banned
+    
+    Args:
+        user_id: User ID to check
+        
+    Returns:
+        bool: True if user is banned, False otherwise
+    """
+    try:
+        user_doc = db.collection('users').document(user_id).get()
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            return user_data.get('isBanned', False)
+        return False
+    except Exception as e:
+        logger.error(f"Error checking ban status for user {user_id}: {e}")
         return False
 
-async def update_user_admin_status(user_uid: str, is_admin: bool):
-    """Update user's admin status in Firestore"""
-    try:
-        user_ref = db.collection('users').document(user_uid)
-        user_ref.update({'isAdmin': is_admin})
-        logger.info(f"Updated admin status for user {user_uid}: {is_admin}")
-        return True
-    except Exception as e:
-        logger.error(f"Error updating admin status for user {user_uid}: {e}")
-        return False 
+
+async def verify_unbanned_user(user_data: dict = Depends(verify_firebase_token)):
+    """
+    Verify user is not banned
+    
+    Args:
+        user_data: User data from token verification
+        
+    Returns:
+        dict: User data if not banned
+        
+    Raises:
+        HTTPException: If user is banned
+    """
+    # Server admin bypasses ban checks
+    if user_data.get('is_server'):
+        return user_data
+    
+    user_id = user_data.get('uid')
+    if await check_user_ban_status(user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account has been suspended"
+        )
+    
+    return user_data 
