@@ -1571,50 +1571,236 @@ const Home: React.FC = () => {
                                 />
                             )}
 
-                            {/* Search Section - Prominent search bar below banner */}
+                            {/* Collapsible Search & Filter Section */}
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                                <div className="bg-white rounded-xl shadow-lg border p-6 sm:p-8">
-                                    <div className="max-w-2xl mx-auto">
-                                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">
-                                            Find Your Perfect Gear
-                                        </h2>
-                                        <div className="relative">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                </svg>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                value={filters.searchQuery}
-                                                onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
-                                                placeholder="Search for outdoor gear, brands, categories..."
-                                                className="w-full pl-12 pr-12 py-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
-                                            />
-                                            {filters.searchQuery && (
-                                                <button
-                                                    onClick={() => handleFilterChange('searchQuery', '')}
-                                                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
-                                                >
-                                                    <svg className="h-6 w-6 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                {/* Search & Filter Toggle Button */}
+                                <button
+                                    onClick={() => setFiltersOpen(!filtersOpen)}
+                                    className="w-full mb-4 bg-white rounded-xl shadow-lg border p-4 flex items-center justify-between text-left hover:shadow-xl transition-shadow"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                        </svg>
+                                        <div>
+                                            <h2 className="text-xl font-bold text-gray-900">Search & Filter</h2>
+                                            <p className="text-sm text-gray-600">Find your perfect gear</p>
+                                        </div>
+                                        {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery) && (
+                                            <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-medium">Active</span>
+                                        )}
+                                    </div>
+                                    <svg className={`w-6 h-6 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
+
+                                {/* Collapsible Search & Filter Panel */}
+                                <div className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all duration-300 ${filtersOpen ? 'max-h-none opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="p-6 sm:p-8">
+                                        {/* Search Input */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                                     </svg>
-                                                </button>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={filters.searchQuery}
+                                                    onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
+                                                    placeholder="Search for outdoor gear, brands, categories..."
+                                                    className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                />
+                                                {filters.searchQuery && (
+                                                    <button
+                                                        onClick={() => handleFilterChange('searchQuery', '')}
+                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                                                    >
+                                                        <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {filters.searchQuery && (
+                                                <div className="mt-2 text-center">
+                                                    <p className="text-sm text-gray-600">
+                                                        Searching through titles, descriptions, brands, categories, and more
+                                                    </p>
+                                                </div>
                                             )}
                                         </div>
-                                        {filters.searchQuery && (
-                                            <div className="mt-3 text-center">
-                                                <p className="text-sm text-gray-600">
-                                                    Searching through titles, descriptions, brands, categories, and more
-                                                </p>
-                                                <button
-                                                    onClick={() => handleFilterChange('searchQuery', '')}
-                                                    className="mt-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
+
+                                        {/* Filter Controls */}
+                                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                                            {/* Sort By */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                                                <select
+                                                    value={filters.sortBy}
+                                                    onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 >
-                                                    Clear search
+                                                    <option value="newest">Newest First</option>
+                                                    <option value="oldest">Oldest First</option>
+                                                    <option value="price-low">Price: Low to High</option>
+                                                    <option value="price-high">Price: High to Low</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Category */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                                                <select
+                                                    value={filters.category}
+                                                    onChange={(e) => handleFilterChange('category', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                >
+                                                    <option value="">All Categories</option>
+                                                    <option value="Climbing">Climbing 🧗</option>
+                                                    <option value="Skiing">Skiing ⛷️</option>
+                                                    <option value="Hiking">Hiking 🥾</option>
+                                                    <option value="Camping">Camping ⛺</option>
+                                                    <option value="Mountaineering">Mountaineering 🏔️</option>
+                                                    <option value="Snowboarding">Snowboarding 🏂</option>
+                                                    <option value="Cycling">Cycling 🚵</option>
+                                                    <option value="Water Sports">Water Sports 🚣</option>
+                                                    <option value="Apparel">Apparel 👕</option>
+                                                    <option value="Footwear">Footwear 👟</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Gender */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+                                                <select
+                                                    value={filters.gender}
+                                                    onChange={(e) => handleFilterChange('gender', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                >
+                                                    <option value="">All</option>
+                                                    <option value="Men">Men</option>
+                                                    <option value="Women">Women</option>
+                                                    <option value="Unisex">Unisex</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Size */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Size</label>
+                                                <select
+                                                    value={filters.size}
+                                                    onChange={(e) => handleFilterChange('size', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                >
+                                                    <option value="">All Sizes</option>
+                                                    <option value="XS">XS</option>
+                                                    <option value="S">S</option>
+                                                    <option value="M">M</option>
+                                                    <option value="L">L</option>
+                                                    <option value="XL">XL</option>
+                                                    <option value="XXL">XXL</option>
+                                                    <option value="6">6</option>
+                                                    <option value="7">7</option>
+                                                    <option value="8">8</option>
+                                                    <option value="9">9</option>
+                                                    <option value="10">10</option>
+                                                    <option value="11">11</option>
+                                                    <option value="12">12</option>
+                                                    <option value="13">13</option>
+                                                    <option value="One Size">One Size</option>
+                                                </select>
+                                            </div>
+
+                                            {/* Brand */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                                                <input
+                                                    type="text"
+                                                    value={filters.brand}
+                                                    onChange={(e) => handleFilterChange('brand', e.target.value)}
+                                                    placeholder="Search brands..."
+                                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                />
+                                            </div>
+
+                                            {/* Color */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
+                                                <select
+                                                    value={filters.color}
+                                                    onChange={(e) => handleFilterChange('color', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                                >
+                                                    <option value="">All Colors</option>
+                                                    <option value="Black">Black</option>
+                                                    <option value="White">White</option>
+                                                    <option value="Gray">Gray</option>
+                                                    <option value="Red">Red</option>
+                                                    <option value="Blue">Blue</option>
+                                                    <option value="Green">Green</option>
+                                                    <option value="Yellow">Yellow</option>
+                                                    <option value="Orange">Orange</option>
+                                                    <option value="Purple">Purple</option>
+                                                    <option value="Pink">Pink</option>
+                                                    <option value="Brown">Brown</option>
+                                                    <option value="Navy">Navy</option>
+                                                    <option value="Burgundy">Burgundy</option>
+                                                    <option value="Olive">Olive</option>
+                                                    <option value="Tan">Tan</option>
+                                                    <option value="Multicolor">Multicolor</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {/* Price Range */}
+                                        <div className="mb-6">
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
+                                            <select
+                                                value={filters.priceRange}
+                                                onChange={(e) => handleFilterChange('priceRange', e.target.value)}
+                                                className="w-full max-w-xs border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                                            >
+                                                <option value="">Any Price</option>
+                                                <option value="0-25">Under $25</option>
+                                                <option value="25-50">$25 - $50</option>
+                                                <option value="50-100">$50 - $100</option>
+                                                <option value="100-200">$100 - $200</option>
+                                                <option value="200-500">$200 - $500</option>
+                                                <option value="500">$500+</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Action Buttons */}
+                                        <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-gray-200">
+                                            <div className="text-sm text-gray-600">
+                                                {filters.searchQuery && (
+                                                    <span className="mr-4">
+                                                        Searching for "<span className="font-medium text-gray-900">{filters.searchQuery}</span>"
+                                                    </span>
+                                                )}
+                                                {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange) && (
+                                                    <span className="text-orange-600 font-medium">Filters active</span>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={clearFilters}
+                                                    className="px-4 py-2 text-sm text-gray-600 hover:text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                                >
+                                                    Clear All
+                                                </button>
+                                                <button
+                                                    onClick={() => setFiltersOpen(false)}
+                                                    className="px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
+                                                >
+                                                    Apply Filters
                                                 </button>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1623,188 +1809,10 @@ const Home: React.FC = () => {
                 </>
             )}
 
-            {/* Main Content with Sidebar */}
+            {/* Main Content */}
             {currentPage === 'store' && (
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-                    <div className="flex flex-col lg:flex-row gap-4 lg:gap-8">
-                        {/* Left Sidebar - Filters */}
-                        <div ref={filtersRef} className="w-full lg:w-64 lg:flex-shrink-0 hidden">
-                            {/* Filter Toggle Button */}
-                            <button
-                                onClick={() => setFiltersOpen(!filtersOpen)}
-                                className="w-full mb-4 bg-white rounded-lg shadow-sm border p-4 flex items-center justify-between text-left"
-                            >
-                                <div className="flex items-center gap-2">
-                                    <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707v4.586a1 1 0 01-1.414.924l-2-1A1 1 0 0110 17.414V13.414a1 1 0 00-.293-.707L3.293 6.293A1 1 0 013 5.586V4z" />
-                                    </svg>
-                                    <span className="font-medium text-gray-900">Filters</span>
-                                    {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery) && (
-                                        <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full">Active</span>
-                                    )}
-                                </div>
-                                <svg className={`w-5 h-5 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </button>
-
-                            {/* Filter Panel */}
-                            <div className={`bg-white rounded-lg shadow-sm border p-4 sm:p-6 lg:sticky lg:top-8 ${
-                                filtersOpen ? 'block' : 'hidden'
-                            }`}>
-                                <div className="flex justify-between items-center mb-4 sm:mb-6">
-                                    <h3 className="text-base sm:text-lg font-semibold text-gray-900">Filters</h3>
-                                    <button
-                                        onClick={clearFilters}
-                                        className="text-sm text-orange-600 hover:text-orange-700"
-                                    >
-                                        Clear All
-                                    </button>
-                                </div>
-
-
-
-                                {/* Sort By */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
-                                    <select
-                                        value={filters.sortBy}
-                                        onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        <option value="newest">Newest First</option>
-                                        <option value="oldest">Oldest First</option>
-                                        <option value="price-low">Price: Low to High</option>
-                                        <option value="price-high">Price: High to Low</option>
-                                    </select>
-                                </div>
-
-                                {/* Category */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                                    <select
-                                        value={filters.category}
-                                        onChange={(e) => handleFilterChange('category', e.target.value)}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        <option value="">All Categories</option>
-                                        <option value="Climbing">Climbing 🧗</option>
-                                        <option value="Skiing">Skiing ⛷️</option>
-                                        <option value="Hiking">Hiking 🥾</option>
-                                        <option value="Camping">Camping ⛺</option>
-                                        <option value="Mountaineering">Mountaineering 🏔️</option>
-                                        <option value="Snowboarding">Snowboarding 🏂</option>
-                                        <option value="Cycling">Cycling 🚵</option>
-                                        <option value="Water Sports">Water Sports 🚣</option>
-                                        <option value="Apparel">Apparel 👕</option>
-                                        <option value="Footwear">Footwear 👟</option>
-                                    </select>
-                                </div>
-
-                                {/* Gender */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
-                                    <select
-                                        value={filters.gender}
-                                        onChange={(e) => handleFilterChange('gender', e.target.value)}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        <option value="">All</option>
-                                        <option value="Men">Men</option>
-                                        <option value="Women">Women</option>
-                                        <option value="Unisex">Unisex</option>
-                                    </select>
-                                </div>
-
-                                {/* Size */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Size</label>
-                                    <select
-                                        value={filters.size}
-                                        onChange={(e) => handleFilterChange('size', e.target.value)}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        <option value="">All Sizes</option>
-                                        <option value="XS">XS</option>
-                                        <option value="S">S</option>
-                                        <option value="M">M</option>
-                                        <option value="L">L</option>
-                                        <option value="XL">XL</option>
-                                        <option value="XXL">XXL</option>
-                                        <option value="6">6</option>
-                                        <option value="7">7</option>
-                                        <option value="8">8</option>
-                                        <option value="9">9</option>
-                                        <option value="10">10</option>
-                                        <option value="11">11</option>
-                                        <option value="12">12</option>
-                                        <option value="13">13</option>
-                                        <option value="One Size">One Size</option>
-                                    </select>
-                                </div>
-
-                                {/* Brand */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                                    <input
-                                        type="text"
-                                        value={filters.brand}
-                                        onChange={(e) => handleFilterChange('brand', e.target.value)}
-                                        placeholder="Search brands..."
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    />
-                                </div>
-
-                                {/* Color */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
-                                    <select
-                                        value={filters.color}
-                                        onChange={(e) => handleFilterChange('color', e.target.value)}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        <option value="">All Colors</option>
-                                        <option value="Black">Black</option>
-                                        <option value="White">White</option>
-                                        <option value="Gray">Gray</option>
-                                        <option value="Red">Red</option>
-                                        <option value="Blue">Blue</option>
-                                        <option value="Green">Green</option>
-                                        <option value="Yellow">Yellow</option>
-                                        <option value="Orange">Orange</option>
-                                        <option value="Purple">Purple</option>
-                                        <option value="Pink">Pink</option>
-                                        <option value="Brown">Brown</option>
-                                        <option value="Navy">Navy</option>
-                                        <option value="Burgundy">Burgundy</option>
-                                        <option value="Olive">Olive</option>
-                                        <option value="Tan">Tan</option>
-                                        <option value="Multicolor">Multicolor</option>
-                                    </select>
-                                </div>
-
-                                {/* Price Range */}
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
-                                    <select
-                                        value={filters.priceRange}
-                                        onChange={(e) => handleFilterChange('priceRange', e.target.value)}
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                    >
-                                        <option value="">Any Price</option>
-                                        <option value="0-25">Under $25</option>
-                                        <option value="25-50">$25 - $50</option>
-                                        <option value="50-100">$50 - $100</option>
-                                        <option value="100-200">$100 - $200</option>
-                                        <option value="200-500">$200 - $500</option>
-                                        <option value="500">$500+</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Main Content Area */}
-                        <div className="flex-1">
+                    <div>
                             <div className="mb-8">
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                                     <div>
@@ -2044,7 +2052,6 @@ const Home: React.FC = () => {
                                     );
                                 })()}
                             </div>
-                        </div>
                     </div>
                 </div>
             )}
