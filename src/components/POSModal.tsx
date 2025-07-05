@@ -127,7 +127,16 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
   const debugDatabaseItems = async () => {
     try {
       console.log('🔍 Debugging database items...');
-      const response = await fetch('http://localhost:8080/api/admin/debug-barcodes', {
+      
+      // Use the same API detection logic as apiService
+      const getApiBaseUrl = () => {
+        if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
+        if (import.meta.env.DEV) return 'http://localhost:8002';
+        return 'https://consignment-api-caua3ttntq-uc.a.run.app';
+      };
+      const API_BASE_URL = getApiBaseUrl();
+      
+      const response = await fetch(`${API_BASE_URL}/api/admin/debug-barcodes`, {
         headers: {
           'Authorization': `Bearer ${await user?.getIdToken()}`
         }
@@ -547,7 +556,15 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
 
     setIsSearchingCustomer(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/admin/search-customers?q=${encodeURIComponent(query)}`, {
+      // Use the same API detection logic as apiService
+      const getApiBaseUrl = () => {
+        if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
+        if (import.meta.env.DEV) return 'http://localhost:8002';
+        return 'https://consignment-api-caua3ttntq-uc.a.run.app';
+      };
+      const API_BASE_URL = getApiBaseUrl();
+      
+      const response = await fetch(`${API_BASE_URL}/api/admin/search-customers?q=${encodeURIComponent(query)}`, {
         headers: {
           'Authorization': `Bearer ${await user?.getIdToken()}`,
           'Content-Type': 'application/json'

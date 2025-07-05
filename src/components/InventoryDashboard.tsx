@@ -8,6 +8,8 @@ import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import NotificationModal from './NotificationModal';
 import BulkActionsModal from './BulkActionsModal';
+import POSModal from './POSModal';
+import InventoryScanningModal from './InventoryScanningModal';
 import { testDataFiles } from '../assets/test-data';
 
 interface InventoryDashboardProps {
@@ -56,6 +58,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
     type: 'info' as 'success' | 'error' | 'info' | 'warning'
   });
   const [showBulkActionsModal, setShowBulkActionsModal] = useState(false);
+  const [isPOSModalOpen, setIsPOSModalOpen] = useState(false);
+  const [isScanningModalOpen, setIsScanningModalOpen] = useState(false);
   const { user } = useAuth();
 
   // Define available bulk actions
@@ -357,7 +361,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
              // Use the same API detection logic as apiService
        const getApiBaseUrl = () => {
          if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
-         if (import.meta.env.DEV) return 'http://localhost:8000';
+         if (import.meta.env.DEV) return 'http://localhost:8002';
          return ''; // Use relative URLs for production
        };
        const API_BASE_URL = getApiBaseUrl();
@@ -523,6 +527,16 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         </div>
         <div className="flex items-center gap-4">
           <button
+            onClick={() => setIsScanningModalOpen(true)}
+            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Scan Item
+          </button>
+          <button
             onClick={() => setShowImportModal(true)}
             className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium flex items-center gap-2"
           >
@@ -593,10 +607,17 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
       </div>
 
       {/* Enhanced Search Bar */}
-      <div className="bg-white rounded-lg border p-6 mb-6">
-        <h3 className="text-lg font-medium text-gray-900 mb-3">Search Inventory</h3>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+            <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900">Search Inventory</h3>
+        </div>
         <div className="relative max-w-2xl">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -606,13 +627,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by title, brand, seller, description, ID, or transaction..."
-            className="block w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            className="block w-full pl-12 pr-12 py-4 border border-gray-300 rounded-xl text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm"
           />
           {searchQuery && (
-            <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+            <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
               <button
                 onClick={() => setSearchQuery('')}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                className="text-gray-400 hover:text-gray-600 focus:outline-none transition-colors duration-200 p-1 rounded-full hover:bg-gray-100"
                 title="Clear search"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -623,29 +644,42 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           )}
         </div>
         {searchQuery && (
-          <div className="mt-3 text-sm text-gray-600">
-            <span className="font-medium">Found {filteredItems.length} items</span> matching "{searchQuery}"
-            {filteredItems.length !== items.length && (
-              <span className="ml-2 text-orange-600">
-                ({items.length - filteredItems.length} filtered out)
-              </span>
-            )}
+          <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="flex items-center gap-2 text-sm text-gray-700">
+              <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="font-medium">Found {filteredItems.length} items</span> matching "<span className="font-semibold text-orange-700">"{searchQuery}"</span>"
+              {filteredItems.length !== items.length && (
+                <span className="ml-2 text-orange-600 font-medium">
+                  ({items.length - filteredItems.length} filtered out)
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg border p-6">
-        <h4 className="text-base font-medium text-gray-900 mb-4">Filter Results</h4>
-        <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
+      {/* Enhanced Filters */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
+            </svg>
+          </div>
+          <h4 className="text-xl font-semibold text-gray-900">Filter Results</h4>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
           
           {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Status</label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Statuses</option>
               <option value="pending">Pending</option>
@@ -657,12 +691,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Category Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Category</label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Categories</option>
               {categories.map((category) => (
@@ -672,12 +706,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Brand Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Brand</label>
             <select
               value={brandFilter}
               onChange={(e) => setBrandFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Brands</option>
               {brands.map((brand) => (
@@ -687,12 +721,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Condition Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Condition</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Condition</label>
             <select
               value={conditionFilter}
               onChange={(e) => setConditionFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Conditions</option>
               {conditions.map((condition) => (
@@ -702,12 +736,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Gender Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Gender</label>
             <select
               value={genderFilter}
               onChange={(e) => setGenderFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Genders</option>
               {genders.map((gender) => (
@@ -717,12 +751,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Shipping Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Shipping Status</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Shipping Status</label>
             <select
               value={shippingFilter}
               onChange={(e) => setShippingFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Orders</option>
               <option value="shipped">Shipped</option>
@@ -732,12 +766,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Refund Status Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Refund Status</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Refund Status</label>
             <select
               value={refundFilter}
               onChange={(e) => setRefundFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="all">All Items</option>
               <option value="refunded">Refunded</option>
@@ -746,12 +780,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Sort By */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Sort By</label>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 bg-white shadow-sm"
             >
               <option value="newest">Newest First</option>
               <option value="oldest">Oldest First</option>
@@ -763,12 +797,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
 
           {/* Bulk Actions */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Bulk Actions</label>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-gray-700">Bulk Actions</label>
             <button
               onClick={() => setShowBulkActionsModal(true)}
               disabled={selectedItems.length === 0}
-              className="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+              className="w-full bg-gradient-to-r from-gray-600 to-gray-700 text-white px-4 py-2.5 rounded-lg hover:from-gray-700 hover:to-gray-800 transition-all duration-200 disabled:from-gray-300 disabled:to-gray-400 disabled:cursor-not-allowed text-sm font-medium flex items-center justify-center gap-2 shadow-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -778,9 +812,63 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           </div>
         </div>
 
-
-
-
+        {/* Active Filters Summary */}
+        {(statusFilter !== 'all' || categoryFilter !== 'all' || brandFilter !== 'all' || 
+          conditionFilter !== 'all' || genderFilter !== 'all' || shippingFilter !== 'all' || 
+          refundFilter !== 'all') && (
+          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
+              </svg>
+              <span className="text-sm font-semibold text-blue-900">Active Filters</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {statusFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Status: {statusFilter}
+                  <button onClick={() => setStatusFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+              {categoryFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Category: {categoryFilter}
+                  <button onClick={() => setCategoryFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+              {brandFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Brand: {brandFilter}
+                  <button onClick={() => setBrandFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+              {conditionFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Condition: {conditionFilter}
+                  <button onClick={() => setConditionFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+              {genderFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Gender: {genderFilter}
+                  <button onClick={() => setGenderFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+              {shippingFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Shipping: {shippingFilter}
+                  <button onClick={() => setShippingFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+              {refundFilter !== 'all' && (
+                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                  Refund: {refundFilter}
+                  <button onClick={() => setRefundFilter('all')} className="ml-1 hover:text-blue-600">×</button>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Items Table */}
@@ -1084,6 +1172,22 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         title={notificationData.title}
         message={notificationData.message}
         type={notificationData.type}
+      />
+
+      {/* POS Modal */}
+      <POSModal
+        isOpen={isPOSModalOpen}
+        onClose={() => setIsPOSModalOpen(false)}
+      />
+
+      {/* Inventory Scanning Modal */}
+      <InventoryScanningModal 
+        isOpen={isScanningModalOpen} 
+        onClose={() => setIsScanningModalOpen(false)}
+        onItemAdded={(item) => {
+          showNotificationModal('Success', `Item ${item.id ? 'updated' : 'created'} successfully!`, 'success');
+          fetchAllItems(); // Refresh the inventory list
+        }}
       />
     </div>
   );
@@ -1400,7 +1504,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
           setUploadProgress(50);
           
           try {
-            const importResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:6330'}/api/admin/import-processed-items`, {
+            const importResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002'}/api/admin/import-processed-items`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1496,7 +1600,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
     
     try {
       // Create a manual fetch request to the analyze-data endpoint
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:6330'}/api/admin/analyze-data`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002'}/api/admin/analyze-data`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
