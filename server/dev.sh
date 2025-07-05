@@ -27,7 +27,7 @@ pkill -f "uvicorn main:app" 2>/dev/null || true
 
 # Start the development server
 echo "🚀 Starting development server with auto-reload..."
-echo "🌐 Server will be available at: http://localhost:8080"
+echo "🌐 Server will be available at: http://localhost:8002"
 echo "📱 Frontend should be running at: http://localhost:5174"
 echo "⏹️  Press Ctrl+C to stop"
 echo ""

@@ -4,7 +4,6 @@ import { subscribeToActionLogs, ActionLog, logUserAction, getActionLogs } from '
 import UserAnalyticsModal from './UserAnalyticsModal';
 import AdminBanModal from './AdminBanModal';
 import AdminManageModal from './AdminManageModal';
-import CategoryManagement from './CategoryManagement';
 
 interface ActionsDashboardProps {
   user: AuthUser | null;
@@ -22,7 +21,6 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
   const [showUserAnalytics, setShowUserAnalytics] = useState(false);
   const [showBanModal, setShowBanModal] = useState(false);
   const [showAdminManageModal, setShowAdminManageModal] = useState(false);
-  const [showCategoryManagement, setShowCategoryManagement] = useState(false);
 
 
 
@@ -345,15 +343,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
                 </svg>
                 👑 Make Admin or Remove
               </button>
-              <button
-                onClick={() => setShowCategoryManagement(true)}
-                className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                🏷️ Category Management
-              </button>
+
               <button
                 onClick={() => setShowUserAnalytics(true)}
                 className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
@@ -411,20 +401,58 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-lg border p-6">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {/* Search */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search users, actions, items..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            />
+      {/* Prominent Search Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="bg-white rounded-xl shadow-lg border p-6 sm:p-8">
+          <div className="max-w-3xl mx-auto">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">
+              Search Actions & Users
+            </h2>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search users, actions, items, emails..."
+                className="w-full pl-12 pr-12 py-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                >
+                  <svg className="h-6 w-6 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {searchQuery && (
+              <div className="mt-3 text-center">
+                <p className="text-sm text-gray-600">
+                  Searching through user names, emails, actions, and item details
+                </p>
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="mt-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
+                >
+                  Clear search
+                </button>
+              </div>
+            )}
           </div>
+        </div>
+      </div>
+
+      {/* Filter Controls */}
+      <div className="bg-white rounded-lg border p-6">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Filter Actions</h3>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
           {/* Action Filter */}
           <div>
@@ -781,11 +809,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         />
       )}
 
-      {/* Category Management Modal */}
-      <CategoryManagement
-        isOpen={showCategoryManagement}
-        onClose={() => setShowCategoryManagement(false)}
-      />
+
     </div>
   );
 };

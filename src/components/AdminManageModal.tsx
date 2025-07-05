@@ -175,20 +175,50 @@ const AdminManageModal: React.FC<AdminManageModalProps> = ({ onClose }) => {
           </div>
         </div>
 
-        {/* Search */}
+        {/* Enhanced Search Section */}
         <div className="p-6 border-b border-gray-200">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search users by email or name..."
-                className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div className="text-sm text-gray-500 flex items-center">
-              {filteredUsers.length} users found ({users.filter(u => u.isAdmin).length} admins)
+          <div className="bg-blue-50 rounded-xl border p-4 sm:p-6">
+            <div className="max-w-2xl mx-auto">
+              <h3 className="text-lg sm:text-xl font-bold text-blue-900 text-center mb-4">
+                Search Users
+              </h3>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search users by email or name..."
+                  className="w-full pl-12 pr-12 py-3 text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 shadow-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                  >
+                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 text-center">
+                <p className="text-sm text-blue-700">
+                  Found <span className="font-medium">{filteredUsers.length}</span> users • <span className="font-medium">{users.filter(u => u.isAdmin).length}</span> admins
+                </p>
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="mt-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Clear search
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

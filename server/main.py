@@ -1636,7 +1636,7 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
                 
                 # Create store credit for seller
                 if cart_item.seller_id and not cart_item.seller_id.startswith('phone_'):
-                    credit_ref = db.collection('store_credits').document()
+                    credit_ref = db.collection('storeCredit').document()
                     batch.set(credit_ref, {
                         'userId': cart_item.seller_id,
                         'amount': earnings['seller_earnings'],
@@ -4517,7 +4517,7 @@ async def get_user_store_credit(request: Request):
         transactions = []
         try:
             # Use simple query without ordering to avoid index requirement  
-            transactions_query = db.collection('store_credits').where('userId', '==', user_id).get()
+            transactions_query = db.collection('storeCredit').where('userId', '==', user_id).get()
             
             for transaction_doc in transactions_query:
                 transaction_data = transaction_doc.to_dict()
@@ -5175,7 +5175,7 @@ async def process_inhouse_sale(request: Request, admin_data: dict = Depends(veri
                 # Create store credit for seller (if applicable)
                 seller_id = item_data.get('sellerId')
                 if seller_id and not seller_id.startswith('phone_'):
-                    credit_ref = db.collection('store_credits').document()
+                    credit_ref = db.collection('storeCredit').document()
                     batch.set(credit_ref, {
                         'userId': seller_id,
                         'amount': earnings['seller_earnings'],

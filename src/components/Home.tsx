@@ -15,7 +15,6 @@ import ApplicationTestModal from './ApplicationTestModal';
 import SoldItemsModal from './SoldItemsModal';
 import LoginModal from './LoginModal';
 import CategoryDashboard from './CategoryDashboard';
-import CategoryManagement from './CategoryManagement';
 import Dashboard from './Dashboard';
 import ItemDetailModal from './ItemDetailModal';
 import CartModal from './CartModal';
@@ -87,7 +86,6 @@ const Home: React.FC = () => {
     const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [isCategoryDashboardOpen, setIsCategoryDashboardOpen] = useState(false);
-    const [isCategoryManagementOpen, setIsCategoryManagementOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
     const [showInventoryPage, setShowInventoryPage] = useState(false);
     const [showActionsPage, setShowActionsPage] = useState(false);
@@ -483,13 +481,7 @@ const Home: React.FC = () => {
         setIsCategoryDashboardOpen(false);
     };
 
-    const handleCategoryManagement = () => {
-        setIsCategoryManagementOpen(true);
-    };
 
-    const handleCategoryManagementClose = () => {
-        setIsCategoryManagementOpen(false);
-    };
 
 
 
@@ -1521,15 +1513,6 @@ const Home: React.FC = () => {
                                         >
                                             🏷️ Category Dashboard
                                         </button>
-                                        <button
-                                            onClick={() => {
-                                                handleCategoryManagement();
-                                                setUserMenuOpen(false);
-                                            }}
-                                            className="mobile-user-menu-item mobile-user-menu-item-default"
-                                        >
-                                            🔧 Category Management
-                                        </button>
                                                     </>
                                                 )}
                                             
@@ -1575,63 +1558,68 @@ const Home: React.FC = () => {
                 </div>
             </div>
 
-                    {/* Banner Section - Only show for non-admin users */}
-                    {!isAdmin && (
-                        <Banner 
-                            images={bannerImages}
-                            autoPlay={true}
-                            interval={6000}
-                            height="h-96 sm:h-[500px]"
-                        />
-                    )}
+                    {/* Banner and Search - Only show on store page */}
+                    {currentPage === 'store' && (
+                        <>
+                            {/* Banner Section - Only show for non-admin users */}
+                            {!isAdmin && (
+                                <Banner 
+                                    images={bannerImages}
+                                    autoPlay={true}
+                                    interval={6000}
+                                    height="h-96 sm:h-[500px]"
+                                />
+                            )}
 
-                    {/* Search Section - Prominent search bar below banner */}
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                        <div className="bg-white rounded-xl shadow-lg border p-6 sm:p-8">
-                            <div className="max-w-2xl mx-auto">
-                                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">
-                                    Find Your Perfect Gear
-                                </h2>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                        <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
+                            {/* Search Section - Prominent search bar below banner */}
+                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                                <div className="bg-white rounded-xl shadow-lg border p-6 sm:p-8">
+                                    <div className="max-w-2xl mx-auto">
+                                        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 text-center mb-4">
+                                            Find Your Perfect Gear
+                                        </h2>
+                                        <div className="relative">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
+                                            </div>
+                                            <input
+                                                type="text"
+                                                value={filters.searchQuery}
+                                                onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
+                                                placeholder="Search for outdoor gear, brands, categories..."
+                                                className="w-full pl-12 pr-12 py-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
+                                            />
+                                            {filters.searchQuery && (
+                                                <button
+                                                    onClick={() => handleFilterChange('searchQuery', '')}
+                                                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                                                >
+                                                    <svg className="h-6 w-6 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                        </div>
+                                        {filters.searchQuery && (
+                                            <div className="mt-3 text-center">
+                                                <p className="text-sm text-gray-600">
+                                                    Searching through titles, descriptions, brands, categories, and more
+                                                </p>
+                                                <button
+                                                    onClick={() => handleFilterChange('searchQuery', '')}
+                                                    className="mt-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
+                                                >
+                                                    Clear search
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                    <input
-                                        type="text"
-                                        value={filters.searchQuery}
-                                        onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
-                                        placeholder="Search for outdoor gear, brands, categories..."
-                                        className="w-full pl-12 pr-12 py-4 text-lg border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 shadow-sm"
-                                    />
-                                    {filters.searchQuery && (
-                                        <button
-                                            onClick={() => handleFilterChange('searchQuery', '')}
-                                            className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
-                                        >
-                                            <svg className="h-6 w-6 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    )}
                                 </div>
-                                {filters.searchQuery && (
-                                    <div className="mt-3 text-center">
-                                        <p className="text-sm text-gray-600">
-                                            Searching through titles, descriptions, brands, categories, and more
-                                        </p>
-                                        <button
-                                            onClick={() => handleFilterChange('searchQuery', '')}
-                                            className="mt-2 text-sm text-orange-600 hover:text-orange-700 font-medium"
-                                        >
-                                            Clear search
-                                        </button>
-                                    </div>
-                                )}
                             </div>
-                        </div>
-                    </div>
+                        </>
+                    )}
                 </>
             )}
 
@@ -2122,10 +2110,7 @@ const Home: React.FC = () => {
                         onClose={handleCategoryDashboardClose}
                     />
 
-                    <CategoryManagement 
-                        isOpen={isCategoryManagementOpen} 
-                        onClose={handleCategoryManagementClose}
-                    />
+                    
 
                 </>
             )}

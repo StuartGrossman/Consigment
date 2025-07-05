@@ -667,17 +667,49 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
              <div>
                <div className="flex justify-between items-center mb-4">
                  <h3 className="text-lg font-semibold text-gray-800">All Users</h3>
-                 <div className="flex items-center space-x-4">
-                   <input
-                     type="text"
-                     value={searchQuery}
-                     onChange={(e) => setSearchQuery(e.target.value)}
-                     placeholder="Search users by email, name, or IP..."
-                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
-                   />
-                   <span className="text-sm text-gray-500">
-                     {filteredUsers.length} users found
-                   </span>
+                 <div className="bg-red-50 rounded-xl border p-4 mb-4">
+                   <div className="max-w-xl mx-auto">
+                     <h4 className="text-base font-bold text-red-900 text-center mb-3">
+                       Search Users
+                     </h4>
+                     <div className="relative">
+                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                         <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                         </svg>
+                       </div>
+                       <input
+                         type="text"
+                         value={searchQuery}
+                         onChange={(e) => setSearchQuery(e.target.value)}
+                         placeholder="Search users by email, name, or IP..."
+                         className="w-full pl-10 pr-10 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 shadow-sm"
+                       />
+                       {searchQuery && (
+                         <button
+                           onClick={() => setSearchQuery('')}
+                           className="absolute inset-y-0 right-0 pr-3 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                         >
+                           <svg className="h-4 w-4 text-gray-400 hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                           </svg>
+                         </button>
+                       )}
+                     </div>
+                     <div className="mt-2 text-center">
+                       <p className="text-sm text-red-700">
+                         Found <span className="font-medium">{filteredUsers.length}</span> users
+                       </p>
+                       {searchQuery && (
+                         <button
+                           onClick={() => setSearchQuery('')}
+                           className="mt-1 text-xs text-red-600 hover:text-red-700 font-medium"
+                         >
+                           Clear search
+                         </button>
+                       )}
+                     </div>
+                   </div>
                  </div>
                </div>
                <div className="overflow-x-auto">

@@ -205,7 +205,7 @@ async def update_firebase_after_payment(payment_request: PaymentRequest, order_i
                     
                     # Create store credit for seller (if not phone user) - only for completed sales
                     if cart_item.seller_id and not cart_item.seller_id.startswith('phone_'):
-                        credit_ref = db.collection('store_credits').document()
+                        credit_ref = db.collection('storeCredit').document()
                         batch.set(credit_ref, {
                             'userId': cart_item.seller_id,
                             'amount': earnings['seller_earnings'],
