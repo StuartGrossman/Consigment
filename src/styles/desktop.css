@@ -18,11 +18,11 @@
 }
 
 .desktop-nav-buttons {
-  @apply flex items-center gap-2 sm:gap-3;
+  @apply flex items-center gap-2 sm:gap-3 lg:gap-4;
 }
 
 .desktop-nav-icons {
-  @apply flex items-center gap-2 sm:gap-3;
+  @apply flex items-center gap-2 sm:gap-3 lg:gap-4;
 }
 
 .desktop-nav-user-section {
@@ -91,7 +91,7 @@
 }
 
 .desktop-button-secondary {
-  @apply bg-white text-gray-700 border border-gray-300 px-4 sm:px-6 py-2 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm sm:text-base flex-shrink-0;
+  @apply bg-white text-gray-700 border border-gray-300 px-4 sm:px-6 lg:px-8 py-2 lg:py-3 rounded-lg hover:bg-gray-50 transition-colors font-medium text-sm sm:text-base flex-shrink-0;
 }
 
 .desktop-button-ghost {
@@ -99,9 +99,9 @@
 }
 
 .desktop-icon-button {
-  @apply relative p-2 sm:p-3 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0;
+  @apply relative p-2 sm:p-3 lg:p-4 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0;
 }
 
 .desktop-badge {
-  @apply h-4 w-4 sm:h-5 sm:w-5 min-w-[16px] min-h-[16px] sm:min-w-[20px] sm:min-h-[20px] text-xs font-medium;
+  @apply h-4 w-4 sm:h-5 sm:w-5 lg:h-6 lg:w-6 min-w-[16px] min-h-[16px] sm:min-w-[20px] sm:min-h-[20px] lg:min-w-[24px] lg:min-h-[24px] text-xs lg:text-sm font-medium;
 } 

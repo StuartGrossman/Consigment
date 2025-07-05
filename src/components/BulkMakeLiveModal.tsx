@@ -270,8 +270,8 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
+      <div className="mobile-admin-modal-content">
+        <div className="mobile-admin-modal-header">
           <div className="flex justify-between items-start">
             <div className="flex-1 mr-6">
               <div className="flex items-center justify-between mb-2">
@@ -343,7 +343,7 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="mobile-admin-modal-body">
           {/* Error Summary */}
           {processingErrors.length > 0 && (
             <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -463,75 +463,67 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className="p-6 border-t border-gray-200">
-          <div className="flex justify-between">
-            <div>
-              {currentStep === 'completed' && completedCount > 0 && (
-                <div className="text-sm text-gray-600">
-                  🎉 {completedCount} item{completedCount > 1 ? 's are' : ' is'} now live for customers!
-                </div>
-              )}
-            </div>
-            <div className="flex gap-3">
-              {currentStep === 'preparing' && processingErrors.length === 0 && (
-                <>
-                  <button
-                    onClick={onClose}
-                    className="px-6 py-2 text-gray-600 hover:text-gray-800"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={startBulkProcessing}
-                    disabled={isProcessing}
-                    className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50"
-                  >
-                    🚀 Start Processing
-                  </button>
-                </>
-              )}
-              {currentStep === 'processing' && (
-                <div className="text-sm text-gray-600 flex items-center">
-                  {!isCancelled ? (
-                    <>
-                      <svg className="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Making items live...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="h-4 w-4 mr-2 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-orange-600">Cancelling...</span>
-                    </>
-                  )}
-                </div>
-              )}
-              {currentStep === 'completed' && (
-                <button
-                  onClick={handleComplete}
-                  className={`px-6 py-2 text-white rounded-lg transition-colors ${
-                    isCancelled 
-                      ? 'bg-orange-500 hover:bg-orange-600'
-                      : 'bg-green-500 hover:bg-green-600'
-                  }`}
-                >
-                  {isCancelled ? `Complete (${completedCount} Live, Cancelled)` : `Complete (${completedCount} Live)`}
-                </button>
-              )}
-              {processingErrors.length > 0 && (
+        {/* Modal Footer with Action Buttons */}
+        <div className="mobile-admin-modal-footer">
+          <div className="status-info">
+            {currentStep === 'completed' && completedCount > 0 && (
+              <span className="text-green-600 font-medium">
+                🎉 {completedCount} item{completedCount > 1 ? 's are' : ' is'} now live for customers!
+              </span>
+            )}
+            {currentStep === 'processing' && !isCancelled && (
+              <span className="text-green-600 flex items-center gap-2">
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Making items live...
+              </span>
+            )}
+            {currentStep === 'processing' && isCancelled && (
+              <span className="text-yellow-600 flex items-center gap-2">
+                <svg className="h-4 w-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Cancelling...
+              </span>
+            )}
+          </div>
+          
+          <div className="action-buttons">
+            {currentStep === 'preparing' && processingErrors.length === 0 && (
+              <>
                 <button
                   onClick={onClose}
-                  className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  className="btn-cancel"
                 >
-                  Close
+                  Cancel
                 </button>
-              )}
-            </div>
+                <button
+                  onClick={startBulkProcessing}
+                  disabled={isProcessing}
+                  className="btn-success disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  🚀 Start Processing
+                </button>
+              </>
+            )}
+            {currentStep === 'completed' && (
+              <button
+                onClick={handleComplete}
+                className={isCancelled ? 'btn-secondary' : 'btn-success'}
+              >
+                {isCancelled ? `Complete (${completedCount} Live, Cancelled)` : `Complete (${completedCount} Live)`}
+              </button>
+            )}
+            {processingErrors.length > 0 && (
+              <button
+                onClick={onClose}
+                className="btn-danger"
+              >
+                Close
+              </button>
+            )}
           </div>
         </div>
       </div>
