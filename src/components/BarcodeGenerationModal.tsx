@@ -47,14 +47,12 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
     
     // Add a brief delay for better UX progression
     setTimeout(() => {
-      // Generate barcode data with timestamp and item info
-      const now = new Date();
-      const timestamp = now.getTime().toString();
-      const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
-      const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
-      
-      // Create a unique barcode combining item ID and timestamp
-      const barcodeValue = `${item.id.slice(-8)}${dateStr}${timeStr}`.slice(0, 12);
+      // Generate barcode data with CSG format (same as bulk generation)
+      const timestamp = Date.now().toString().slice(-8);
+      const itemIdShort = item.id.slice(-4).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      // Ensure we have at least 4 characters for the item ID part
+      const paddedItemId = itemIdShort.padEnd(4, '0').slice(0, 4);
+      const barcodeValue = `CSG${timestamp}${paddedItemId}`;
       
       setBarcodeData(barcodeValue);
 

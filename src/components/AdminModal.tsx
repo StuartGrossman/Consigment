@@ -307,7 +307,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
               <div className="bg-gray-50 rounded-xl border p-4 sm:p-6">
                 <div className="max-w-2xl mx-auto">
                   <h3 className="text-lg sm:text-xl font-bold text-gray-900 text-center mb-4">
-                    Search Pending Items
+                    Search Items
                   </h3>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">

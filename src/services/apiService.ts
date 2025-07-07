@@ -382,7 +382,7 @@ class ApiService {
 
     async bulkRejectItems(itemIds: string[], reason: string): Promise<void> {
         try {
-            await this.makeRequest('/api/admin/bulk-reject-items', {
+            await this.makeRequest('/api/admin/bulk-reject', {
                 method: 'POST',
                 body: JSON.stringify({
                     itemIds,
