@@ -35,6 +35,11 @@ export interface ItemManagement {
   setSelectedCategory: (category: string | null) => void;
 }
 
+// Global cache for items
+const itemsCache = new Map<string, { data: ConsignmentItem[], timestamp: number }>();
+const CACHE_DURATION = 2 * 60 * 1000; // 2 minutes for items (shorter than categories)
+const pendingItemRequests = new Map<string, Promise<ConsignmentItem[]>>();
+
 export const useItemManagement = (
   isAuthenticated: boolean,
   cleanupBookmarks?: (items: ConsignmentItem[]) => void
@@ -57,43 +62,112 @@ export const useItemManagement = (
   });
 
   const fetchItems = useCallback(async () => {
-    try {
-      const itemsRef = collection(db, 'items');
-      const q = query(itemsRef, where('status', '==', 'live'));
-      const querySnapshot = await getDocs(q);
-      const fetchedItems: ConsignmentItem[] = [];
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedItems.push({ 
-          id: doc.id, 
-          ...data,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          approvedAt: data.approvedAt?.toDate(),
-          liveAt: data.liveAt?.toDate()
-        } as ConsignmentItem);
-      });
-      
-      // Sort client-side by live date or creation date
-      fetchedItems.sort((a, b) => {
-        const aTime = a.liveAt || a.createdAt;
-        const bTime = b.liveAt || b.createdAt;
-        return bTime.getTime() - aTime.getTime();
-      });
-      
-      setItems(fetchedItems);
+    const cacheKey = 'live-items';
+    
+    // Check cache first
+    const cached = itemsCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+      console.log('📦 Using cached items');
+      setItems(cached.data);
+      setLoadingItems(false);
       
       // Clean up bookmarks to remove sold/unavailable items
       if (isAuthenticated && cleanupBookmarks) {
-        cleanupBookmarks(fetchedItems);
+        cleanupBookmarks(cached.data);
+      }
+      return;
+    }
+
+    // Check if there's already a pending request
+    if (pendingItemRequests.has(cacheKey)) {
+      console.log('⏳ Waiting for existing items request');
+      try {
+        const result = await pendingItemRequests.get(cacheKey)!;
+        setItems(result);
+        setLoadingItems(false);
+        
+        // Clean up bookmarks to remove sold/unavailable items
+        if (isAuthenticated && cleanupBookmarks) {
+          cleanupBookmarks(result);
+        }
+        return;
+      } catch (error) {
+        console.error('Error waiting for pending request:', error);
+      }
+    }
+
+    // Create new request
+    const requestPromise = (async () => {
+      try {
+        console.log('🔄 Fetching live items from Firestore...');
+        const itemsRef = collection(db, 'items');
+        const q = query(itemsRef, where('status', '==', 'live'));
+        const querySnapshot = await getDocs(q);
+        const fetchedItems: ConsignmentItem[] = [];
+        
+        console.log(`📊 Found ${querySnapshot.size} live items`);
+        
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const item = { 
+            id: doc.id, 
+            ...data,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            approvedAt: data.approvedAt?.toDate(),
+            liveAt: data.liveAt?.toDate()
+          } as ConsignmentItem;
+          
+          fetchedItems.push(item);
+        });
+        
+        // Sort client-side by live date or creation date
+        fetchedItems.sort((a, b) => {
+          const aTime = a.liveAt || a.createdAt;
+          const bTime = b.liveAt || b.createdAt;
+          return bTime.getTime() - aTime.getTime();
+        });
+        
+        // Cache the result
+        itemsCache.set(cacheKey, {
+          data: fetchedItems,
+          timestamp: Date.now()
+        });
+        
+        console.log(`✅ Items fetched and cached: ${fetchedItems.length} items`);
+        return fetchedItems;
+      } catch (error) {
+        console.error('❌ Error fetching items:', error);
+        return [];
+      } finally {
+        setLoadingItems(false);
+        pendingItemRequests.delete(cacheKey);
+      }
+    })();
+
+    // Store the pending request
+    pendingItemRequests.set(cacheKey, requestPromise);
+
+    try {
+      const result = await requestPromise;
+      setItems(result);
+      
+      // Clean up bookmarks to remove sold/unavailable items
+      if (isAuthenticated && cleanupBookmarks) {
+        cleanupBookmarks(result);
       }
     } catch (error) {
-      console.error('Error fetching items:', error);
+      console.error('Error in fetchItems:', error);
       setItems([]);
-    } finally {
-      setLoadingItems(false);
     }
   }, [isAuthenticated, cleanupBookmarks]);
+
+  // Clear cache function
+  const clearItemsCache = useCallback(async () => {
+    itemsCache.clear();
+    pendingItemRequests.clear();
+    console.log('🗑️ Items cache cleared');
+    await fetchItems(); // Refetch items after clearing cache
+  }, [fetchItems]);
 
   // Fetch items when authenticated status changes
   useEffect(() => {
@@ -162,60 +236,69 @@ export const useItemManagement = (
     if (filters.priceRange) {
       const [min, max] = filters.priceRange.split('-').map(Number);
       filteredItems = filteredItems.filter(item => {
-        if (max) return item.price >= min && item.price <= max;
-        return item.price >= min;
+        const price = item.price;
+        if (max) {
+          return price >= min && price <= max;
+        }
+        return price >= min;
       });
     }
 
-    // Sort items
+    // Apply sorting
     switch (filters.sortBy) {
       case 'price-low':
-        return filteredItems.sort((a, b) => a.price - b.price);
+        filteredItems.sort((a, b) => a.price - b.price);
+        break;
       case 'price-high':
-        return filteredItems.sort((a, b) => b.price - a.price);
+        filteredItems.sort((a, b) => b.price - a.price);
+        break;
+      case 'name':
+        filteredItems.sort((a, b) => a.title.localeCompare(b.title));
+        break;
+      case 'category':
+        filteredItems.sort((a, b) => {
+          const aCat = a.category || '';
+          const bCat = b.category || '';
+          if (aCat === bCat) {
+            return a.title.localeCompare(b.title);
+          }
+          return aCat.localeCompare(bCat);
+        });
+        break;
       case 'newest':
-        return filteredItems.sort((a, b) => {
+      default:
+        filteredItems.sort((a, b) => {
           const aTime = a.liveAt || a.createdAt;
           const bTime = b.liveAt || b.createdAt;
           return bTime.getTime() - aTime.getTime();
         });
-      case 'oldest':
-        return filteredItems.sort((a, b) => {
-          const aTime = a.liveAt || a.createdAt;
-          const bTime = b.liveAt || b.createdAt;
-          return aTime.getTime() - bTime.getTime();
-        });
-      default:
-        return filteredItems;
+        break;
     }
+
+    return filteredItems;
   };
 
-  const getItemsByCategory = (): { [key: string]: ConsignmentItem[] } => {
+  const getItemsByCategory = () => {
     const filteredItems = getFilteredAndSortedItems();
-    const categories: { [key: string]: ConsignmentItem[] } = {};
-    
-    filteredItems.forEach((item: ConsignmentItem) => {
-      const category = item.category || 'Uncategorized';
-      if (!categories[category]) {
-        categories[category] = [];
+    const categoriesWithItems: { [key: string]: ConsignmentItem[] } = {};
+
+    filteredItems.forEach(item => {
+      const category = item.category || 'Other';
+      if (!categoriesWithItems[category]) {
+        categoriesWithItems[category] = [];
       }
-      categories[category].push(item);
+      categoriesWithItems[category].push(item);
     });
-    
-    // Sort categories by item count (most items first)
-    const sortedCategories = Object.entries(categories)
-      .sort(([, a], [, b]) => b.length - a.length)
-      .reduce((acc, [category, items]) => {
-        acc[category] = items;
-        return acc;
-      }, {} as { [key: string]: ConsignmentItem[] });
-    
-    return sortedCategories;
+
+    return categoriesWithItems;
   };
 
   const handleCategoryFilter = (category: string) => {
-    setActiveCategoryFilter(category);
-    clearFilters(); // Clear other filters when applying category filter
+    if (activeCategoryFilter === category) {
+      setActiveCategoryFilter(null);
+    } else {
+      setActiveCategoryFilter(category);
+    }
   };
 
   const clearCategoryFilter = () => {
@@ -229,7 +312,7 @@ export const useItemManagement = (
     selectedCategory,
     activeCategoryFilter,
     filterCollapsed,
-    fetchItems,
+    fetchItems: clearItemsCache, // Return clearItemsCache to allow manual refresh
     handleFilterChange,
     clearFilters,
     getFilteredAndSortedItems,

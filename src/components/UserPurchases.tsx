@@ -29,6 +29,8 @@ interface Order {
   };
   estimatedDelivery?: any;
   trackingNumber?: string;
+  paymentStatus?: string;
+  reservedUntil?: any;
 }
 
 const UserPurchases: React.FC = () => {
@@ -85,6 +87,36 @@ const UserPurchases: React.FC = () => {
       case 'processing': return 'bg-yellow-100 text-yellow-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getTimeLeft = (reservedUntil: any) => {
+    if (!reservedUntil) return '';
+    
+    let until: Date;
+    if (reservedUntil?.toDate && typeof reservedUntil.toDate === 'function') {
+      // Firestore Timestamp
+      until = reservedUntil.toDate();
+    } else if (typeof reservedUntil === 'string') {
+      until = new Date(reservedUntil);
+    } else if (reservedUntil instanceof Date) {
+      until = reservedUntil;
+    } else {
+      return '';
+    }
+    
+    const now = new Date();
+    const diffMs = until.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return 'Reservation expired';
+    
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (hours > 0) {
+      return `Time left to pick up: ${hours}h ${minutes}m`;
+    } else {
+      return `Time left to pick up: ${minutes}m`;
     }
   };
 
@@ -177,6 +209,30 @@ const UserPurchases: React.FC = () => {
                       </p>
                     </div>
                   </div>
+
+                  {/* Pending Payment Notification for In-Store Pickup */}
+                  {order.fulfillmentMethod === 'pickup' && order.paymentStatus !== 'completed' && order.reservedUntil && (
+                    <div className="mb-4 p-3 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div className="ml-3">
+                          <p className="text-sm font-medium text-yellow-800">
+                            Payment pending for in-store pickup
+                          </p>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            {getTimeLeft(order.reservedUntil)}
+                          </p>
+                          <p className="text-xs text-yellow-600 mt-2">
+                            Please bring your order confirmation and payment method to complete your purchase.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Order Items */}
                   <div className="border-t border-gray-200 pt-4">

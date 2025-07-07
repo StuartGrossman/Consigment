@@ -25,6 +25,7 @@ import MobileSharedCartScanner from './MobileSharedCartScanner';
 import StoreCreditModal from './StoreCreditModal';
 import POSModal from './POSModal';
 import RewardsPointsDashboard from './RewardsPointsDashboard';
+import AdminCartModal from './AdminCartModal';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
 import {
@@ -40,12 +41,13 @@ import {
   hikingBoots
 } from '../assets/category-images';
 import { AnalyticsPage, InventoryPage, ActionsPage, UserHistoryPage } from '../pages';
+import { useItemManagement } from '../hooks/useItemManagement';
 
 
 const Home: React.FC = () => {
     const { user, loading, signInWithGoogle, signInWithPhone, verifyOTP, resendOTP, logout, isAuthenticated, isAdmin: userIsAdmin, toggleAdmin, switchingAdminMode, verificationId } = useAuth();
     const { getCartItemCount, getBookmarkCount, cleanupBookmarks, switchUser } = useCart();
-    const { categories: realCategories } = useCategories();
+    const { categories: realCategories, refetch: refetchCategories, loading: categoriesLoading } = useCategories();
     
     // Categories loaded - no more console spam!
     
@@ -72,7 +74,26 @@ const Home: React.FC = () => {
     const handleNavigateBack = () => {
         handleNavigateToPage('store');
     };
-    const [items, setItems] = useState<ConsignmentItem[]>([]);
+
+    // Use item management hook with caching
+    const {
+        items,
+        loadingItems,
+        filters,
+        selectedCategory,
+        activeCategoryFilter,
+        filterCollapsed,
+        fetchItems,
+        handleFilterChange,
+        clearFilters,
+        getFilteredAndSortedItems,
+        getItemsByCategory,
+        handleCategoryFilter,
+        clearCategoryFilter,
+        setFilterCollapsed,
+        setSelectedCategory,
+    } = useItemManagement(isAuthenticated, cleanupBookmarks);
+
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isAdminModalOpen, setIsAdminModalOpen] = useState(false);
     const [isApprovedModalOpen, setIsApprovedModalOpen] = useState(false);
@@ -84,6 +105,7 @@ const Home: React.FC = () => {
     const [isPOSModalOpen, setIsPOSModalOpen] = useState(false);
     const [isRewardsPointsDashboardOpen, setIsRewardsPointsDashboardOpen] = useState(false);
     const [isMobileScannerOpen, setIsMobileScannerOpen] = useState(false);
+    const [isAdminCartModalOpen, setIsAdminCartModalOpen] = useState(false);
     const [isDashboardOpen, setIsDashboardOpen] = useState(false);
     const [isCategoryDashboardOpen, setIsCategoryDashboardOpen] = useState(false);
     const [showAnalyticsPage, setShowAnalyticsPage] = useState(false);
@@ -94,7 +116,6 @@ const Home: React.FC = () => {
     const [isBookmarksModalOpen, setIsBookmarksModalOpen] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
     const [showOrderSuccess, setShowOrderSuccess] = useState(false);
-    const [loadingItems, setLoadingItems] = useState(true);
     const [isAdmin, setIsAdmin] = useState(false);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -107,16 +128,6 @@ const Home: React.FC = () => {
     const [recentItems, setRecentItems] = useState<ConsignmentItem[]>([]);
     const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
     const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
-    const [filters, setFilters] = useState({
-        category: '',
-        gender: '',
-        size: '',
-        brand: '',
-        color: '',
-        priceRange: '',
-        sortBy: 'newest',
-        searchQuery: ''
-    });
     const [notificationCounts, setNotificationCounts] = useState({
         pending: 0,
         approved: 0,
@@ -126,17 +137,10 @@ const Home: React.FC = () => {
     const [filtersOpen, setFiltersOpen] = useState(false); // For mobile filter collapse
     const filtersRef = useRef<HTMLDivElement>(null);
 
-    // State for new layout
-    const [filterCollapsed, setFilterCollapsed] = useState(true);
-    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-    const [activeCategoryFilter, setActiveCategoryFilter] = useState<string | null>(null);
-
     useEffect(() => {
         if (isAuthenticated) {
-            fetchItems();
             checkAdminStatus();
         } else {
-            setLoadingItems(false);
             setIsAdmin(false);
         }
     }, [isAuthenticated, userIsAdmin]);
@@ -163,12 +167,22 @@ const Home: React.FC = () => {
             }
         };
 
+        const handleCategoriesUpdated = (event: CustomEvent) => {
+            console.log('🏷️ Categories updated event received:', event.detail);
+            if (event.detail?.action === 'categories_reordered') {
+                console.log('🔄 Categories reordered - refreshing categories list');
+                refetchCategories();
+            }
+        };
+
         window.addEventListener('itemsUpdated', handleItemsUpdated as EventListener);
+        window.addEventListener('categoriesUpdated', handleCategoriesUpdated as EventListener);
         
         return () => {
             window.removeEventListener('itemsUpdated', handleItemsUpdated as EventListener);
+            window.removeEventListener('categoriesUpdated', handleCategoriesUpdated as EventListener);
         };
-    }, [isAuthenticated, user]);
+    }, [isAuthenticated, user, refetchCategories]);
 
     // Handle clicking outside menus
     useEffect(() => {
@@ -247,45 +261,6 @@ const Home: React.FC = () => {
             console.error('Error fetching notification counts:', error);
         }
     }, [user]);
-
-    const fetchItems = async () => {
-        try {
-            const itemsRef = collection(db, 'items');
-            const q = query(itemsRef, where('status', '==', 'live'));
-            const querySnapshot = await getDocs(q);
-            const fetchedItems: ConsignmentItem[] = [];
-            
-            querySnapshot.forEach((doc) => {
-                const data = doc.data();
-                fetchedItems.push({ 
-                    id: doc.id, 
-                    ...data,
-                    createdAt: data.createdAt?.toDate() || new Date(),
-                    approvedAt: data.approvedAt?.toDate(),
-                    liveAt: data.liveAt?.toDate()
-                } as ConsignmentItem);
-            });
-            
-            // Sort client-side by live date or creation date
-            fetchedItems.sort((a, b) => {
-                const aTime = a.liveAt || a.createdAt;
-                const bTime = b.liveAt || b.createdAt;
-                return bTime.getTime() - aTime.getTime();
-            });
-            
-            setItems(fetchedItems);
-            
-            // Clean up bookmarks to remove sold/unavailable items
-            if (isAuthenticated) {
-                cleanupBookmarks(fetchedItems);
-            }
-        } catch (error) {
-            console.error('Error fetching items:', error);
-            setItems([]);
-        } finally {
-            setLoadingItems(false);
-        }
-    };
 
     const fetchRecentItems = useCallback(async () => {
         if (!user) return;
@@ -577,169 +552,13 @@ const Home: React.FC = () => {
 
 
 
-    const handleFilterChange = (filterType: string, value: string) => {
-        setFilters(prev => ({ ...prev, [filterType]: value }));
+    // Override the handleFilterChange to add mobile filter auto-close
+    const handleFilterChangeWithMobileClose = (filterType: string, value: string) => {
+        handleFilterChange(filterType, value);
         // Auto-close mobile filters when a filter is selected (except for search as users might type continuously)
         if (filterType !== 'searchQuery' && window.innerWidth < 1024) {
             setFiltersOpen(false);
         }
-    };
-
-    const clearFilters = () => {
-        setFilters({
-            category: '',
-            gender: '',
-            size: '',
-            brand: '',
-            color: '',
-            priceRange: '',
-            sortBy: 'newest',
-            searchQuery: ''
-        });
-    };
-
-    const getFilteredAndSortedItems = () => {
-        let filtered = [...items];
-
-        // Apply search query filter
-        if (filters.searchQuery) {
-            const searchLower = filters.searchQuery.toLowerCase();
-            filtered = filtered.filter(item => {
-                return (
-                    item.title?.toLowerCase().includes(searchLower) ||
-                    item.description?.toLowerCase().includes(searchLower) ||
-                    item.brand?.toLowerCase().includes(searchLower) ||
-                    item.category?.toLowerCase().includes(searchLower) ||
-                    item.color?.toLowerCase().includes(searchLower) ||
-                    item.size?.toLowerCase().includes(searchLower) ||
-                    item.condition?.toLowerCase().includes(searchLower) ||
-                    item.gender?.toLowerCase().includes(searchLower)
-                );
-            });
-        }
-
-        // Apply filters
-        if (filters.category) {
-            filtered = filtered.filter(item => item.category === filters.category);
-        }
-        if (filters.gender) {
-            filtered = filtered.filter(item => item.gender === filters.gender);
-        }
-        if (filters.size) {
-            filtered = filtered.filter(item => item.size === filters.size);
-        }
-        if (filters.brand) {
-            filtered = filtered.filter(item => item.brand?.toLowerCase().includes(filters.brand.toLowerCase()));
-        }
-        if (filters.color) {
-            filtered = filtered.filter(item => item.color?.toLowerCase().includes(filters.color.toLowerCase()));
-        }
-        if (filters.priceRange) {
-            const [min, max] = filters.priceRange.split('-').map(Number);
-            filtered = filtered.filter(item => {
-                if (max) {
-                    return item.price >= min && item.price <= max;
-                } else {
-                    return item.price >= min;
-                }
-            });
-        }
-
-        // Apply sorting
-        switch (filters.sortBy) {
-            case 'price-low':
-                filtered.sort((a, b) => a.price - b.price);
-                break;
-            case 'price-high':
-                filtered.sort((a, b) => b.price - a.price);
-                break;
-            case 'oldest':
-                filtered.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-                break;
-            case 'popular':
-                // For now, sort by a combination of recent activity and lower price (simulating popularity)
-                // In the future, this could be based on views, likes, or actual sales data
-                filtered.sort((a, b) => {
-                    const aScore = (Date.now() - a.createdAt.getTime()) / (1000 * 60 * 60 * 24) + a.price / 100;
-                    const bScore = (Date.now() - b.createdAt.getTime()) / (1000 * 60 * 60 * 24) + b.price / 100;
-                    return aScore - bScore;
-                });
-                break;
-            case 'alphabetical':
-                filtered.sort((a, b) => a.title.localeCompare(b.title));
-                break;
-            case 'category':
-                filtered.sort((a, b) => {
-                    const aCat = a.category || '';
-                    const bCat = b.category || '';
-                    if (aCat === bCat) {
-                        return a.title.localeCompare(b.title);
-                    }
-                    return aCat.localeCompare(bCat);
-                });
-                break;
-            case 'newest':
-            default:
-                filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-                break;
-        }
-
-        return filtered;
-    };
-
-    // Group items by REAL categories from Category Management Dashboard
-    const getItemsByCategory = () => {
-        const filteredItems = getFilteredAndSortedItems();
-        
-        // If a specific category filter is active, return only that category
-        if (activeCategoryFilter) {
-            const categoryItems = filteredItems.filter(item => 
-                (item.category || 'Uncategorized') === activeCategoryFilter
-            );
-            return { [activeCategoryFilter]: categoryItems };
-        }
-        
-        // Use ONLY real categories from the category management system
-        const categoriesWithItems: { [key: string]: ConsignmentItem[] } = {};
-        
-        // Get only active real categories
-        const activeRealCategories = realCategories.filter(cat => cat.isActive);
-        
-        // For each real category, find matching items
-        activeRealCategories.forEach((realCategory) => {
-            const matchingItems = filteredItems.filter(item => 
-                item.category === realCategory.name
-            );
-            
-            // Only include categories that have items
-            if (matchingItems.length > 0) {
-                categoriesWithItems[realCategory.name] = matchingItems;
-            }
-        });
-        
-        // Sort categories by item count (most items first)
-        const sortedCategories = Object.entries(categoriesWithItems)
-            .sort(([, a], [, b]) => b.length - a.length)
-            .reduce((acc, [category, items]) => {
-                acc[category] = items;
-                return acc;
-            }, {} as { [key: string]: ConsignmentItem[] });
-        
-        return sortedCategories;
-    };
-
-    const handleCategoryFilter = (category: string) => {
-        if (activeCategoryFilter === category) {
-            // Clear filter if clicking the same category
-            setActiveCategoryFilter(null);
-        } else {
-            // Set new category filter
-            setActiveCategoryFilter(category);
-        }
-    };
-
-    const clearCategoryFilter = () => {
-        setActiveCategoryFilter(null);
     };
 
     // Category image mapping
@@ -762,6 +581,7 @@ const Home: React.FC = () => {
             'Cycling': mountainBiking,
             'Apparel': outdoorClothing,
             'Footwear': hikingBoots,
+            'Other': mountainTrail, // Use mountain trail as default for uncategorized items
         };
         return fallbackImages[categoryName] || mountainTrail;
     };
@@ -785,6 +605,7 @@ const Home: React.FC = () => {
             'Water Sports': '🚣',
             'Apparel': '👕',
             'Footwear': '👟',
+            'Other': '📦',
         };
         return fallbackIcons[categoryName] || '📦';
     };
@@ -1010,20 +831,39 @@ const Home: React.FC = () => {
             {!showAnalyticsPage && !showInventoryPage && !showActionsPage && (
                 <>
                     {/* Header */}
-                    <div className="desktop-nav-header">
+                    <div className="desktop-nav-header sticky top-0 z-40">
                         <div className="desktop-nav-container">
                             <div className="desktop-nav-content">
-                        <div className="flex items-center space-x-3">
+                        <button 
+                            onClick={() => {
+                                // Reset to home page view for both users and admins
+                                setShowAnalyticsPage(false);
+                                setShowInventoryPage(false);
+                                setShowActionsPage(false);
+                                setCurrentPage('store');
+                                // Reset any active modals
+                                setIsAdminModalOpen(false);
+                                setIsApprovedModalOpen(false);
+                                setIsAnalyticsModalOpen(false);
+                                setIsApplicationTestModalOpen(false);
+                                setIsCategoryDashboardOpen(false);
+                                setIsSoldItemsModalOpen(false);
+                                setIsMyPendingItemsModalOpen(false);
+                                setIsDashboardOpen(false);
+                            }}
+                            className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
+                            title="Return to Home"
+                        >
                             <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
                                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-9 7-6-2 1-14z" />
                                 </svg>
                             </div>
                             <div>
-                                        <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
+                                <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
                                 <p className="text-xs text-gray-500">Mountain Consignment Store</p>
                             </div>
-                        </div>
+                        </button>
                         
                                 <div className="desktop-nav-actions">
                                     <div className="desktop-nav-buttons gap-4">
@@ -1032,10 +872,12 @@ const Home: React.FC = () => {
                                             className="desktop-button-primary flex items-center justify-center p-2"
                                 title="List Item for Consignment"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                                 </svg>
                             </button>
+                            
+
                             
                             {/* My Pending Items button for regular users */}
                             {!isAdmin && (
@@ -1079,32 +921,14 @@ const Home: React.FC = () => {
                                 <>
                                     {/* Individual buttons for all screens (640px+) */}
                                     <div className="hidden sm:flex sm:gap-4 lg:gap-6">
-                                        <button
+                                        {/* REMOVE POS BUTTON FROM ADMIN NAVIGATION */}
+                                        {/* <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 lg:p-4 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
                                             title="Scan Items (POS)"
                                         >
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                className="h-6 w-6 lg:h-7 lg:w-7"
-                                                fill="none"
-                                                viewBox="0 0 24 24"
-                                                stroke="currentColor"
-                                            >
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                                                />
-                                                <path
-                                                    strokeLinecap="round"
-                                                    strokeLinejoin="round"
-                                                    strokeWidth={2}
-                                                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                                                />
-                                            </svg>
-                                        </button>
+                                            <svg ... />
+                                        </button> */}
                                         <button
                                             onClick={handleAdminModal}
                                             className="desktop-button-secondary relative flex items-center justify-center p-2 lg:p-4"
@@ -1141,17 +965,14 @@ const Home: React.FC = () => {
                                     {/* Mobile/small screens - show icons only */}
                                     <div className="flex gap-3 sm:hidden">
 
-                                        {/* Desktop POS Button */}
-                                        <button
+                                        {/* REMOVE POS BUTTON FROM ADMIN NAVIGATION */}
+                                        {/* <button
                                             onClick={() => setIsPOSModalOpen(true)}
                                             className="p-2 lg:p-4 text-orange-600 hover:text-orange-800 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-full transition-all duration-200 bg-orange-50 hover:bg-orange-100"
                                             title="🖥️ Desktop POS System"
                                         >
-                                            <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                                            </svg>
-                                        </button>
+                                            <svg ... />
+                                        </button> */}
                                         <button
                                             onClick={handleAdminModal}
                                             className="desktop-button-secondary relative p-2"
@@ -1194,7 +1015,7 @@ const Home: React.FC = () => {
                                                 className="desktop-icon-button"
                                     title="Bookmarked Items"
                                 >
-                                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                                     </svg>
                                     {getBookmarkCount(items) > 0 && (
@@ -1212,7 +1033,7 @@ const Home: React.FC = () => {
                                                 className="desktop-icon-button"
                                     title="Shopping Cart"
                                 >
-                                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
                                     </svg>
                                     {getCartItemCount() > 0 && (
@@ -1220,6 +1041,22 @@ const Home: React.FC = () => {
                                             {getCartItemCount() > 9 ? '9+' : getCartItemCount()}
                                         </span>
                                     )}
+                                </button>
+                            )}
+
+                            {/* Admin Cart Icon - Only for admin users */}
+                            {isAdmin && (
+                                <button
+                                    onClick={() => setIsAdminCartModalOpen(true)}
+                                    className="desktop-icon-button"
+                                    title="Admin Cart - In-Store Checkout"
+                                >
+                                    <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                    </svg>
+                                    <span className="absolute -top-1 -right-1 bg-purple-500 text-white text-xs rounded-full desktop-badge flex items-center justify-center">
+                                        $
+                                    </span>
                                 </button>
                             )}
 
@@ -1235,7 +1072,7 @@ const Home: React.FC = () => {
                                     }}
                                                 className="desktop-icon-button"
                                 >
-                                                <svg className="w-5 h-5 sm:w-7 sm:h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <svg className="w-5 h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5-5V9a6 6 0 10-12 0v3l-5 5h5m7 0v1a3 3 0 11-6 0v-1m6 0H9" />
                                     </svg>
                                     {(() => {
@@ -1555,67 +1392,65 @@ const Home: React.FC = () => {
 
                             {/* Collapsible Search & Filter Section */}
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-                                {/* Search & Filter Toggle Button */}
-                                <button
-                                    onClick={() => setFiltersOpen(!filtersOpen)}
-                                    className="w-full mb-4 bg-white rounded-xl shadow-lg border p-4 flex items-center justify-between text-left hover:shadow-xl transition-shadow"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                        </svg>
-                                        <div>
-                                            <h2 className="text-xl font-bold text-gray-900">Search & Filter</h2>
-                                            <p className="text-sm text-gray-600">Find your perfect gear</p>
-                                        </div>
-                                        {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange || filters.searchQuery) && (
-                                            <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-medium">Active</span>
-                                        )}
-                                    </div>
-                                    <svg className={`w-6 h-6 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                    </svg>
-                                </button>
-
-                                {/* Collapsible Search & Filter Panel */}
-                                <div className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all duration-300 ${filtersOpen ? 'max-h-none opacity-100' : 'max-h-0 opacity-0'}`}>
-                                    <div className="p-6 sm:p-8">
+                                {/* Search Input and Filter Button - Side by Side */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                                    <div className="flex gap-3">
                                         {/* Search Input */}
-                                        <div className="mb-6">
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-                                            <div className="relative">
-                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                    </svg>
-                                                </div>
-                                                <input
-                                                    type="text"
-                                                    value={filters.searchQuery}
-                                                    onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
-                                                    placeholder="Search for outdoor gear, brands, categories..."
-                                                    className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                                />
-                                                {filters.searchQuery && (
-                                                    <button
-                                                        onClick={() => handleFilterChange('searchQuery', '')}
-                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
-                                                    >
-                                                        <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                    </button>
-                                                )}
+                                        <div className="flex-1 relative">
+                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
                                             </div>
+                                            <input
+                                                type="text"
+                                                value={filters.searchQuery}
+                                                onChange={(e) => handleFilterChangeWithMobileClose('searchQuery', e.target.value)}
+                                                placeholder="Search for outdoor gear, brands, categories..."
+                                                className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                            />
                                             {filters.searchQuery && (
-                                                <div className="mt-2 text-center">
-                                                    <p className="text-sm text-gray-600">
-                                                        Searching through titles, descriptions, brands, categories, and more
-                                                    </p>
-                                                </div>
+                                                <button
+                                                    onClick={() => handleFilterChangeWithMobileClose('searchQuery', '')}
+                                                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                                                >
+                                                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                    </svg>
+                                                </button>
                                             )}
                                         </div>
 
+                                        {/* Filter Toggle Button - Compact */}
+                                        <button
+                                            onClick={() => setFiltersOpen(!filtersOpen)}
+                                            className="bg-white rounded-lg shadow-lg border p-3 flex items-center gap-2 hover:shadow-xl transition-shadow whitespace-nowrap"
+                                        >
+                                            <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z" />
+                                            </svg>
+                                            <span className="text-sm font-medium text-gray-900">Filters</span>
+                                            {(filters.category || filters.gender || filters.size || filters.brand || filters.color || filters.priceRange) && (
+                                                <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-medium">Active</span>
+                                            )}
+                                            <svg className={`w-4 h-4 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    {filters.searchQuery && (
+                                        <div className="mt-2 text-center">
+                                            <p className="text-sm text-gray-600">
+                                                Searching through titles, descriptions, brands, categories, and more
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Collapsible Filter Panel */}
+                                <div className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all duration-300 ${filtersOpen ? 'max-h-none opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="p-6 sm:p-8">
                                         {/* Filter Controls */}
                                         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
                                             {/* Sort By */}
@@ -1623,7 +1458,7 @@ const Home: React.FC = () => {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
                                                 <select
                                                     value={filters.sortBy}
-                                                    onChange={(e) => handleFilterChange('sortBy', e.target.value)}
+                                                    onChange={(e) => handleFilterChangeWithMobileClose('sortBy', e.target.value)}
                                                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 >
                                                     <option value="newest">Newest First</option>
@@ -1638,20 +1473,18 @@ const Home: React.FC = () => {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
                                                 <select
                                                     value={filters.category}
-                                                    onChange={(e) => handleFilterChange('category', e.target.value)}
+                                                    onChange={(e) => handleFilterChangeWithMobileClose('category', e.target.value)}
                                                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 >
                                                     <option value="">All Categories</option>
-                                                    <option value="Climbing">Climbing 🧗</option>
-                                                    <option value="Skiing">Skiing ⛷️</option>
-                                                    <option value="Hiking">Hiking 🥾</option>
-                                                    <option value="Camping">Camping ⛺</option>
-                                                    <option value="Mountaineering">Mountaineering 🏔️</option>
-                                                    <option value="Snowboarding">Snowboarding 🏂</option>
-                                                    <option value="Cycling">Cycling 🚵</option>
-                                                    <option value="Water Sports">Water Sports 🚣</option>
-                                                    <option value="Apparel">Apparel 👕</option>
-                                                    <option value="Footwear">Footwear 👟</option>
+                                                    {realCategories
+                                                        .filter(cat => cat.isActive)
+                                                        .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                                                        .map(category => (
+                                                            <option key={category.id} value={category.name}>
+                                                                {category.name} {category.icon}
+                                                            </option>
+                                                        ))}
                                                 </select>
                                             </div>
 
@@ -1660,7 +1493,7 @@ const Home: React.FC = () => {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Gender</label>
                                                 <select
                                                     value={filters.gender}
-                                                    onChange={(e) => handleFilterChange('gender', e.target.value)}
+                                                    onChange={(e) => handleFilterChangeWithMobileClose('gender', e.target.value)}
                                                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 >
                                                     <option value="">All</option>
@@ -1675,7 +1508,7 @@ const Home: React.FC = () => {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Size</label>
                                                 <select
                                                     value={filters.size}
-                                                    onChange={(e) => handleFilterChange('size', e.target.value)}
+                                                    onChange={(e) => handleFilterChangeWithMobileClose('size', e.target.value)}
                                                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 >
                                                     <option value="">All Sizes</option>
@@ -1703,7 +1536,7 @@ const Home: React.FC = () => {
                                                 <input
                                                     type="text"
                                                     value={filters.brand}
-                                                    onChange={(e) => handleFilterChange('brand', e.target.value)}
+                                                    onChange={(e) => handleFilterChangeWithMobileClose('brand', e.target.value)}
                                                     placeholder="Search brands..."
                                                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 />
@@ -1714,7 +1547,7 @@ const Home: React.FC = () => {
                                                 <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
                                                 <select
                                                     value={filters.color}
-                                                    onChange={(e) => handleFilterChange('color', e.target.value)}
+                                                    onChange={(e) => handleFilterChangeWithMobileClose('color', e.target.value)}
                                                     className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                                 >
                                                     <option value="">All Colors</option>
@@ -1743,7 +1576,7 @@ const Home: React.FC = () => {
                                             <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
                                             <select
                                                 value={filters.priceRange}
-                                                onChange={(e) => handleFilterChange('priceRange', e.target.value)}
+                                                onChange={(e) => handleFilterChangeWithMobileClose('priceRange', e.target.value)}
                                                 className="w-full max-w-xs border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                                             >
                                                 <option value="">Any Price</option>
@@ -1793,215 +1626,121 @@ const Home: React.FC = () => {
 
             {/* Main Content */}
             {currentPage === 'store' && (
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-                    <div>
-                            <div className="mb-8">
-
-                                {/* Items Grid */}
-                                {loadingItems ? (
-                                    <div className="flex justify-center py-12">
-                                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
+                (loadingItems || categoriesLoading)
+                    ? (
+                        <div className="flex justify-center items-center min-h-[40vh]">
+                            <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-orange-500"></div>
+                        </div>
+                    )
+                    : (
+                        <>
+                            {Object.entries(getItemsByCategory()).map(([category, items]) => (
+                                <React.Fragment key={category}>
+                                    {/* Category Banner - FULL WIDTH, OUTSIDE CONTAINER */}
+                                    <div
+                                        className="relative h-48 w-full overflow-hidden shadow-lg cursor-pointer group"
+                                        style={{
+                                            backgroundImage: `url(${getCategoryImage(category)})`,
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center',
+                                        }}
+                                        onClick={() => handleCategoryFilter(category)}
+                                    >
+                                        {/* Overlay */}
+                                        <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
+                                        {/* Content */}
+                                        <div className="relative h-full flex items-center px-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-4xl">{getCategoryIcon(category)}</div>
+                                                <div>
+                                                    <h3 className="text-xl font-bold text-white mb-1">Explore {category}</h3>
+                                                    <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                ) : (() => {
-                                    const filteredItems = getFilteredAndSortedItems();
-                                    return filteredItems.length === 0 ? (
-                                        <div className="text-center py-16 bg-white rounded-lg border-2 border-dashed border-gray-300">
-                                            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                                <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                    {/* Items Row for this Category */}
+                                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+                                        {/* Category Header with View All Button */}
+                                        <div className="flex items-center justify-between mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
+                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={() => handleCategoryFilter(category)}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
+                                                title={`View all ${category} items`}
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                                 </svg>
-                                            </div>
-                                            <h3 className="text-lg font-medium text-gray-900 mb-2">
-                                                {items.length === 0 
-                                                    ? 'No items available yet' 
-                                                    : filters.searchQuery 
-                                                        ? `No results found for "${filters.searchQuery}"` 
-                                                        : 'No items match your filters'
-                                                }
-                                            </h3>
-                                            <p className="text-gray-500 mb-6">
-                                                {items.length === 0 
-                                                    ? 'Be the first to list your mountain gear!' 
-                                                    : filters.searchQuery
-                                                        ? 'Try different keywords or check your spelling'
-                                                        : 'Try adjusting your search criteria'
-                                                }
-                                            </p>
-                                            {items.length === 0 ? (
-                                                <button
-                                                    onClick={handleAddItem}
-                                                    className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors"
-                                                >
-                                                    List Your First Item
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    onClick={clearFilters}
-                                                    className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg transition-colors"
-                                                >
-                                                    Clear Filters
-                                                </button>
-                                            )}
+                                                View All
+                                            </button>
                                         </div>
-                                    ) : (
-                                        <div>
-                                            {/* Category Filter Status */}
-                                            {activeCategoryFilter && (
-                                                <div className="mb-6 flex items-center justify-between bg-orange-50 p-4 rounded-lg border border-orange-200">
-                                                    <div className="flex items-center gap-3">
-                                                        <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.707A1 1 0 013 7V4z" />
-                                                        </svg>
-                                                        <span className="font-medium text-orange-900">Filtering by: {activeCategoryFilter}</span>
-                                                        <span className="bg-orange-200 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                            {(() => {
-                                                                const categoryData = getItemsByCategory();
-                                                                const count = categoryData[activeCategoryFilter]?.length || 0;
-                                                                return `${count} ${count === 1 ? 'item' : 'items'}`;
-                                                            })()}
-                                                        </span>
-                                                    </div>
-                                                    <button
-                                                        onClick={clearCategoryFilter}
-                                                        className="flex items-center gap-1 text-orange-600 hover:text-orange-700 font-medium text-sm transition-colors"
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                        </svg>
-                                                        Clear Filter
-                                                    </button>
+                                        {/* Items Row (Horizontal Scroll) */}
+                                        <div className="relative overflow-hidden">
+                                            <div 
+                                                className="pb-4 overflow-x-auto scrollbar-hide"
+                                                data-category={category}
+                                                style={{ 
+                                                    scrollbarWidth: 'none',
+                                                    msOverflowStyle: 'none',
+                                                    WebkitOverflowScrolling: 'touch'
+                                                }}
+                                            >
+                                                <div className="flex gap-4 w-max">
+                                                    {items.map((item) => (
+                                                        <div key={item.id} className="w-72 flex-shrink-0">
+                                                            <ItemCard 
+                                                                item={item} 
+                                                                isAdmin={isAdmin}
+                                                                onClick={handleItemClick}
+                                                            />
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                            )}
-
-                                            {/* Category-Based Two-Row Horizontal Scrolling Layout */}
-                                            <div className="space-y-8">
-                                                {Object.entries(getItemsByCategory()).map(([category, items]) => (
-                                                    <div key={category} className="category-section">
-                                                        {/* Category Header with View All Button */}
-                                                        <div className="flex items-center justify-between mb-4">
-                                                            <div className="flex items-center gap-3">
-                                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
-                                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                                                                </span>
-                                                            </div>
-                                                            
-                                                            <button
-                                                                onClick={() => handleCategoryFilter(category)}
-                                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
-                                                                title={`View all ${category} items`}
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                                </svg>
-                                                                View All
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Category Banner */}
-                                                        <div 
-                                                            className="relative h-36 mb-6 rounded-xl overflow-hidden shadow-lg cursor-pointer group"
-                                                            style={{
-                                                                backgroundImage: `url(${getCategoryImage(category)})`,
-                                                                backgroundSize: 'cover',
-                                                                backgroundPosition: 'center',
-                                                            }}
-                                                            onClick={() => handleCategoryFilter(category)}
-                                                        >
-                                                            {/* Overlay */}
-                                                            <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
-                                                            
-                                                            {/* Content */}
-                                                            <div className="relative h-full flex items-center px-6">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="text-4xl">{getCategoryIcon(category)}</div>
-                                                                    <div>
-                                                                        <h3 className="text-xl font-bold text-white mb-1">Explore {category}</h3>
-                                                                        <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Two-Row Horizontal Scrolling Container */}
-                                                        <div className="relative overflow-hidden">
-                                                            <div 
-                                                                className="pb-4 overflow-x-auto scrollbar-hide"
-                                                                data-category={category}
-                                                                style={{ 
-                                                                    scrollbarWidth: 'none',
-                                                                    msOverflowStyle: 'none',
-                                                                    WebkitOverflowScrolling: 'touch'
-                                                                }}
-                                                            >
-                                                                                                                {/* Two-Row Grid */}
-                                                <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
-                                                    {(() => {
-                                                        // Only show even number of items (pairs for 2-row grid)
-                                                        // Show maximum 16 items (8 pairs) in horizontal scroll for performance
-                                                        const maxItemsToShow = activeCategoryFilter ? items.length : 16;
-                                                        const itemsToShow = items.slice(0, maxItemsToShow);
-                                                        const evenItemsToShow = itemsToShow.length % 2 === 0 ? itemsToShow : itemsToShow.slice(0, -1);
-                                                        
-                                                        return evenItemsToShow.map((item, index) => (
-                                                            <div key={item.id} className="w-72">
-                                                                <ItemCard 
-                                                                    item={item} 
-                                                                    isAdmin={isAdmin}
-                                                                    onClick={handleItemClick}
-                                                                />
-                                                            </div>
-                                                        ));
-                                                    })()}
-                                                </div>
-                                                            </div>
-                                                            
-                                                            {/* Left Scroll Shadow */}
-                                                            <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-gray-50 to-transparent pointer-events-none z-10" />
-                                                            
-                                                            {/* Right Scroll Shadow */}
-                                                            <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none z-10" />
-                                                            
-                                                            {/* Scroll Arrows for Desktop */}
-                                                            <div className="hidden lg:block">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const container = document.querySelector(`[data-category="${category}"]`);
-                                                                        if (container) {
-                                                                            container.scrollBy({ left: -300, behavior: 'smooth' });
-                                                                        }
-                                                                    }}
-                                                                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
-                                                                >
-                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                                                    </svg>
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const container = document.querySelector(`[data-category="${category}"]`);
-                                                                        if (container) {
-                                                                            container.scrollBy({ left: 300, behavior: 'smooth' });
-                                                                        }
-                                                                    }}
-                                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
-                                                                >
-                                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                                    </svg>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                            </div>
+                                            {/* Left/Right Scroll Shadows and Arrows (if needed) */}
+                                            <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-gray-50 to-transparent pointer-events-none z-10" />
+                                            <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none z-10" />
+                                            <div className="hidden lg:block">
+                                                <button
+                                                    onClick={() => {
+                                                        const container = document.querySelector(`[data-category="${category}"]`);
+                                                        if (container) {
+                                                            container.scrollBy({ left: -300, behavior: 'smooth' });
+                                                        }
+                                                    }}
+                                                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                    </svg>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        const container = document.querySelector(`[data-category="${category}"]`);
+                                                        if (container) {
+                                                            container.scrollBy({ left: 300, behavior: 'smooth' });
+                                                        }
+                                                    }}
+                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                    </svg>
+                                                </button>
                                             </div>
                                         </div>
-                                    );
-                                })()}
-                            </div>
-                    </div>
-                </div>
+                                    </div>
+                                </React.Fragment>
+                            ))}
+                        </>
+                    )
             )}
 
             {/* Page Routing */}
@@ -2127,11 +1866,18 @@ const Home: React.FC = () => {
             />
 
             {isAdmin && (
-                <RewardsPointsDashboard 
-                    user={user}
-                    isOpen={isRewardsPointsDashboardOpen}
-                    onClose={() => setIsRewardsPointsDashboardOpen(false)}
-                />
+                <>
+                    <RewardsPointsDashboard 
+                        user={user}
+                        isOpen={isRewardsPointsDashboardOpen}
+                        onClose={() => setIsRewardsPointsDashboardOpen(false)}
+                    />
+                    <AdminCartModal 
+                        isOpen={isAdminCartModalOpen}
+                        onClose={() => setIsAdminCartModalOpen(false)}
+                        items={items}
+                    />
+                </>
             )}
 
             <Checkout 

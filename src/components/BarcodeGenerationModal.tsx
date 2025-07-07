@@ -86,7 +86,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
           setIsGenerating(false);
           
           // Show error message to user
-          alert('Error generating barcode. Please try again.');
+          console.error('❌ Error generating barcode. Please try again.');
         }
       } else {
         console.error('❌ Canvas reference not available');
@@ -329,7 +329,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
     if (!user) {
       console.error('No authenticated user found');
-      alert('Authentication error. Please log in again.');
+      console.error('❌ Authentication error. Please log in again.');
       return;
     }
 
@@ -342,7 +342,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
 
     if (!isAdmin) {
       console.error('User does not have admin privileges');
-      alert('Admin privileges required to approve items. Please contact an administrator.');
+      console.error('❌ Admin privileges required to approve items. Please contact an administrator.');
       return;
     }
 
@@ -413,7 +413,7 @@ const BarcodeGenerationModal: React.FC<BarcodeGenerationModalProps> = ({
       
       // Show user-friendly error message
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      alert(`Failed to confirm item approval: ${errorMessage}\n\nUser: ${user.email}\nAdmin Status: ${isAdmin}\nItem ID: ${item.id}\n\nPlease try again or contact support if the issue persists.`);
+      console.error(`❌ Failed to confirm item approval: ${errorMessage}\n\nUser: ${user.email}\nAdmin Status: ${isAdmin}\nItem ID: ${item.id}\n\nPlease try again or contact support if the issue persists.`);
     } finally {
       setIsConfirming(false);
     }

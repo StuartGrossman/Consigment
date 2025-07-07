@@ -5,6 +5,7 @@ import UserAnalyticsModal from './UserAnalyticsModal';
 import AdminBanModal from './AdminBanModal';
 import AdminManageModal from './AdminManageModal';
 
+
 interface ActionsDashboardProps {
   user: AuthUser | null;
   isAdmin: boolean;
@@ -316,9 +317,36 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="min-h-screen bg-gray-50">
+      {/* Simple Header with Back Button */}
+      <div className="bg-white border-b border-gray-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
+                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-9 7-6-2 1-14z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
+                <p className="text-sm text-gray-500">Mountain Consignment Store</p>
+              </div>
+            </div>
+            <button
+              onClick={() => window.location.href = '/'}
+              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors font-medium"
+            >
+              Back to Store
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="space-y-6">
+          {/* Dashboard Header */}
+          <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Actions Dashboard</h1>
           <p className="text-gray-600">Track all user and admin activities</p>
@@ -874,8 +902,8 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
           onClose={() => setShowAdminManageModal(false)}
         />
       )}
-
-
+        </div>
+      </div>
     </div>
   );
 };

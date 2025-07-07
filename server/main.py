@@ -44,6 +44,11 @@ app.add_middleware(
         "http://localhost:7359",  # Previous app port
         "http://localhost:9498",  # Current app port
         "http://localhost:9999",  # Frontend port for this session
+        "http://localhost:10001",  # Frontend port
+        "http://localhost:10002",  # Frontend port
+        "http://localhost:10003",  # Frontend port
+        "http://localhost:10004",  # Frontend port
+        "http://localhost:10005",  # Frontend port
         "https://consignment-store-4a564.web.app",
         "https://consignment-store-4a564.firebaseapp.com"
     ],
@@ -86,13 +91,22 @@ class PaymentRequest(BaseModel):
     cart_items: List[CartItem]
     customer_info: CustomerInfo
     fulfillment_method: str = Field(..., pattern='^(pickup|shipping)$')
-    payment_method_id: str
+    payment_type: str = Field(..., pattern='^(online|in_store)$')
+    payment_method_id: Optional[str] = None  # Optional for in-store payments
     
     @field_validator('cart_items')
     @classmethod
     def validate_cart_not_empty(cls, v):
         if not v:
             raise ValueError('Cart cannot be empty')
+        return v
+    
+    @field_validator('payment_method_id')
+    @classmethod
+    def validate_payment_method_for_online(cls, v, info):
+        payment_type = info.data.get('payment_type')
+        if payment_type == 'online' and not v:
+            raise ValueError('Payment method ID is required for online payments')
         return v
 
 class PaymentResponse(BaseModel):
@@ -273,11 +287,10 @@ async def import_processed_items(request: Request, admin_data: dict = Depends(ve
                     'sellerPhone': item.get('sellerPhone', ''),
                     'sellerId': admin_data.get('uid', 'imported'),
                     'sellerName': admin_data.get('name', 'Admin Import'),
-                    'status': 'approved',  # Import as approved items
+                    'status': 'pending',  # Import as pending items for admin review
                     'images': item.get('images', []),  # Default to empty array for imported items
                     'tags': item.get('tags', []),  # Default to empty array
                     'createdAt': datetime.now(timezone.utc),
-                    'approvedAt': datetime.now(timezone.utc),
                     'importedAt': datetime.now(timezone.utc),
                     'importSource': import_source,
                     'barcodeData': barcode_data,
@@ -1590,16 +1603,37 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
                 item_data = validated_item['item_data']
                 earnings = calculate_earnings(cart_item.price)
                 
-                # Update item status to sold
+                # Update item status based on payment type and fulfillment method
                 item_ref = db.collection('items').document(cart_item.item_id)
-                batch.update(item_ref, {
-                    'status': 'sold',
+                
+                if payment_request.payment_type == 'online' and payment_request.fulfillment_method == 'pickup':
+                    # For online payment + pickup, mark as sold but keep in pickup queue
+                    item_status = 'sold'
+                    payment_status = 'completed'
+                    payment_method = 'Credit Card'
+                    pickup_status = 'pending_pickup'
+                elif payment_request.payment_type == 'in_store' and payment_request.fulfillment_method == 'pickup':
+                    # For in-store pickup, mark as reserved but not paid
+                    item_status = 'reserved_for_pickup'
+                    payment_status = 'pending'
+                    payment_method = 'In-Store Payment Pending'
+                    pickup_status = 'pending_payment'
+                else:
+                    # For home delivery, mark as sold
+                    item_status = 'sold'
+                    payment_status = 'completed'
+                    payment_method = 'Credit Card'
+                    pickup_status = None
+                
+                # Enhanced item update with shipping information
+                item_update_data = {
+                    'status': item_status,
                     'soldAt': datetime.now(timezone.utc),
                     'soldPrice': cart_item.price,
                     'buyerId': user_id,
                     'buyerInfo': payment_request.customer_info.dict(),
                     'saleTransactionId': transaction_id,
-                    'saleType': 'online',
+                    'saleType': payment_request.payment_type,
                     'fulfillmentMethod': payment_request.fulfillment_method,
                     'trackingNumber': f"TRK{int(time.time())}" if payment_request.fulfillment_method == 'shipping' else None,
                     'shippingLabelGenerated': False,
@@ -1607,12 +1641,28 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
                     'adminEarnings': earnings['store_commission'],
                     'lastUpdated': datetime.now(timezone.utc),
                     'orderNumber': order_id,
-                    'paymentMethod': 'Credit Card'
-                })
+                    'paymentMethod': payment_method,
+                    'paymentStatus': payment_status,
+                    'reservedUntil': datetime.now(timezone.utc) + timedelta(hours=24) if item_status == 'reserved_for_pickup' else None,
+                    'pickupStatus': pickup_status
+                }
                 
-                # Create sales record
+                # Add shipping-specific fields for home delivery
+                if payment_request.fulfillment_method == 'shipping':
+                    item_update_data.update({
+                        'shippingAddress': payment_request.customer_info.dict(),
+                        'shippingStatus': 'pending',
+                        'shippingLabelGenerated': False,
+                        'estimatedDelivery': datetime.now(timezone.utc) + timedelta(days=7),
+                        'shippingMethod': 'Standard Home Delivery',
+                        'shippingCost': 5.99
+                    })
+                
+                batch.update(item_ref, item_update_data)
+                
+                # Create sales record with enhanced information
                 sales_ref = db.collection('sales').document()
-                batch.set(sales_ref, {
+                sales_data = {
                     'itemId': cart_item.item_id,
                     'itemTitle': cart_item.title,
                     'itemCategory': item_data.get('category', 'Unknown'),
@@ -1622,17 +1672,26 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
                     'sellerName': cart_item.seller_name,
                     'buyerId': user_id,
                     'buyerName': payment_request.customer_info.name,
+                    'buyerEmail': payment_request.customer_info.email,
+                    'buyerPhone': payment_request.customer_info.phone,
                     'salePrice': cart_item.price,
                     'sellerEarnings': earnings['seller_earnings'],
                     'storeCommission': earnings['store_commission'],
                     'soldAt': datetime.now(timezone.utc),
                     'transactionId': transaction_id,
                     'orderNumber': order_id,
-                    'paymentMethod': 'Credit Card',
+                    'paymentMethod': payment_method,
                     'fulfillmentMethod': payment_request.fulfillment_method,
-                    'saleType': 'online',
-                    'shippingAddress': payment_request.customer_info.dict() if payment_request.fulfillment_method == 'shipping' else None
-                })
+                    'saleType': payment_request.payment_type,
+                    'paymentStatus': payment_status,
+                    'shippingAddress': payment_request.customer_info.dict() if payment_request.fulfillment_method == 'shipping' else None,
+                    'shippingStatus': 'pending' if payment_request.fulfillment_method == 'shipping' else None,
+                    'shippingCost': 5.99 if payment_request.fulfillment_method == 'shipping' else 0,
+                    'estimatedDelivery': datetime.now(timezone.utc) + timedelta(days=7) if payment_request.fulfillment_method == 'shipping' else None,
+                    'pickupStatus': pickup_status
+                }
+                
+                batch.set(sales_ref, sales_data)
                 
                 # Create store credit for seller
                 if cart_item.seller_id and not cart_item.seller_id.startswith('phone_'):
@@ -1661,22 +1720,34 @@ async def process_payment(payment_request: PaymentRequest, user_data: dict = Dep
                         logger.error(f"Failed to award seller points for item {cart_item.item_id}: {e}")
                         # Don't fail the whole payment for points issues
             
-            # Create order record
+            # Create comprehensive order record
             order_ref = db.collection('orders').document(order_id)
-            batch.set(order_ref, {
+            order_data = {
                 'orderId': order_id,
                 'userId': user_id,
                 'customerInfo': payment_request.customer_info.dict(),
                 'items': [item.dict() for item in payment_request.cart_items],
                 'totalAmount': total_amount,
+                'subtotal': total_amount - (5.99 if payment_request.fulfillment_method == 'shipping' else 0),
+                'shippingCost': 5.99 if payment_request.fulfillment_method == 'shipping' else 0,
                 'fulfillmentMethod': payment_request.fulfillment_method,
-                'paymentMethod': 'Credit Card',
+                'paymentMethod': payment_method,
+                'paymentStatus': payment_status,
                 'transactionId': transaction_id,
                 'status': 'completed',
-                'orderStatus': 'processing',
+                'orderStatus': 'processing' if payment_request.fulfillment_method == 'shipping' else 'completed',
                 'createdAt': datetime.now(timezone.utc),
-                'estimatedDelivery': datetime.now(timezone.utc) + timedelta(days=7) if payment_request.fulfillment_method == 'shipping' else None
-            })
+                'estimatedDelivery': datetime.now(timezone.utc) + timedelta(days=7) if payment_request.fulfillment_method == 'shipping' else None,
+                'shippingStatus': 'pending' if payment_request.fulfillment_method == 'shipping' else None,
+                'shippingAddress': payment_request.customer_info.dict() if payment_request.fulfillment_method == 'shipping' else None,
+                'shippingMethod': 'Standard Home Delivery' if payment_request.fulfillment_method == 'shipping' else 'In-Store Pickup',
+                'itemCount': len(payment_request.cart_items),
+                'sellerIds': list(set([item.seller_id for item in payment_request.cart_items])),
+                'sellerNames': list(set([item.seller_name for item in payment_request.cart_items])),
+                'pickupStatus': 'pending_pickup' if payment_request.fulfillment_method == 'pickup' and payment_request.payment_type == 'online' else None
+            }
+            
+            batch.set(order_ref, order_data)
             
             # Commit all changes
             batch.commit()
@@ -1849,65 +1920,58 @@ async def approve_pending_item(
     approval_data: dict,
     admin_data: dict = Depends(verify_admin_access)
 ):
-    """Admin endpoint to approve a pending item and make it live"""
+    """Admin endpoint to approve a pending item"""
     try:
         admin_id = admin_data.get('uid')
-        pending_item_id = approval_data.get('pending_item_id')
+        item_id = approval_data.get('pending_item_id')
         
-        if not pending_item_id:
+        if not item_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Pending item ID is required"
+                detail="Item ID is required"
             )
         
-        # Get the pending item
-        pending_ref = db.collection('pendingItems').document(pending_item_id)
-        pending_doc = pending_ref.get()
+        # Get the item from the main items collection
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
         
-        if not pending_doc.exists:
+        if not item_doc.exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Pending item not found"
+                detail="Item not found"
             )
         
-        item_data = pending_doc.to_dict()
+        item_data = item_doc.to_dict()
         
-        # Create live item in main items collection
-        live_item_data = {
-            **item_data,
-            'status': 'live',
+        # Check if item is actually pending
+        if item_data.get('status') != 'pending':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Item is not in pending status"
+            )
+        
+        # Update item to approved status
+        item_ref.update({
+            'status': 'approved',
             'approvedAt': datetime.now(timezone.utc),
-            'approvedBy': admin_id,
-            'liveAt': datetime.now(timezone.utc)
-        }
+            'approvedBy': admin_id
+        })
         
-        # Remove internal tracking fields
-        live_item_data.pop('originalUserId', None)
-        live_item_data.pop('originalItemId', None)
-        live_item_data.pop('pendingItemId', None)
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': admin_id,
+            'action': 'item_approved',
+            'itemId': item_id,
+            'details': 'Approved pending item',
+            'timestamp': datetime.now(timezone.utc)
+        })
         
-        # Create in main items collection
-        items_ref = db.collection('items').document()
-        items_ref.set(live_item_data)
-        
-        # Update user's original item
-        if item_data.get('originalUserId') and item_data.get('originalItemId'):
-            user_item_ref = db.collection('userItems').document(item_data['originalUserId']).collection('items').document(item_data['originalItemId'])
-            user_item_ref.update({
-                'status': 'approved',
-                'approvedAt': datetime.now(timezone.utc),
-                'liveItemId': items_ref.id
-            })
-        
-        # Remove from pending collection
-        pending_ref.delete()
-        
-        logger.info(f"Admin {admin_id} approved item {pending_item_id}, now live as {items_ref.id}")
+        logger.info(f"Admin {admin_id} approved item {item_id}")
         
         return {
             "success": True,
-            "message": "Item approved and made live",
-            "live_item_id": items_ref.id
+            "message": "Item approved successfully",
+            "item_id": item_id
         }
         
     except HTTPException:
@@ -2570,52 +2634,8 @@ async def create_item(request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@app.post("/api/admin/approve-item")
-async def approve_single_item(request: Request):
-    """Admin endpoint to approve a single item"""
-    try:
-        auth_header = request.headers.get("authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
-        
-        token = auth_header.split("Bearer ")[1]
-        decoded_token = auth.verify_id_token(token)
-        user_id = decoded_token['uid']
-        
-        user_doc = db.collection('users').document(user_id).get()
-        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
-            raise HTTPException(status_code=403, detail="Admin access required")
-        
-        data = await request.json()
-        item_id = data.get('itemId', '')
-        
-        if not item_id:
-            raise HTTPException(status_code=400, detail="Missing itemId")
-        
-        # Update item to approved status
-        item_ref = db.collection('items').document(item_id)
-        item_ref.update({
-            'status': 'approved',
-            'approvedAt': datetime.now(timezone.utc),
-            'approvedBy': user_id
-        })
-        
-        # Log admin action
-        db.collection('adminActions').add({
-            'adminId': user_id,
-            'action': 'item_approved',
-            'itemId': item_id,
-            'details': 'Approved item',
-            'timestamp': datetime.now(timezone.utc)
-        })
-        
-        return {"success": True, "message": "Item approved successfully"}
-        
-    except Exception as e:
-        logger.error(f"Error approving item: {e}")
-        if isinstance(e, HTTPException):
-            raise e
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+# Removed duplicate /api/admin/approve-item endpoint to fix route conflict
+# The correct endpoint is at line 1874 which expects pending_item_id
 
 @app.post("/api/admin/bulk-approve")
 async def bulk_approve_items(request: Request):
@@ -2930,31 +2950,410 @@ async def generate_test_data(request: Request):
         
         logger.info(f"Admin {admin_user_id} generating test data")
         
-        # Comprehensive test data with diverse categories and high-quality images
+        # Comprehensive test data using outlet images with proper descriptions and tags
         test_items = [
-            # Electronics - Enhanced with more items
+            # Rock Climbing Gear
             {
-                'title': 'Garmin Fenix 7X Solar GPS Watch',
-                'description': 'Multi-sport GPS smartwatch with Power Glass solar charging lens. Features heart rate monitoring, pulse ox sensor, detailed mapping, and up to 28 days battery life. Built for serious athletes and outdoor enthusiasts.',
-                'price': 649.00,
-                'originalPrice': 899.99,
-                'brand': 'Garmin',
-                'category': 'Electronics',
+                'title': 'Black Diamond Momentum Climbing Harness',
+                'description': 'Comfortable and adjustable climbing harness perfect for gym climbing and outdoor sport routes. Features breathable mesh waist belt, 4 gear loops, and adjustable leg loops. UIAA certified for safety.',
+                'price': 45.00,
+                'originalPrice': 69.95,
+                'brand': 'Black Diamond',
+                'category': 'Climbing Gear',
                 'gender': 'Unisex',
-                'size': '51mm',
-                'color': 'Carbon Gray DLC',
-                'condition': 'Excellent',
-                'material': 'Titanium Bezel, Sapphire Lens',
-                'tags': ['gps', 'smartwatch', 'solar', 'multisport', 'mapping'],
+                'size': 'Medium',
+                'color': 'Blue',
+                'condition': 'Very Good',
+                'material': 'Nylon Webbing, Mesh',
+                'tags': ['climbing harness', 'gym climbing', 'sport climbing', 'adjustable', 'uiaa certified'],
                 'status': 'pending',
                 'sellerId': admin_user_id,
-                'sellerName': 'Tech Gear Expert',
-                'sellerEmail': 'tech@summitgear.com',
+                'sellerName': 'Vertical Adventures',
+                'sellerEmail': 'climb@vertical.com',
                 'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80'
-                ]
+                'images': ['/src/assets/outlet images/rock-climbing-harness.jpg']
+            },
+            {
+                'title': 'Mammut 9.5mm Phoenix Dry Climbing Rope',
+                'description': '70m dynamic single rope with Dry treatment technology providing water resistance. Featuring UIAA and CE certified construction with middle mark for safe rappelling. Perfect for sport, trad, and alpine climbing.',
+                'price': 125.00,
+                'originalPrice': 179.95,
+                'brand': 'Mammut',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '70m x 9.5mm',
+                'color': 'Safety Orange',
+                'condition': 'Very Good',
+                'material': 'Nylon Core, Polyester Sheath',
+                'tags': ['dynamic rope', 'dry treatment', 'single rope', 'middle mark', 'uiaa certified'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Elite Climbing Gear',
+                'sellerEmail': 'elite@climbinggear.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-ropes.jpg']
+            },
+            {
+                'title': 'La Sportiva Solution Comp Climbing Shoes',
+                'description': 'Aggressive performance climbing shoe with P3 system for precise edging and hooking. Features sticky Vibram XS Grip2 rubber and Fast Lacing System. Perfect for advanced sport climbing and bouldering.',
+                'price': 129.00,
+                'originalPrice': 189.00,
+                'brand': 'La Sportiva',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '42',
+                'color': 'White/Lily Orange',
+                'condition': 'Excellent',
+                'material': 'Leather, Vibram XS Grip2',
+                'tags': ['aggressive climbing', 'sport climbing', 'bouldering', 'vibram rubber', 'performance'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Comp Climbing Pro',
+                'sellerEmail': 'comp@climbingpro.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-shoes.jpg']
+            },
+            {
+                'title': 'Black Diamond Positron Screwgate Carabiners (Set of 6)',
+                'description': 'High-strength screwgate carabiners with keylock nose for snag-free clipping. Features 24kN gate-open strength and smooth gate action. Perfect for belaying, rappelling, and anchor building.',
+                'price': 35.00,
+                'originalPrice': 59.95,
+                'brand': 'Black Diamond',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': 'Standard',
+                'color': 'Silver',
+                'condition': 'Good',
+                'material': 'Aluminum Alloy',
+                'tags': ['carabiners', 'screwgate', 'keylock', 'belaying', 'anchors'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Safety First Climbing',
+                'sellerEmail': 'safety@climbing.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/carabiners.jpg']
+            },
+            {
+                'title': 'Petzl Meteor Climbing Helmet',
+                'description': 'Lightweight and comfortable climbing helmet with excellent ventilation. Features adjustable headband and chin strap. UIAA and CE certified for impact protection. Perfect for all types of climbing.',
+                'price': 55.00,
+                'originalPrice': 89.95,
+                'brand': 'Petzl',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': 'Medium',
+                'color': 'Red',
+                'condition': 'Very Good',
+                'material': 'Polycarbonate Shell, EPS Foam',
+                'tags': ['climbing helmet', 'lightweight', 'ventilated', 'uiaa certified', 'impact protection'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Head Protection Pro',
+                'sellerEmail': 'head@protection.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-helmet.jpg']
+            },
+            {
+                'title': 'Black Diamond HotForge Quickdraws (Set of 12)',
+                'description': 'Lightweight quickdraws with wiregate carabiners for fast clipping. Features 24kN gate-open strength and color-coded dogbones. Perfect for sport climbing and gym use.',
+                'price': 85.00,
+                'originalPrice': 129.95,
+                'brand': 'Black Diamond',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '12cm',
+                'color': 'Mixed Colors',
+                'condition': 'Excellent',
+                'material': 'Aluminum, Nylon Webbing',
+                'tags': ['quickdraws', 'wiregate', 'sport climbing', 'lightweight', 'color coded'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Quick Draw Supply',
+                'sellerEmail': 'quick@drawsupply.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/quickdraws.jpg']
+            },
+            {
+                'title': 'Friction Labs Chalk Bag with Belt',
+                'description': 'Premium chalk bag with adjustable belt and fleece lining. Features secure closure and comfortable fit. Perfect for bouldering, sport climbing, and gym sessions.',
+                'price': 18.00,
+                'originalPrice': 29.95,
+                'brand': 'Friction Labs',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': 'Standard',
+                'color': 'Black',
+                'condition': 'Good',
+                'material': 'Nylon, Fleece Lining',
+                'tags': ['chalk bag', 'fleece lining', 'adjustable belt', 'bouldering', 'gym climbing'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Chalk Master',
+                'sellerEmail': 'chalk@master.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/chalk-bag.jpg']
+            },
+            {
+                'title': 'Black Diamond ATC-XP Belay Device',
+                'description': 'Versatile belay device with extended plate for smooth rope handling. Features two rope slots for different diameters and textured surface for better grip. Perfect for gym and outdoor climbing.',
+                'price': 22.00,
+                'originalPrice': 34.95,
+                'brand': 'Black Diamond',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': 'Standard',
+                'color': 'Silver',
+                'condition': 'Very Good',
+                'material': 'Aluminum Alloy',
+                'tags': ['belay device', 'atc', 'smooth handling', 'versatile', 'textured surface'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Belay Device Pro',
+                'sellerEmail': 'belay@device.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/belay-device.jpg']
+            },
+            {
+                'title': 'Friction Labs Premium Chalk (4oz)',
+                'description': 'High-quality climbing chalk with optimal moisture absorption. Features fine texture for better grip and long-lasting performance. Perfect for all climbing styles.',
+                'price': 12.00,
+                'originalPrice': 19.95,
+                'brand': 'Friction Labs',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '4oz',
+                'color': 'White',
+                'condition': 'New',
+                'material': 'Magnesium Carbonate',
+                'tags': ['climbing chalk', 'moisture absorption', 'premium', 'fine texture', 'long lasting'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Chalk Supply Co',
+                'sellerEmail': 'supply@chalk.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-chalk.jpg']
+            },
+            {
+                'title': 'Black Diamond C4 Camalot Set (0.3-3)',
+                'description': 'Complete set of camming devices for trad climbing. Features dual-axle design for wide range and color-coded sizing. Perfect for placing protection on traditional routes.',
+                'price': 245.00,
+                'originalPrice': 399.95,
+                'brand': 'Black Diamond',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '0.3-3',
+                'color': 'Mixed Colors',
+                'condition': 'Very Good',
+                'material': 'Aluminum, Steel Springs',
+                'tags': ['cams', 'trad climbing', 'dual axle', 'color coded', 'protection'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Trad Climbing Gear',
+                'sellerEmail': 'trad@climbing.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-cams.jpg']
+            },
+            {
+                'title': 'DMM Wallnuts Set (1-11)',
+                'description': 'Complete set of passive protection nuts for trad climbing. Features color-coded sizing and durable construction. Perfect for placing protection in cracks and fissures.',
+                'price': 65.00,
+                'originalPrice': 99.95,
+                'brand': 'DMM',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '1-11',
+                'color': 'Mixed Colors',
+                'condition': 'Good',
+                'material': 'Aluminum Alloy',
+                'tags': ['nuts', 'passive protection', 'trad climbing', 'color coded', 'crack protection'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Passive Protection Pro',
+                'sellerEmail': 'passive@protection.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-nuts.jpg']
+            },
+            {
+                'title': 'Osprey Mutant 38L Climbing Pack',
+                'description': 'Versatile climbing backpack with rope carry system and gear organization. Features hydration compatibility and durable construction. Perfect for cragging and multi-pitch routes.',
+                'price': 95.00,
+                'originalPrice': 149.95,
+                'brand': 'Osprey',
+                'category': 'Climbing Gear',
+                'gender': 'Unisex',
+                'size': '38L',
+                'color': 'Black',
+                'condition': 'Very Good',
+                'material': 'Nylon, Ripstop',
+                'tags': ['climbing pack', 'rope carry', 'gear organization', 'hydration', 'durable'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Pack Solutions',
+                'sellerEmail': 'pack@solutions.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/climbing-backpack.jpg']
+            },
+            
+            # Skiing Gear
+            {
+                'title': 'Salomon QST 106 Ski Boots - Men\'s',
+                'description': 'Versatile all-mountain ski boots with excellent flex for varied terrain. Features customizable fit with heat-moldable liner and adjustable buckles. Perfect for powder, groomers, and backcountry skiing.',
+                'price': 189.00,
+                'originalPrice': 299.95,
+                'brand': 'Salomon',
+                'category': 'Skiing Gear',
+                'gender': 'Men',
+                'size': '27.5',
+                'color': 'Black/Red',
+                'condition': 'Very Good',
+                'material': 'Polyurethane Shell, Heat-moldable Liner',
+                'tags': ['ski boots', 'all mountain', 'heat moldable', 'adjustable', 'versatile'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Ski Boot Pro',
+                'sellerEmail': 'boots@skipro.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-boots.jpg']
+            },
+            {
+                'title': 'Atomic Bent Chetler 100 Skis (2023)',
+                'description': 'Lightweight all-mountain skis with playful feel and excellent float. Features carbon layering for responsiveness and rocker-camber-rocker profile. Perfect for powder and variable conditions.',
+                'price': 299.00,
+                'originalPrice': 499.95,
+                'brand': 'Atomic',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': '184cm',
+                'color': 'Black/White',
+                'condition': 'Excellent',
+                'material': 'Wood Core, Carbon Fiber',
+                'tags': ['skis', 'all mountain', 'lightweight', 'powder', 'carbon fiber'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Atomic Ski Specialist',
+                'sellerEmail': 'atomic@skispecialist.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/skis.jpg']
+            },
+            {
+                'title': 'Black Diamond Expedition Carbon Ski Poles',
+                'description': 'Ultralight carbon fiber ski poles with adjustable length. Features comfortable grips and durable construction. Perfect for backcountry skiing and mountaineering.',
+                'price': 45.00,
+                'originalPrice': 79.95,
+                'brand': 'Black Diamond',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': 'Adjustable 110-130cm',
+                'color': 'Black',
+                'condition': 'Very Good',
+                'material': 'Carbon Fiber, Aluminum',
+                'tags': ['ski poles', 'carbon fiber', 'adjustable', 'ultralight', 'backcountry'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Pole Master',
+                'sellerEmail': 'poles@master.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-poles.jpg']
+            },
+            {
+                'title': 'POC Obex SPIN Ski Helmet',
+                'description': 'Advanced ski helmet with SPIN technology for rotational impact protection. Features adjustable ventilation and comfortable fit. Perfect for all-mountain and freestyle skiing.',
+                'price': 75.00,
+                'originalPrice': 129.95,
+                'brand': 'POC',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': 'Medium',
+                'color': 'White',
+                'condition': 'Excellent',
+                'material': 'Polycarbonate Shell, EPS Foam',
+                'tags': ['ski helmet', 'spin technology', 'rotational protection', 'adjustable ventilation'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Helmet Safety Pro',
+                'sellerEmail': 'helmet@safety.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-helmet.jpg']
+            },
+            {
+                'title': 'Oakley Flight Deck XM Ski Goggles',
+                'description': 'Premium ski goggles with Prizm lens technology for enhanced visibility. Features spherical lens design and comfortable fit. Perfect for all light conditions.',
+                'price': 89.00,
+                'originalPrice': 149.95,
+                'brand': 'Oakley',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': 'Large',
+                'color': 'Black/Red',
+                'condition': 'Very Good',
+                'material': 'Polycarbonate Lens, O Matter Frame',
+                'tags': ['ski goggles', 'prizm lens', 'spherical', 'enhanced visibility', 'all conditions'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Goggle Vision Pro',
+                'sellerEmail': 'goggles@vision.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-goggles.jpg']
+            },
+            {
+                'title': 'Hestra Army Leather Ski Gloves',
+                'description': 'Premium leather ski gloves with excellent warmth and dexterity. Features waterproof membrane and adjustable wrist closure. Perfect for cold weather skiing.',
+                'price': 65.00,
+                'originalPrice': 109.95,
+                'brand': 'Hestra',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': 'Large',
+                'color': 'Brown',
+                'condition': 'Good',
+                'material': 'Leather, Gore-Tex Membrane',
+                'tags': ['ski gloves', 'leather', 'waterproof', 'warm', 'dexterity'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Glove Master',
+                'sellerEmail': 'gloves@master.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-gloves.jpg']
+            },
+            {
+                'title': 'Arc\'teryx Beta AR Ski Jacket',
+                'description': 'Versatile ski jacket with Gore-Tex Pro technology for waterproof protection. Features adjustable hood and multiple pockets. Perfect for backcountry and resort skiing.',
+                'price': 199.00,
+                'originalPrice': 349.95,
+                'brand': 'Arc\'teryx',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': 'Medium',
+                'color': 'Black',
+                'condition': 'Very Good',
+                'material': 'Gore-Tex Pro, Nylon',
+                'tags': ['ski jacket', 'gore tex', 'waterproof', 'versatile', 'backcountry'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Jacket Pro',
+                'sellerEmail': 'jacket@pro.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-jacket.jpg']
+            },
+            {
+                'title': 'Patagonia Powder Bowl Ski Pants',
+                'description': 'Insulated ski pants with waterproof shell and comfortable fit. Features adjustable waist and reinforced knees. Perfect for cold weather and powder skiing.',
+                'price': 85.00,
+                'originalPrice': 149.95,
+                'brand': 'Patagonia',
+                'category': 'Skiing Gear',
+                'gender': 'Unisex',
+                'size': '32x32',
+                'color': 'Navy',
+                'condition': 'Good',
+                'material': 'Waterproof Shell, Insulated',
+                'tags': ['ski pants', 'insulated', 'waterproof', 'adjustable', 'powder'],
+                'status': 'pending',
+                'sellerId': admin_user_id,
+                'sellerName': 'Pants Pro',
+                'sellerEmail': 'pants@pro.com',
+                'isTestData': True,
+                'images': ['/src/assets/outlet images/ski-pants.jpg']
             },
             {
                 'title': 'GoPro Hero 12 Black Action Camera',
@@ -4421,9 +4820,13 @@ async def issue_refund(request: Request):
                 
                 logger.info(f"Added ${refund_amount} store credit to user {buyer_id}")
         
-        # Update item status back to PENDING and clear sale information
+        # Store original category before moving back to pending
+        original_category = item_data.get('category', 'Pending Items')
+        
+        # Update item status to PENDING and restore original category
         item_ref.update({
-            'status': 'pending',  # Changed from 'approved' to 'pending'
+            'status': 'pending',  # Move back to pending for resale
+            'category': original_category,  # Restore original category
             'soldAt': None,
             'soldPrice': None,
             'buyerId': None,
@@ -4441,15 +4844,61 @@ async def issue_refund(request: Request):
             'lastUpdated': datetime.now(timezone.utc)
         })
         
+        # UPDATE ORDER STATUS to refunded
+        order_id = item_data.get('orderId')
+        if order_id:
+            try:
+                # Find the order that contains this item
+                orders_query = db.collection('orders').where('orderId', '==', order_id).get()
+                for order_doc in orders_query:
+                    order_data = order_doc.to_dict()
+                    order_items = order_data.get('items', [])
+                    
+                    # Check if this order contains the refunded item
+                    item_found = False
+                    for order_item in order_items:
+                        if order_item.get('item_id') == item_id:
+                            item_found = True
+                            # Mark this specific item as refunded in the order
+                            order_item['status'] = 'refunded'
+                            order_item['refundedAt'] = datetime.now(timezone.utc).isoformat()
+                            order_item['refundReason'] = refund_reason.strip()
+                            break
+                    
+                    if item_found:
+                        # Update the order with refunded item
+                        order_ref = db.collection('orders').document(order_doc.id)
+                        order_ref.update({
+                            'items': order_items,
+                            'lastUpdated': datetime.now(timezone.utc),
+                            'hasRefundedItems': True
+                        })
+                        
+                        # Check if all items in the order are refunded
+                        all_refunded = all(item.get('status') == 'refunded' for item in order_items)
+                        if all_refunded:
+                            order_ref.update({
+                                'orderStatus': 'cancelled',
+                                'cancelledAt': datetime.now(timezone.utc),
+                                'cancellationReason': f'Refunded: {refund_reason.strip()}'
+                            })
+                        
+                        logger.info(f"Updated order {order_id} with refunded item {item_id}")
+                        break
+                        
+            except Exception as e:
+                logger.warning(f"Could not update order {order_id} for refunded item {item_id}: {e}")
+                # Continue with refund process even if order update fails
+        
         # NOTIFY SELLER about item return
         seller_id = item_data.get('sellerId')
         if seller_id:
             seller_notification = {
                 'userId': seller_id,
                 'type': 'item_returned',
-                'title': 'Item Returned to Shop',
-                'message': f'Your item "{item_data.get("title", "Unknown")}" has been returned to the shop due to a refund.',
-                'details': f'Reason: {refund_reason.strip()}',
+                'title': 'Item Returned to Pending',
+                'message': f'Your item "{item_data.get("title", "Unknown")}" has been returned to pending status due to a refund.',
+                'details': f'Reason: {refund_reason.strip()}. Item is now back in {original_category} category and available for resale.',
                 'itemId': item_id,
                 'itemTitle': item_data.get('title', 'Unknown'),
                 'createdAt': datetime.now(timezone.utc),
@@ -4457,6 +4906,24 @@ async def issue_refund(request: Request):
                 'priority': 'high'
             }
             db.collection('notifications').add(seller_notification)
+        
+        # NOTIFY BUYER about refund
+        if buyer_id:
+            buyer_notification = {
+                'userId': buyer_id,
+                'type': 'order_refunded',
+                'title': 'Order Refunded',
+                'message': f'Your order for "{item_data.get("title", "Unknown")}" has been refunded.',
+                'details': f'Refund amount: ${refund_amount}. Reason: {refund_reason.strip()}. Store credit has been added to your account.',
+                'itemId': item_id,
+                'itemTitle': item_data.get('title', 'Unknown'),
+                'refundAmount': refund_amount,
+                'refundReason': refund_reason.strip(),
+                'createdAt': datetime.now(timezone.utc),
+                'read': False,
+                'priority': 'high'
+            }
+            db.collection('notifications').add(buyer_notification)
         
         # Log admin action with enhanced details
         admin_action = {
@@ -4488,6 +4955,106 @@ async def issue_refund(request: Request):
         
     except Exception as e:
         logger.error(f"Error processing refund: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/reactivate-refunded-item")
+async def reactivate_refunded_item(request: Request):
+    """Admin endpoint to reactivate a refunded item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        admin_user_id = decoded_token['uid']
+        
+        # Verify admin status
+        admin_doc = db.collection('users').document(admin_user_id).get()
+        if not admin_doc.exists or not admin_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId')
+        new_category = data.get('newCategory', 'Pending Items')  # Default to Pending Items
+        admin_notes = data.get('adminNotes', 'Item reactivated from refunded status')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        logger.info(f"Admin {admin_user_id} reactivating refunded item {item_id}")
+        
+        # Get the item to verify it's refunded
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        # Verify the item is refunded
+        if item_data.get('status') != 'refunded':
+            raise HTTPException(status_code=400, detail="Only refunded items can be reactivated")
+        
+        # Get the original category if available, otherwise use the provided category
+        original_category = item_data.get('originalCategory') or new_category
+        
+        # Update item status to pending and restore original category
+        item_ref.update({
+            'status': 'pending',
+            'category': original_category,
+            'reactivatedAt': datetime.now(timezone.utc),
+            'reactivatedBy': admin_user_id,
+            'reactivationNotes': admin_notes,
+            'lastUpdated': datetime.now(timezone.utc)
+        })
+        
+        # NOTIFY SELLER about item reactivation
+        seller_id = item_data.get('sellerId')
+        if seller_id:
+            seller_notification = {
+                'userId': seller_id,
+                'type': 'item_reactivated',
+                'title': 'Item Reactivated',
+                'message': f'Your item "{item_data.get("title", "Unknown")}" has been reactivated from the Refunded category.',
+                'details': f'Item is now back in {original_category} category and available for sale.',
+                'itemId': item_id,
+                'itemTitle': item_data.get('title', 'Unknown'),
+                'createdAt': datetime.now(timezone.utc),
+                'read': False,
+                'priority': 'medium'
+            }
+            db.collection('notifications').add(seller_notification)
+        
+        # Log admin action
+        admin_action = {
+            'adminId': admin_user_id,
+            'action': 'item_reactivated',
+            'details': f'Reactivated refunded item "{item_data.get("title", "Unknown")}" - moved to {original_category} category.',
+            'itemId': item_id,
+            'sellerId': seller_id,
+            'newCategory': original_category,
+            'adminNotes': admin_notes,
+            'timestamp': datetime.now(timezone.utc)
+        }
+        db.collection('adminActions').add(admin_action)
+        
+        logger.info(f"Successfully reactivated refunded item {item_id} to {original_category} category")
+        
+        return {
+            "success": True,
+            "message": f"Item reactivated successfully - moved to {original_category} category",
+            "itemId": item_id,
+            "newStatus": "pending",
+            "newCategory": original_category,
+            "sellerNotified": bool(seller_id),
+            "processedAt": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error reactivating refunded item: {e}")
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -4588,7 +5155,9 @@ async def get_user_purchases(request: Request):
                 'createdAt': order_data.get('createdAt'),
                 'customerInfo': order_data.get('customerInfo'),
                 'estimatedDelivery': order_data.get('estimatedDelivery'),
-                'trackingNumber': order_data.get('trackingNumber')
+                'trackingNumber': order_data.get('trackingNumber'),
+                'paymentStatus': order_data.get('paymentStatus'),
+                'reservedUntil': order_data.get('reservedUntil')
             })
         
         # Also query by email in customer info
@@ -4610,7 +5179,9 @@ async def get_user_purchases(request: Request):
                     'createdAt': order_data.get('createdAt'),
                     'customerInfo': order_data.get('customerInfo'),
                     'estimatedDelivery': order_data.get('estimatedDelivery'),
-                    'trackingNumber': order_data.get('trackingNumber')
+                    'trackingNumber': order_data.get('trackingNumber'),
+                    'paymentStatus': order_data.get('paymentStatus'),
+                    'reservedUntil': order_data.get('reservedUntil')
                 })
         
         # Sort by creation date (newest first)
@@ -5778,99 +6349,82 @@ async def get_all_orders(admin_data: dict = Depends(verify_admin_access)):
     try:
         logger.info("Fetching all orders for admin dashboard")
         
-        # First, get all completed transactions/payments
-        payments_ref = db.collection('payments')
-        payments_docs = payments_ref.get()
+        # Get all orders from the orders collection
+        orders_ref = db.collection('orders')
+        orders_docs = orders_ref.order_by('createdAt', direction='DESCENDING').get()
         
         orders = []
         
-        for payment_doc in payments_docs:
-            payment_data = payment_doc.to_dict()
-            payment_id = payment_doc.id
+        for order_doc in orders_docs:
+            order_data = order_doc.to_dict()
+            order_id = order_doc.id
             
-            # Get the order items from the sold items
+            # Get detailed item information for each item in the order
             order_items = []
             total_amount = 0
             
-            # Look for items that were part of this transaction
-            items_ref = db.collection('items')
-            
-            # Try to find items by transaction_id first
-            if 'transaction_id' in payment_data:
-                sold_items_query = items_ref.where('transaction_id', '==', payment_data['transaction_id'])
-                sold_items_docs = sold_items_query.get()
-                
-                for item_doc in sold_items_docs:
-                    item_data = item_doc.to_dict()
-                    order_items.append({
-                        'id': item_doc.id,
-                        'title': item_data.get('title', 'Unknown Item'),
-                        'price': item_data.get('soldPrice', item_data.get('price', 0)),
-                        'seller': item_data.get('sellerName', 'Unknown Seller'),
-                        'category': item_data.get('category', 'Uncategorized'),
-                        'status': item_data.get('status', 'sold'),
-                        'shippedAt': item_data.get('shippedAt'),
-                        'trackingNumber': item_data.get('trackingNumber')
-                    })
-                    total_amount += item_data.get('soldPrice', item_data.get('price', 0))
-            
-            # If no items found by transaction_id, try other methods
-            if not order_items and 'order_id' in payment_data:
-                sold_items_query = items_ref.where('order_id', '==', payment_data['order_id'])
-                sold_items_docs = sold_items_query.get()
-                
-                for item_doc in sold_items_docs:
-                    item_data = item_doc.to_dict()
-                    order_items.append({
-                        'id': item_doc.id,
-                        'title': item_data.get('title', 'Unknown Item'),
-                        'price': item_data.get('soldPrice', item_data.get('price', 0)),
-                        'seller': item_data.get('sellerName', 'Unknown Seller'),
-                        'category': item_data.get('category', 'Uncategorized'),
-                        'status': item_data.get('status', 'sold'),
-                        'shippedAt': item_data.get('shippedAt'),
-                        'trackingNumber': item_data.get('trackingNumber')
-                    })
-                    total_amount += item_data.get('soldPrice', item_data.get('price', 0))
-            
-            # If still no items, this might be a payment without properly linked items
-            if not order_items:
-                # Use payment amount as fallback
-                total_amount = payment_data.get('amount', payment_data.get('total_amount', 0))
-                order_items = [{
-                    'id': 'unknown',
-                    'title': 'Order Details Not Available',
-                    'price': total_amount,
-                    'seller': 'System',
-                    'category': 'Payment Record',
-                    'status': 'completed'
-                }]
+            # Process each item in the order
+            for cart_item in order_data.get('items', []):
+                item_id = cart_item.get('item_id')
+                if item_id:
+                    # Get the actual item details from the items collection
+                    item_doc = db.collection('items').document(item_id).get()
+                    if item_doc.exists:
+                        item_data = item_doc.to_dict()
+                        order_items.append({
+                            'id': item_id,
+                            'title': item_data.get('title', cart_item.get('title', 'Unknown Item')),
+                            'price': item_data.get('soldPrice', cart_item.get('price', 0)),
+                            'quantity': cart_item.get('quantity', 1),
+                            'seller': item_data.get('sellerName', cart_item.get('seller_name', 'Unknown Seller')),
+                            'category': item_data.get('category', 'Uncategorized'),
+                            'status': item_data.get('status', 'sold'),
+                            'shippedAt': item_data.get('shippedAt'),
+                            'trackingNumber': item_data.get('trackingNumber'),
+                            'brand': item_data.get('brand', 'N/A'),
+                            'size': item_data.get('size', 'N/A'),
+                            'condition': item_data.get('condition', 'N/A')
+                        })
+                        total_amount += (item_data.get('soldPrice', cart_item.get('price', 0)) * cart_item.get('quantity', 1))
+                    else:
+                        # Item not found, use cart item data
+                        order_items.append({
+                            'id': item_id,
+                            'title': cart_item.get('title', 'Unknown Item'),
+                            'price': cart_item.get('price', 0),
+                            'quantity': cart_item.get('quantity', 1),
+                            'seller': cart_item.get('seller_name', 'Unknown Seller'),
+                            'category': 'Unknown',
+                            'status': 'sold',
+                            'shippedAt': None,
+                            'trackingNumber': None,
+                            'brand': 'N/A',
+                            'size': 'N/A',
+                            'condition': 'N/A'
+                        })
+                        total_amount += cart_item.get('price', 0) * cart_item.get('quantity', 1)
             
             # Build order object
             order = {
-                'id': payment_id,
-                'orderId': payment_data.get('order_id', payment_id),
-                'customerName': payment_data.get('customer_name', payment_data.get('customerName', 'Unknown Customer')),
-                'customerEmail': payment_data.get('customer_email', payment_data.get('customerEmail', 'No email')),
-                'customerPhone': payment_data.get('customer_phone', payment_data.get('customerPhone')),
-                'totalAmount': total_amount or payment_data.get('amount', 0),
-                'paymentStatus': payment_data.get('status', payment_data.get('payment_status', 'completed')),
-                'paymentMethod': payment_data.get('payment_method', payment_data.get('paymentMethod', 'card')),
-                'status': 'completed',  # All payments are completed by default
+                'id': order_id,
+                'orderId': order_data.get('orderId', order_id),
+                'userId': order_data.get('userId'),
+                'customerName': order_data.get('customerInfo', {}).get('name', 'Unknown Customer'),
+                'customerEmail': order_data.get('customerInfo', {}).get('email', 'No email'),
+                'customerPhone': order_data.get('customerInfo', {}).get('phone'),
+                'totalAmount': order_data.get('totalAmount', total_amount),
+                'paymentStatus': 'completed',  # All orders are completed
+                'paymentMethod': order_data.get('paymentMethod', 'Credit Card'),
+                'status': order_data.get('orderStatus', 'processing'),
                 'items': order_items,
-                'createdAt': payment_data.get('created_at', payment_data.get('createdAt', datetime.now(timezone.utc))),
+                'createdAt': order_data.get('createdAt', datetime.now(timezone.utc)),
                 'shippedAt': None,  # Will be set if any items are shipped
                 'trackingNumber': None,
-                'shippingAddress': {
-                    'address': payment_data.get('shipping_address', payment_data.get('address')),
-                    'city': payment_data.get('shipping_city', payment_data.get('city')),
-                    'state': payment_data.get('shipping_state', payment_data.get('state')),
-                    'zip': payment_data.get('shipping_zip', payment_data.get('zip_code')),
-                    'country': payment_data.get('shipping_country', 'US')
-                } if payment_data.get('fulfillment_method') == 'shipping' else None,
-                'fulfillmentMethod': payment_data.get('fulfillment_method', 'pickup'),
-                'notes': payment_data.get('notes', ''),
-                'transactionId': payment_data.get('transaction_id', payment_id)
+                'shippingAddress': order_data.get('customerInfo') if order_data.get('fulfillmentMethod') == 'shipping' else None,
+                'fulfillmentMethod': order_data.get('fulfillmentMethod', 'pickup'),
+                'notes': '',
+                'transactionId': order_data.get('transactionId'),
+                'estimatedDelivery': order_data.get('estimatedDelivery')
             }
             
             # Check if any items in the order have been shipped
@@ -5883,15 +6437,14 @@ async def get_all_orders(admin_data: dict = Depends(verify_admin_access)):
             
             orders.append(order)
         
-        # Sort orders by creation date (newest first)
-        orders.sort(key=lambda x: x.get('createdAt', datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
-        
         # Convert datetime objects to ISO strings for JSON serialization
         for order in orders:
             if isinstance(order.get('createdAt'), datetime):
                 order['createdAt'] = order['createdAt'].isoformat()
             if isinstance(order.get('shippedAt'), datetime):
                 order['shippedAt'] = order['shippedAt'].isoformat()
+            if isinstance(order.get('estimatedDelivery'), datetime):
+                order['estimatedDelivery'] = order['estimatedDelivery'].isoformat()
             
             # Handle items datetime conversion
             for item in order.get('items', []):
@@ -6276,8 +6829,8 @@ async def get_or_create_pos_cart(request: Request):
 async def get_categories():
     """Get all categories - Public endpoint, no authentication required"""
     try:
-        # Get all categories
-        categories_ref = db.collection('categories')
+        # Get all categories ordered by displayOrder
+        categories_ref = db.collection('categories').order_by('displayOrder')
         categories = []
         
         for doc in categories_ref.stream():
@@ -6290,10 +6843,7 @@ async def get_categories():
                 category_data['updatedAt'] = category_data['updatedAt'].isoformat()
             categories.append(category_data)
         
-        # Sort by name
-        categories.sort(key=lambda x: x.get('name', ''))
-        
-        logger.info(f"Retrieved {len(categories)} categories (public access)")
+        logger.info(f"Retrieved {len(categories)} categories ordered by displayOrder (public access)")
         return {"success": True, "categories": categories}
         
     except Exception as e:
@@ -6306,8 +6856,8 @@ async def get_categories():
 async def get_active_categories():
     """Get only active categories - Public endpoint, no authentication required"""
     try:
-        # Get active categories
-        categories_ref = db.collection('categories').where('isActive', '==', True)
+        # Get active categories ordered by displayOrder
+        categories_ref = db.collection('categories').where('isActive', '==', True).order_by('displayOrder')
         categories = []
         
         for doc in categories_ref.stream():
@@ -6320,10 +6870,7 @@ async def get_active_categories():
                 category_data['updatedAt'] = category_data['updatedAt'].isoformat()
             categories.append(category_data)
         
-        # Sort by name
-        categories.sort(key=lambda x: x.get('name', ''))
-        
-        logger.info(f"Retrieved {len(categories)} active categories (public access)")
+        logger.info(f"Retrieved {len(categories)} active categories ordered by displayOrder (public access)")
         return {"success": True, "categories": categories}
         
     except Exception as e:
@@ -6337,6 +6884,8 @@ async def create_category(request: Request):
     """Create a new category - Admin dashboard access"""
     try:
         data = await request.json()
+        
+        logger.info(f"🆕 Creating new category with data: {data}")
         
         # Use a default admin context since this is accessed from admin dashboard
         admin_data = {'uid': 'admin_dashboard', 'email': 'admin@dashboard'}
@@ -6352,6 +6901,17 @@ async def create_category(request: Request):
         if any(existing_categories):
             raise HTTPException(status_code=400, detail="Category with this name already exists")
         
+        # Calculate displayOrder if not provided
+        if 'displayOrder' not in data or data['displayOrder'] is None:
+            # Get the highest displayOrder and add 10
+            all_categories = list(db.collection('categories').stream())
+            max_order = max([cat.to_dict().get('displayOrder', 0) for cat in all_categories]) if all_categories else 0
+            display_order = max_order + 10
+            logger.info(f"📝 Calculated displayOrder: {display_order} (max was {max_order})")
+        else:
+            display_order = data['displayOrder']
+            logger.info(f"📝 Using provided displayOrder: {display_order}")
+        
         # Prepare category data
         category_data = {
             'name': data['name'].strip(),
@@ -6360,14 +6920,17 @@ async def create_category(request: Request):
             'bannerImage': data.get('bannerImage', ''),
             'attributes': data.get('attributes', []),
             'isActive': data.get('isActive', True),
+            'displayOrder': display_order,
             'createdAt': datetime.now(timezone.utc),
             'updatedAt': datetime.now(timezone.utc),
             'createdBy': admin_data['uid']
         }
         
         # Create category in Firestore
+        logger.info(f"💾 Creating Firestore document with data: {category_data}")
         doc_ref = db.collection('categories').add(category_data)[1]
         category_id = doc_ref.id
+        logger.info(f"✅ Successfully created category {category_id}: {data['name']}")
         
         # Log admin action
         db.collection('adminActions').add({
@@ -6388,14 +6951,14 @@ async def create_category(request: Request):
             'isAdmin': True
         })
         
-        logger.info(f"Successfully created category {category_id}: {data['name']}")
-        
         # Return the created category with datetime converted to string
         return_category = {**category_data, 'id': category_id}
         if 'createdAt' in return_category and hasattr(return_category['createdAt'], 'isoformat'):
             return_category['createdAt'] = return_category['createdAt'].isoformat()
         if 'updatedAt' in return_category and hasattr(return_category['updatedAt'], 'isoformat'):
             return_category['updatedAt'] = return_category['updatedAt'].isoformat()
+        
+        logger.info(f"📤 Returning created category: {return_category}")
         
         return {
             "success": True,
@@ -6416,6 +6979,8 @@ async def update_category(category_id: str, request: Request):
     try:
         data = await request.json()
         
+        logger.info(f"🔄 Updating category {category_id} with data: {data}")
+        
         # Use a default admin context since this is accessed from admin dashboard
         admin_data = {'uid': 'admin_dashboard', 'email': 'admin@dashboard'}
         
@@ -6424,9 +6989,11 @@ async def update_category(category_id: str, request: Request):
         category_doc = category_ref.get()
         
         if not category_doc.exists:
+            logger.error(f"❌ Category {category_id} not found")
             raise HTTPException(status_code=404, detail="Category not found")
         
         current_category = category_doc.to_dict()
+        logger.info(f"📋 Current category data: {current_category}")
         
         # Check if new name conflicts with existing categories (excluding current)
         if data.get('name') and data['name'].strip() != current_category.get('name'):
@@ -6454,13 +7021,19 @@ async def update_category(category_id: str, request: Request):
             update_data['attributes'] = data['attributes']
         if 'isActive' in data:
             update_data['isActive'] = data['isActive']
+        if 'displayOrder' in data:
+            update_data['displayOrder'] = data['displayOrder']
+            logger.info(f"📝 Setting displayOrder to {data['displayOrder']} for category {category_id}")
         
         # Update category in Firestore
+        logger.info(f"💾 Updating Firestore document for category {category_id} with data: {update_data}")
         category_ref.update(update_data)
+        logger.info(f"✅ Successfully updated Firestore document for category {category_id}")
         
         # Get updated category
         updated_category = category_ref.get().to_dict()
         updated_category['id'] = category_id
+        logger.info(f"📋 Updated category data: {updated_category}")
         
         # Convert datetime objects to strings
         if 'createdAt' in updated_category and hasattr(updated_category['createdAt'], 'isoformat'):
@@ -6557,6 +7130,527 @@ async def delete_category(category_id: str, request: Request):
         
     except Exception as e:
         logger.error(f"Error deleting category: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/items-by-status")
+async def get_items_by_status(
+    status: str,
+    admin_data: dict = Depends(verify_admin_access)
+):
+    """Get items by status - Admin only"""
+    try:
+        logger.info(f"Admin {admin_data['uid']} fetching items with status: {status}")
+        
+        # Query items by status
+        items_query = db.collection('items').where('status', '==', status)
+        items_docs = items_query.stream()
+        
+        items = []
+        for doc in items_docs:
+            item_data = doc.to_dict()
+            items.append({
+                'id': doc.id,
+                'title': item_data.get('title', 'Unknown'),
+                'price': item_data.get('price', 0),
+                'originalPrice': item_data.get('originalPrice'),
+                'category': item_data.get('category', 'Unknown'),
+                'originalCategory': item_data.get('originalCategory'),
+                'sellerName': item_data.get('sellerName', 'Unknown'),
+                'sellerId': item_data.get('sellerId', 'unknown'),
+                'condition': item_data.get('condition', 'Unknown'),
+                'brand': item_data.get('brand'),
+                'images': item_data.get('images', []),
+                'refundedAt': item_data.get('refundedAt'),
+                'refundReason': item_data.get('refundReason'),
+                'reactivatedAt': item_data.get('reactivatedAt'),
+                'reactivatedBy': item_data.get('reactivatedBy'),
+                'reactivationNotes': item_data.get('reactivationNotes'),
+                'createdAt': item_data.get('createdAt'),
+                'lastUpdated': item_data.get('lastUpdated')
+            })
+        
+        # Sort by last updated (newest first)
+        items.sort(key=lambda x: x.get('lastUpdated') or x.get('createdAt') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        
+        logger.info(f"Found {len(items)} items with status '{status}'")
+        
+        return {
+            "success": True,
+            "items": items,
+            "total": len(items),
+            "status": status
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting items by status {status}: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/refunded-items-pending")
+async def get_refunded_items_pending(
+    admin_data: dict = Depends(verify_admin_access)
+):
+    """Get items that were refunded and are now pending for resale"""
+    try:
+        logger.info(f"Admin {admin_data.get('uid', 'unknown')} fetching refunded items pending")
+        
+        # Query items that are pending and have refundedAt field
+        items_ref = db.collection('items')
+        q = items_ref.where('status', '==', 'pending')
+        query_snapshot = q.get()
+        
+        items = []
+        for doc in query_snapshot:
+            item_data = doc.to_dict()
+            # Only include items that have been refunded (have refundedAt field)
+            if item_data.get('refundedAt') and item_data.get('refundReason'):
+                items.append({
+                    'id': doc.id,
+                    'title': item_data.get('title', 'Unknown'),
+                    'price': item_data.get('price', 0),
+                    'originalPrice': item_data.get('originalPrice'),
+                    'category': item_data.get('category', 'Unknown'),
+                    'originalCategory': item_data.get('originalCategory'),
+                    'sellerName': item_data.get('sellerName', 'Unknown'),
+                    'sellerId': item_data.get('sellerId', 'unknown'),
+                    'condition': item_data.get('condition', 'Unknown'),
+                    'brand': item_data.get('brand'),
+                    'images': item_data.get('images', []),
+                    'refundedAt': item_data.get('refundedAt'),
+                    'refundReason': item_data.get('refundReason'),
+                    'originalBuyerName': item_data.get('originalBuyerName'),
+                    'originalBuyerEmail': item_data.get('originalBuyerEmail'),
+                    'refundAmount': item_data.get('refundAmount'),
+                    'createdAt': item_data.get('createdAt'),
+                    'lastUpdated': item_data.get('lastUpdated')
+                })
+        
+        # Sort by refunded date (newest first)
+        items.sort(key=lambda x: x.get('refundedAt') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        
+        logger.info(f"Found {len(items)} refunded items that are now pending")
+        
+        return {
+            "success": True,
+            "items": items,
+            "total": len(items)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching refunded items pending: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/in-store-pickup-items")
+async def get_in_store_pickup_items(admin_data: dict = Depends(verify_admin_access)):
+    """Get items reserved for in-store pickup or sold but pending pickup"""
+    try:
+        logger.info(f"Admin {admin_data.get('uid')} requesting in-store pickup items")
+        
+        items_ref = db.collection('items')
+        
+        # Get items that are reserved for pickup (not paid yet)
+        reserved_query = items_ref.where('status', '==', 'reserved_for_pickup')
+        reserved_items = []
+        
+        for doc in reserved_query.stream():
+            item_data = doc.to_dict()
+            item_data['id'] = doc.id
+            item_data['pickupType'] = 'pending_payment'
+            
+            # Calculate time remaining for pickup
+            reserved_until = item_data.get('reservedUntil')
+            if reserved_until:
+                if isinstance(reserved_until, str):
+                    reserved_until = datetime.fromisoformat(reserved_until.replace('Z', '+00:00'))
+                time_remaining = reserved_until - datetime.now(timezone.utc)
+                item_data['timeRemaining'] = max(0, time_remaining.total_seconds())
+                item_data['timeRemainingFormatted'] = f"{int(time_remaining.total_seconds() // 3600)}h {int((time_remaining.total_seconds() % 3600) // 60)}m"
+            else:
+                item_data['timeRemaining'] = 0
+                item_data['timeRemainingFormatted'] = "Expired"
+            
+            reserved_items.append(item_data)
+        
+        # Get items that are sold but pending pickup (paid online)
+        sold_pickup_query = items_ref.where('status', '==', 'sold').where('pickupStatus', '==', 'pending_pickup')
+        sold_pickup_items = []
+        
+        for doc in sold_pickup_query.stream():
+            item_data = doc.to_dict()
+            item_data['id'] = doc.id
+            item_data['pickupType'] = 'paid_online'
+            item_data['timeRemaining'] = 0  # No time limit for paid items
+            item_data['timeRemainingFormatted'] = "No limit"
+            
+            sold_pickup_items.append(item_data)
+        
+        # Combine both lists
+        all_items = reserved_items + sold_pickup_items
+        
+        logger.info(f"Retrieved {len(all_items)} in-store pickup items ({len(reserved_items)} pending payment, {len(sold_pickup_items)} paid online)")
+        
+        return {
+            'success': True,
+            'items': all_items,
+            'total': len(all_items),
+            'pendingPayment': len(reserved_items),
+            'paidOnline': len(sold_pickup_items)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting in-store pickup items: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve in-store pickup items"
+        )
+
+@app.post("/api/admin/process-instore-pickup-payment")
+async def process_instore_pickup_payment(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Process payment for in-store pickup items"""
+    try:
+        data = await request.json()
+        item_id = data.get('item_id')
+        payment_method = data.get('payment_method', 'cash')  # cash, card, etc.
+        payment_amount = data.get('payment_amount')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Item ID is required")
+        
+        logger.info(f"Admin {admin_data.get('uid')} processing in-store payment for item {item_id}")
+        
+        # Get the item
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        if item_data.get('status') != 'reserved_for_pickup':
+            raise HTTPException(status_code=400, detail="Item is not reserved for in-store pickup")
+        
+        # Calculate earnings
+        earnings = calculate_earnings(item_data.get('price', 0))
+        
+        # Update item status to sold and mark as paid
+        batch = db.batch()
+        
+        batch.update(item_ref, {
+            'status': 'sold',
+            'paymentStatus': 'completed',
+            'paymentMethod': f'In-Store {payment_method.title()}',
+            'paymentProcessedAt': datetime.now(timezone.utc),
+            'paymentProcessedBy': admin_data.get('uid'),
+            'userEarnings': earnings['seller_earnings'],
+            'adminEarnings': earnings['store_commission'],
+            'lastUpdated': datetime.now(timezone.utc)
+        })
+        
+        # Award points to buyer if they have an account
+        buyer_id = item_data.get('buyerId')
+        if buyer_id and buyer_id != 'guest':
+            award_purchase_points(buyer_id, item_data.get('price', 0))
+        
+        # Award points to seller
+        seller_id = item_data.get('sellerId')
+        if seller_id:
+            award_seller_points(seller_id, item_data.get('price', 0), item_id, item_data.get('title', 'Unknown Item'))
+        
+        # Log the transaction
+        transaction_ref = db.collection('transactions').document()
+        batch.set(transaction_ref, {
+            'transactionId': f"INSTORE_{int(time.time())}",
+            'itemId': item_id,
+            'itemTitle': item_data.get('title'),
+            'amount': item_data.get('price', 0),
+            'paymentMethod': f'In-Store {payment_method.title()}',
+            'processedBy': admin_data.get('uid'),
+            'processedAt': datetime.now(timezone.utc),
+            'buyerId': buyer_id,
+            'sellerId': seller_id,
+            'type': 'in_store_pickup_payment'
+        })
+        
+        # Log admin action
+        batch.set(db.collection('adminActions').document(), {
+            'adminId': admin_data.get('uid'),
+            'action': 'process_instore_payment',
+            'details': f'Processed in-store payment for item {item_id}',
+            'timestamp': datetime.now(timezone.utc),
+            'itemId': item_id,
+            'amount': item_data.get('price', 0)
+        })
+        
+        batch.commit()
+        
+        logger.info(f"Successfully processed in-store payment for item {item_id}")
+        
+        return {
+            'success': True,
+            'message': 'Payment processed successfully',
+            'transactionId': transaction_ref.id,
+            'amount': item_data.get('price', 0)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing in-store pickup payment: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/add-to-instore-cart")
+async def add_to_instore_cart(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Add an in-store pickup item to the in-store cart for checkout"""
+    try:
+        data = await request.json()
+        item_id = data.get('item_id')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Item ID is required")
+        
+        logger.info(f"Admin {admin_data.get('uid')} adding item {item_id} to in-store cart")
+        
+        # Get the item
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        
+        if item_data.get('status') != 'reserved_for_pickup':
+            raise HTTPException(status_code=400, detail="Item is not reserved for in-store pickup")
+        
+        # Get or create in-store cart for this admin
+        admin_id = admin_data.get('uid')
+        cart_ref = db.collection('instoreCarts').document(admin_id)
+        cart_doc = cart_ref.get()
+        
+        if cart_doc.exists:
+            cart_data = cart_doc.to_dict()
+            items = cart_data.get('items', [])
+        else:
+            items = []
+        
+        # Check if item is already in cart
+        item_exists = any(item.get('item_id') == item_id for item in items)
+        if item_exists:
+            raise HTTPException(status_code=400, detail="Item is already in the cart")
+        
+        # Add item to cart
+        cart_item = {
+            'item_id': item_id,
+            'title': item_data.get('title'),
+            'price': item_data.get('price', 0),
+            'quantity': 1,
+            'seller_id': item_data.get('sellerId'),
+            'seller_name': item_data.get('sellerName', 'Unknown'),
+            'buyer_id': item_data.get('buyerId'),
+            'buyer_name': item_data.get('buyerName', 'Guest'),
+            'added_at': datetime.now(timezone.utc),
+            'reserved_until': item_data.get('reservedUntil')
+        }
+        
+        items.append(cart_item)
+        
+        # Calculate total
+        total_amount = sum(item.get('price', 0) for item in items)
+        
+        # Update cart
+        cart_ref.set({
+            'admin_id': admin_id,
+            'items': items,
+            'total_amount': total_amount,
+            'created_at': datetime.now(timezone.utc),
+            'updated_at': datetime.now(timezone.utc),
+            'status': 'active'
+        })
+        
+        logger.info(f"Successfully added item {item_id} to in-store cart for admin {admin_id}")
+        
+        return {
+            'success': True,
+            'message': 'Item added to in-store cart',
+            'cart_item': cart_item,
+            'total_amount': total_amount,
+            'items_count': len(items)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error adding item to in-store cart: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/instore-cart")
+async def get_instore_cart(admin_data: dict = Depends(verify_admin_access)):
+    """Get the current in-store cart for the admin"""
+    try:
+        admin_id = admin_data.get('uid')
+        cart_ref = db.collection('instoreCarts').document(admin_id)
+        cart_doc = cart_ref.get()
+        
+        if not cart_doc.exists:
+            return {
+                'success': True,
+                'cart': {
+                    'items': [],
+                    'total_amount': 0,
+                    'items_count': 0
+                }
+            }
+        
+        cart_data = cart_doc.to_dict()
+        return {
+            'success': True,
+            'cart': cart_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting in-store cart: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/clear-instore-cart")
+async def clear_instore_cart(admin_data: dict = Depends(verify_admin_access)):
+    """Clear the in-store cart for the admin"""
+    try:
+        admin_id = admin_data.get('uid')
+        cart_ref = db.collection('instoreCarts').document(admin_id)
+        
+        # Delete the cart document
+        cart_ref.delete()
+        
+        logger.info(f"Successfully cleared in-store cart for admin {admin_id}")
+        
+        return {
+            'success': True,
+            'message': 'Cart cleared successfully'
+        }
+        
+    except Exception as e:
+        logger.error(f"Error clearing in-store cart: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.post("/api/admin/checkout-instore-cart")
+async def checkout_instore_cart(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Checkout the in-store cart and process all payments"""
+    try:
+        data = await request.json()
+        payment_method = data.get('payment_method', 'cash')
+        
+        admin_id = admin_data.get('uid')
+        cart_ref = db.collection('instoreCarts').document(admin_id)
+        cart_doc = cart_ref.get()
+        
+        if not cart_doc.exists:
+            raise HTTPException(status_code=404, detail="No active cart found")
+        
+        cart_data = cart_doc.to_dict()
+        items = cart_data.get('items', [])
+        
+        if not items:
+            raise HTTPException(status_code=400, detail="Cart is empty")
+        
+        # Process all items in the cart
+        batch = db.batch()
+        processed_items = []
+        total_amount = 0
+        
+        for cart_item in items:
+            item_id = cart_item.get('item_id')
+            item_price = cart_item.get('price', 0)
+            total_amount += item_price
+            
+            # Get the item
+            item_ref = db.collection('items').document(item_id)
+            item_doc = item_ref.get()
+            
+            if not item_doc.exists:
+                continue
+            
+            item_data = item_doc.to_dict()
+            
+            # Calculate earnings
+            earnings = calculate_earnings(item_price)
+            
+            # Update item status to sold
+            batch.update(item_ref, {
+                'status': 'sold',
+                'paymentStatus': 'completed',
+                'paymentMethod': f'In-Store {payment_method.title()}',
+                'paymentProcessedAt': datetime.now(timezone.utc),
+                'paymentProcessedBy': admin_id,
+                'userEarnings': earnings['seller_earnings'],
+                'adminEarnings': earnings['store_commission'],
+                'lastUpdated': datetime.now(timezone.utc)
+            })
+            
+            # Award points to buyer if they have an account
+            buyer_id = item_data.get('buyerId')
+            if buyer_id and buyer_id != 'guest':
+                award_purchase_points(buyer_id, item_price)
+            
+            # Award points to seller
+            seller_id = item_data.get('sellerId')
+            if seller_id:
+                award_seller_points(seller_id, item_price, item_id, item_data.get('title', 'Unknown Item'))
+            
+            # Log the transaction
+            transaction_ref = db.collection('transactions').document()
+            batch.set(transaction_ref, {
+                'transactionId': f"INSTORE_{int(time.time())}_{item_id[:8]}",
+                'itemId': item_id,
+                'itemTitle': item_data.get('title'),
+                'amount': item_price,
+                'paymentMethod': f'In-Store {payment_method.title()}',
+                'processedBy': admin_id,
+                'processedAt': datetime.now(timezone.utc),
+                'buyerId': buyer_id,
+                'sellerId': seller_id,
+                'type': 'in_store_pickup_payment'
+            })
+            
+            processed_items.append({
+                'item_id': item_id,
+                'title': item_data.get('title'),
+                'price': item_price
+            })
+        
+        # Log admin action
+        batch.set(db.collection('adminActions').document(), {
+            'adminId': admin_id,
+            'action': 'checkout_instore_cart',
+            'details': f'Checked out {len(processed_items)} items for ${total_amount:.2f}',
+            'timestamp': datetime.now(timezone.utc),
+            'items': processed_items,
+            'total_amount': total_amount,
+            'payment_method': payment_method
+        })
+        
+        # Clear the cart
+        batch.delete(cart_ref)
+        
+        batch.commit()
+        
+        logger.info(f"Successfully checked out in-store cart with {len(processed_items)} items for ${total_amount:.2f}")
+        
+        return {
+            'success': True,
+            'message': f'Successfully processed {len(processed_items)} items',
+            'processed_items': processed_items,
+            'total_amount': total_amount,
+            'payment_method': payment_method
+        }
+        
+    except Exception as e:
+        logger.error(f"Error checking out in-store cart: {e}")
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
@@ -6709,6 +7803,253 @@ async def initialize_default_categories():
         
     except Exception as e:
         logger.error(f"Error initializing default categories: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+@app.get("/api/admin/unshipped-items")
+async def get_unshipped_items(admin_data: dict = Depends(verify_admin_access)):
+    """Get all items that are sold but not yet shipped (for home delivery orders)"""
+    try:
+        admin_id = admin_data.get('uid')
+        logger.info(f"Admin {admin_id} requesting unshipped items")
+        
+        # Query items that are sold with shipping but not yet shipped
+        items_query = db.collection('items').where('status', '==', 'sold').where('fulfillmentMethod', '==', 'shipping')
+        items_docs = items_query.get()
+        
+        unshipped_items = []
+        for doc in items_docs:
+            item_data = doc.to_dict()
+            
+            # Check if item is not yet shipped
+            if item_data.get('shippingStatus') != 'shipped':
+                unshipped_items.append({
+                    'id': doc.id,
+                    'title': item_data.get('title', 'Unknown Item'),
+                    'price': item_data.get('price', 0),
+                    'soldPrice': item_data.get('soldPrice', 0),
+                    'soldAt': item_data.get('soldAt'),
+                    'buyerInfo': item_data.get('buyerInfo', {}),
+                    'shippingAddress': item_data.get('shippingAddress', {}),
+                    'orderNumber': item_data.get('orderNumber'),
+                    'transactionId': item_data.get('saleTransactionId'),
+                    'shippingStatus': item_data.get('shippingStatus', 'pending'),
+                    'estimatedDelivery': item_data.get('estimatedDelivery'),
+                    'sellerName': item_data.get('sellerName', 'Unknown Seller'),
+                    'category': item_data.get('category', 'Unknown'),
+                    'brand': item_data.get('brand', 'N/A'),
+                    'size': item_data.get('size', 'N/A'),
+                    'condition': item_data.get('condition', 'N/A'),
+                    'images': item_data.get('images', []),
+                    'trackingNumber': item_data.get('trackingNumber'),
+                    'shippingLabelGenerated': item_data.get('shippingLabelGenerated', False),
+                    'paymentMethod': item_data.get('paymentMethod', 'Credit Card'),
+                    'paymentStatus': item_data.get('paymentStatus', 'completed')
+                })
+        
+        # Sort by sold date (newest first)
+        unshipped_items.sort(key=lambda x: x.get('soldAt', datetime.min), reverse=True)
+        
+        logger.info(f"Found {len(unshipped_items)} unshipped items")
+        
+        return {
+            "success": True,
+            "items": unshipped_items,
+            "count": len(unshipped_items)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting unshipped items: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get unshipped items"
+        )
+
+@app.post("/api/admin/mark-item-shipped")
+async def mark_item_shipped(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Mark an item as shipped and update tracking information"""
+    try:
+        admin_id = admin_data.get('uid')
+        data = await request.json()
+        
+        item_id = data.get('item_id')
+        tracking_number = data.get('tracking_number')
+        shipping_carrier = data.get('shipping_carrier', 'Standard Shipping')
+        
+        if not item_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Item ID is required"
+            )
+        
+        logger.info(f"Admin {admin_id} marking item {item_id} as shipped")
+        
+        # Get the item
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        
+        if not item_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Item not found"
+            )
+        
+        item_data = item_doc.to_dict()
+        
+        if item_data.get('status') != 'sold' or item_data.get('fulfillmentMethod') != 'shipping':
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Item is not eligible for shipping"
+            )
+        
+        # Update item with shipping information
+        update_data = {
+            'shippingStatus': 'shipped',
+            'trackingNumber': tracking_number,
+            'shippingCarrier': shipping_carrier,
+            'shippedAt': datetime.now(timezone.utc),
+            'lastUpdated': datetime.now(timezone.utc)
+        }
+        
+        item_ref.update(update_data)
+        
+        # Also update the corresponding sales record
+        sales_query = db.collection('sales').where('itemId', '==', item_id)
+        sales_docs = sales_query.get()
+        
+        for sale_doc in sales_docs:
+            sale_doc.reference.update({
+                'shippingStatus': 'shipped',
+                'trackingNumber': tracking_number,
+                'shippingCarrier': shipping_carrier,
+                'shippedAt': datetime.now(timezone.utc)
+            })
+        
+        logger.info(f"Successfully marked item {item_id} as shipped")
+        
+        return {
+            "success": True,
+            "message": "Item marked as shipped successfully",
+            "tracking_number": tracking_number
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error marking item as shipped: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to mark item as shipped"
+        )
+
+@app.post("/api/admin/mark-item-picked-up")
+async def mark_item_picked_up(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Mark an item as picked up and update its status"""
+    try:
+        data = await request.json()
+        item_id = data.get('item_id')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Item ID is required")
+        
+        logger.info(f"Admin {admin_data.get('uid')} marking item {item_id} as picked up")
+        
+        # Get the item
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        current_status = item_data.get('status')
+        pickup_status = item_data.get('pickupStatus')
+        
+        # Check if item is eligible for pickup
+        if current_status == 'reserved_for_pickup':
+            # Item needs payment first
+            raise HTTPException(status_code=400, detail="Item needs payment before pickup")
+        elif current_status == 'sold' and pickup_status == 'pending_pickup':
+            # Item is paid and ready for pickup
+            pass
+        else:
+            raise HTTPException(status_code=400, detail="Item is not ready for pickup")
+        
+        # Update item status
+        batch = db.batch()
+        
+        batch.update(item_ref, {
+            'pickupStatus': 'picked_up',
+            'pickedUpAt': datetime.now(timezone.utc),
+            'pickedUpBy': admin_data.get('uid'),
+            'lastUpdated': datetime.now(timezone.utc)
+        })
+        
+        # Update sales record
+        sales_query = db.collection('sales').where('itemId', '==', item_id)
+        sales_docs = sales_query.stream()
+        for sales_doc in sales_docs:
+            batch.update(sales_doc.reference, {
+                'pickupStatus': 'picked_up',
+                'pickedUpAt': datetime.now(timezone.utc),
+                'pickedUpBy': admin_data.get('uid')
+            })
+        
+        # Update order record
+        order_number = item_data.get('orderNumber')
+        if order_number:
+            order_ref = db.collection('orders').document(order_number)
+            order_doc = order_ref.get()
+            if order_doc.exists:
+                order_data = order_doc.to_dict()
+                items = order_data.get('items', [])
+                
+                # Update pickup status for this specific item in the order
+                updated_items = []
+                for item in items:
+                    if item.get('item_id') == item_id:
+                        item['pickupStatus'] = 'picked_up'
+                    updated_items.append(item)
+                
+                # Check if all items in order are picked up
+                all_picked_up = all(
+                    item.get('pickupStatus') == 'picked_up' 
+                    for item in updated_items 
+                    if item.get('fulfillmentMethod') == 'pickup'
+                )
+                
+                batch.update(order_ref, {
+                    'items': updated_items,
+                    'pickupStatus': 'completed' if all_picked_up else 'partial_pickup',
+                    'lastUpdated': datetime.now(timezone.utc)
+                })
+        
+        # Log admin action
+        batch.set(db.collection('adminActions').document(), {
+            'adminId': admin_data.get('uid'),
+            'action': 'mark_item_picked_up',
+            'details': f'Marked item {item_id} as picked up',
+            'timestamp': datetime.now(timezone.utc),
+            'itemId': item_id,
+            'itemTitle': item_data.get('title'),
+            'buyerName': item_data.get('buyerInfo', {}).get('name', 'Unknown')
+        })
+        
+        batch.commit()
+        
+        logger.info(f"Successfully marked item {item_id} as picked up")
+        
+        return {
+            'success': True,
+            'message': 'Item marked as picked up successfully',
+            'itemId': item_id,
+            'itemTitle': item_data.get('title'),
+            'buyerName': item_data.get('buyerInfo', {}).get('name', 'Unknown')
+        }
+        
+    except Exception as e:
+        logger.error(f"Error marking item as picked up: {e}")
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

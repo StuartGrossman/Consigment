@@ -609,9 +609,15 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
     });
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     console.log('🛑 User cancelled bulk barcode processing');
     setIsCancelled(true);
+    
+    // Wait a moment for the processing loop to detect cancellation
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Close the modal
+    onClose();
   };
 
   const handleComplete = () => {
@@ -755,8 +761,8 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden flex flex-col">
+        <div className="p-6 border-b border-gray-200 flex-shrink-0">
           <div className="flex justify-between items-start">
             <div className="flex-1 mr-6">
               <div className="flex items-center justify-between mb-2">
@@ -772,6 +778,18 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                       </svg>
                       Cancel
+                    </button>
+                  )}
+                  {/* Close Button during processing (for immediate cancellation) */}
+                  {currentStep === 'processing' && (
+                    <button
+                      onClick={handleCancel}
+                      className="text-gray-400 hover:text-gray-600 p-2"
+                      title="Cancel and close"
+                    >
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
                     </button>
                   )}
                   {/* Close Button after completion */}
@@ -837,10 +855,10 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex-1 overflow-hidden flex flex-col">
           {/* Error Summary */}
           {processingErrors.length > 0 && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex-shrink-0">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-red-800 font-medium">⚠️ Validation Errors</h3>
@@ -865,10 +883,8 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
             </div>
           )}
 
-
-
           {/* Items List */}
-          <div className="max-h-96 overflow-y-auto space-y-3">
+          <div className="flex-1 overflow-y-auto space-y-3 min-h-0">
             {processedItems.map((processedItem, index) => (
               <div
                 key={processedItem.item.id}
@@ -967,7 +983,7 @@ const BulkBarcodeGenerationModal: React.FC<BulkBarcodeGenerationModalProps> = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="p-6 border-t border-gray-200">
+        <div className="p-6 border-t border-gray-200 flex-shrink-0">
           <div className="flex justify-between">
             <div>
               {currentStep === 'completed' && completedCount > 0 && (

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, getDocs, query, where, orderBy, doc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { apiService } from '../services/apiService';
 import { ConsignmentItem, PaymentRecord, AuthUser, UserAnalytics, User } from '../types';
 import {
   LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -9,7 +10,9 @@ import {
 import ItemDetailModal from './ItemDetailModal';
 import ShippedItemsModal from './ShippedItemsModal';
 import UnshippedItemsModal from './UnshippedItemsModal';
-import IssuedRefundsModal from './IssuedRefundsModal';
+import RefundedItemsPendingModal from './RefundedItemsPendingModal';
+import OrderDetailModal from './OrderDetailModal';
+import AdminCartModal from './AdminCartModal';
 
 interface AnalyticsProps {
   user: AuthUser | null;
@@ -17,19 +20,26 @@ interface AnalyticsProps {
 }
 
 const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'sold' | 'shipped' | 'unshipped' | 'refunds' | 'orders'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'sold' | 'shipped' | 'unshipped' | 'refunded_pending' | 'orders' | 'instore_pickup'>('dashboard');
   const [loading, setLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [soldItems, setSoldItems] = useState<ConsignmentItem[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
+  const [inStorePickupItems, setInStorePickupItems] = useState<ConsignmentItem[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [isItemDetailModalOpen, setIsItemDetailModalOpen] = useState(false);
+  const [isOrderDetailModalOpen, setIsOrderDetailModalOpen] = useState(false);
   const [isShippedItemsModalOpen, setIsShippedItemsModalOpen] = useState(false);
   const [isUnshippedItemsModalOpen, setIsUnshippedItemsModalOpen] = useState(false);
-  const [isRefundsModalOpen, setIsRefundsModalOpen] = useState(false);
+  const [isRefundedItemsPendingModalOpen, setIsRefundedItemsPendingModalOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<string | null>(null);
+  const [inStoreCart, setInStoreCart] = useState<any>(null);
+  const [isCartModalOpen, setIsCartModalOpen] = useState(false);
+  const [isAdminCartModalOpen, setIsAdminCartModalOpen] = useState(false);
+  const [itemsForAdminCart, setItemsForAdminCart] = useState<ConsignmentItem[]>([]);
 
   // Muted color palette
   const COLORS = ['#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0', '#f1f5f9'];
@@ -45,8 +55,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       setIsShippedItemsModalOpen(true);
     } else if (activeTab === 'unshipped' && isAdmin) {
       setIsUnshippedItemsModalOpen(true);
-    } else if (activeTab === 'refunds' && isAdmin) {
-      setIsRefundsModalOpen(true);
+    } else if (activeTab === 'refunded_pending' && isAdmin) {
+      setIsRefundedItemsPendingModalOpen(true);
+    } else if (activeTab === 'instore_pickup' && isAdmin) {
+      fetchInStorePickupItems();
+      fetchInStoreCart();
     }
   }, [activeTab, user, isAdmin]);
 
@@ -189,6 +202,26 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
       setSoldItems(items);
     } catch (error) {
       console.error('Error fetching sold items:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchInStorePickupItems = async () => {
+    setLoading(true);
+    try {
+      const response = await apiService.getInStorePickupItems();
+      if (response.success && response.items) {
+        const items: ConsignmentItem[] = response.items.map((item: any) => ({
+          ...item,
+          createdAt: item.createdAt ? new Date(item.createdAt) : new Date(),
+          soldAt: item.soldAt ? new Date(item.soldAt) : new Date(),
+          reservedUntil: item.reservedUntil ? new Date(item.reservedUntil) : null
+        }));
+        setInStorePickupItems(items);
+      }
+    } catch (error) {
+      console.error('Error fetching in-store pickup items:', error);
     } finally {
       setLoading(false);
     }
@@ -395,6 +428,75 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
     setIsItemDetailModalOpen(false);
   };
 
+  const handleOrderClick = (order: any) => {
+    setSelectedOrder(order);
+    setIsOrderDetailModalOpen(true);
+  };
+
+  const handleOrderDetailModalClose = () => {
+    setIsOrderDetailModalOpen(false);
+    setSelectedOrder(null);
+  };
+
+  const handleAddToInStoreCart = async (item: ConsignmentItem) => {
+    try {
+      const response = await apiService.addToInStoreCart(item.id);
+      console.log(`✅ Item added to in-store cart! Total: ${response.items_count} items, $${response.total_amount.toFixed(2)}`);
+      // Refresh cart data
+      await fetchInStoreCart();
+    } catch (error) {
+      console.error('❌ Failed to add item to cart:', error);
+    }
+  };
+
+  const fetchInStoreCart = async () => {
+    try {
+      const response = await apiService.getInStoreCart();
+      if (response.success) {
+        setInStoreCart(response.cart);
+      }
+    } catch (error) {
+      console.error('Error fetching in-store cart:', error);
+    }
+  };
+
+  const handleCheckoutInStoreCart = async (paymentMethod: string = 'cash') => {
+    try {
+      const response = await apiService.checkoutInStoreCart(paymentMethod);
+      console.log(`✅ Checkout successful! Processed ${response.processed_items.length} items for $${response.total_amount.toFixed(2)}`);
+      // Refresh data
+      await fetchInStoreCart();
+      await fetchInStorePickupItems();
+    } catch (error) {
+      console.error('❌ Failed to checkout cart:', error);
+    }
+  };
+
+  const handleMarkAsPickedUp = async (item: ConsignmentItem) => {
+    try {
+      await apiService.markItemPickedUp(item.id);
+      console.log('✅ Item marked as picked up:', item.id);
+      fetchInStorePickupItems(); // Refresh the list
+    } catch (error) {
+      console.error('❌ Error marking item as picked up:', error);
+    }
+  };
+
+  const handlePayForPickupItem = async (item: ConsignmentItem) => {
+    try {
+      console.log('💰 Processing payment for pickup item:', item.id);
+      
+      // Set the item for the admin cart modal
+      setItemsForAdminCart([item]);
+      
+      // Open the admin cart modal
+      setIsAdminCartModalOpen(true);
+      
+    } catch (error) {
+      console.error('❌ Error processing payment for pickup item:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -460,14 +562,24 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                   Shipped Items
                 </button>
                 <button
-                  onClick={() => setActiveTab('refunds')}
+                  onClick={() => setActiveTab('refunded_pending')}
                   className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                    activeTab === 'refunds'
+                    activeTab === 'refunded_pending'
                       ? 'border-slate-500 text-slate-600'
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }`}
                 >
                   Refunds
+                </button>
+                <button
+                  onClick={() => setActiveTab('instore_pickup')}
+                  className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'instore_pickup'
+                      ? 'border-slate-500 text-slate-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  In-Store Pickup
                 </button>
               </>
             )}
@@ -475,24 +587,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
         </div>
 
         {/* Export Controls */}
-        <div className="mb-6 flex justify-between items-center">
-          <button
-            onClick={() => {
-              if (activeTab === 'dashboard') {
-                fetchDashboardData();
-              } else if (activeTab === 'sold') {
-                fetchSoldItems();
-              } else if (activeTab === 'orders') {
-                fetchOrders();
-              }
-            }}
-            className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh Data
-          </button>
+        <div className="mb-6 flex justify-end">
           
           <div className="flex space-x-3">
             <button
@@ -848,6 +943,224 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
               </div>
             )}
 
+            {/* In-Store Pickup Tab */}
+            {activeTab === 'instore_pickup' && isAdmin && (
+              <div className="space-y-8">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Pending Pickups</h3>
+                    <p className="text-3xl font-bold">{inStorePickupItems.length}</p>
+                  </div>
+                  <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Total Value</h3>
+                    <p className="text-3xl font-bold">
+                      {formatCurrency(inStorePickupItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0))}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Expiring Soon</h3>
+                    <p className="text-3xl font-bold">
+                      {inStorePickupItems.filter(item => {
+                        const reservedUntil = item.reservedUntil;
+                        if (!reservedUntil) return false;
+                        const now = new Date();
+                        const timeDiff = reservedUntil.getTime() - now.getTime();
+                        const hoursDiff = timeDiff / (1000 * 60 * 60);
+                        return hoursDiff < 6; // Less than 6 hours remaining
+                      }).length}
+                    </p>
+                  </div>
+                  <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
+                    <h3 className="text-lg font-semibold mb-2">Ready for Payment</h3>
+                    <p className="text-3xl font-bold">
+                      {inStorePickupItems.filter(item => item.paymentStatus === 'pending').length}
+                    </p>
+                  </div>
+                </div>
+
+                {/* In-Store Cart Display */}
+                {inStoreCart && inStoreCart.items && inStoreCart.items.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-6">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        In-Store Cart ({inStoreCart.items.length} items)
+                      </h3>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-lg font-semibold text-green-600">
+                          Total: {formatCurrency(inStoreCart.total_amount)}
+                        </span>
+                        <button
+                          onClick={() => handleCheckoutInStoreCart('cash')}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                        >
+                          Checkout (Cash)
+                        </button>
+                        <button
+                          onClick={() => handleCheckoutInStoreCart('card')}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        >
+                          Checkout (Card)
+                        </button>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Added</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {inStoreCart.items.map((cartItem: any, index: number) => (
+                            <tr key={index} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm font-medium text-gray-900">{cartItem.title}</div>
+                                <div className="text-xs text-gray-500">ID: {cartItem.item_id}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">{cartItem.buyer_name}</div>
+                                <div className="text-xs text-gray-500">ID: {cartItem.buyer_id}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                {formatCurrency(cartItem.price)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {cartItem.added_at ? new Date(cartItem.added_at).toLocaleTimeString() : 'N/A'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* In-Store Pickup Items Table */}
+                <div className="bg-white border border-gray-200 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    In-Store Pickup Items ({inStorePickupItems.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pickup Type</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment Status</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Remaining</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order #</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {inStorePickupItems.map((item) => {
+                          const reservedUntil = item.reservedUntil;
+                          const now = new Date();
+                          const timeDiff = reservedUntil ? reservedUntil.getTime() - now.getTime() : 0;
+                          const hoursDiff = timeDiff / (1000 * 60 * 60);
+                          const isExpiringSoon = hoursDiff < 6;
+                          
+                          return (
+                            <tr key={item.id} className={`hover:bg-gray-50 ${isExpiringSoon ? 'bg-red-50' : ''}`}>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                  {item.images && item.images[0] && (
+                                    <img className="h-10 w-10 rounded-lg object-cover mr-3" src={item.images[0]} alt={item.title} />
+                                  )}
+                                  <div>
+                                    <div className="text-sm font-medium text-gray-900 truncate max-w-xs">{item.title}</div>
+                                    <div className="text-xs text-gray-500">{item.category}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="text-sm text-gray-900">
+                                  {item.buyerInfo?.name || 'Unknown'}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {item.buyerInfo?.email || 'No email'}
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  {item.buyerInfo?.phone || 'No phone'}
+                                </div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
+                                {formatCurrency(item.soldPrice || item.price)}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  item.pickupType === 'paid_online' 
+                                    ? 'bg-blue-100 text-blue-800' 
+                                    : 'bg-orange-100 text-orange-800'
+                                }`}>
+                                  {item.pickupType === 'paid_online' ? '💳 Paid Online' : '💰 Pending Payment'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  item.paymentStatus === 'pending' 
+                                    ? 'bg-yellow-100 text-yellow-800' 
+                                    : 'bg-green-100 text-green-800'
+                                }`}>
+                                  {item.paymentStatus === 'pending' ? '💰 Payment Pending' : '✅ Paid'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {item.timeRemainingFormatted ? (
+                                  <div>
+                                    <div className={isExpiringSoon ? 'text-red-600 font-medium' : ''}>
+                                      {item.timeRemainingFormatted}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-400">No limit</span>
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                {item.orderNumber || 'N/A'}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                <div className="flex space-x-2">
+                                  <button
+                                    onClick={() => handleItemClick(item)}
+                                    className="text-slate-600 hover:text-slate-900"
+                                  >
+                                    View Details
+                                  </button>
+                                  {item.paymentStatus === 'pending' && (
+                                    <button
+                                      onClick={() => handlePayForPickupItem(item)}
+                                      className="text-green-600 hover:text-green-900 font-medium"
+                                    >
+                                      Pay
+                                    </button>
+                                  )}
+                                  {item.paymentStatus === 'completed' && item.pickupType === 'paid_online' && (
+                                    <button
+                                      onClick={() => handleMarkAsPickedUp(item)}
+                                      className="text-blue-600 hover:text-blue-900 font-medium"
+                                    >
+                                      Mark Picked Up
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Orders Tab */}
             {activeTab === 'orders' && isAdmin && (
               <div className="space-y-8">
@@ -1022,10 +1335,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                 <button
-                                  onClick={() => {
-                                    // Handle view order details
-                                    console.log('View order details:', order);
-                                  }}
+                                  onClick={() => handleOrderClick(order)}
                                   className="text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-1 rounded transition-colors"
                                 >
                                   View Details
@@ -1075,11 +1385,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
           onItemClick={handleItemClick}
         />
 
-        {/* Refunds Modal */}
-        <IssuedRefundsModal 
-          isOpen={isRefundsModalOpen}
+        {/* Refunded Items Pending Modal */}
+        <RefundedItemsPendingModal 
+          isOpen={isRefundedItemsPendingModalOpen}
           onClose={() => {
-            setIsRefundsModalOpen(false);
+            setIsRefundedItemsPendingModalOpen(false);
             setActiveTab('dashboard'); // Reset to dashboard when closing
           }}
         />
@@ -1278,6 +1588,20 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
             </div>
           </div>
         )}
+
+        {/* Order Detail Modal */}
+        <OrderDetailModal 
+          isOpen={isOrderDetailModalOpen}
+          onClose={handleOrderDetailModalClose}
+          order={selectedOrder}
+        />
+
+        {/* Admin Cart Modal */}
+        <AdminCartModal 
+          isOpen={isAdminCartModalOpen}
+          onClose={() => setIsAdminCartModalOpen(false)}
+          items={itemsForAdminCart}
+        />
 
       </div>
     </div>

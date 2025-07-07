@@ -7,7 +7,7 @@ export interface ConsignmentItem {
   sellerId: string;
   sellerName: string;
   sellerEmail: string;
-  status: 'pending' | 'approved' | 'live' | 'sold' | 'archived' | 'rejected';
+  status: 'pending' | 'approved' | 'live' | 'sold' | 'archived' | 'rejected' | 'reserved_for_pickup';
   createdAt: Date;
   approvedAt?: Date;
   liveAt?: Date;
@@ -35,6 +35,8 @@ export interface ConsignmentItem {
   buyerEmail?: string;
   paymentId?: string;
   paymentStatus?: 'pending' | 'completed' | 'failed' | 'refunded';
+  reservedUntil?: Date;
+  orderNumber?: string;
   notes?: string;
   tags?: string[];
   // Sale type tracking
@@ -70,6 +72,14 @@ export interface ConsignmentItem {
   refundedAt?: Date; // When item was refunded
   refundReason?: string; // Reason for refund
   returnedToShop?: boolean; // Flag indicating item was returned to shop due to refund
+  // Inventory tracking
+  inventory?: number; // Number of items available (default: 1 for unique consignment items)
+  // Pickup tracking for in-store pickup items
+  pickupStatus?: 'pending_pickup' | 'picked_up' | 'pending_payment';
+  pickupType?: 'paid_online' | 'pending_payment';
+  timeRemainingFormatted?: string;
+  pickedUpAt?: Date;
+  pickedUpBy?: string;
 }
 
 export interface User {
@@ -156,6 +166,7 @@ export interface Category {
   bannerImage: string;
   attributes: any[];
   isActive: boolean;
+  displayOrder: number; // Order in which categories appear on the main page
   createdAt: string;
   updatedAt: string;
 }
@@ -167,6 +178,7 @@ export interface CreateCategoryData {
   bannerImage: string;
   attributes: string[];
   isActive: boolean;
+  displayOrder: number;
 }
 
 export interface UpdateCategoryData {
@@ -176,4 +188,5 @@ export interface UpdateCategoryData {
   bannerImage?: string;
   attributes?: string[];
   isActive?: boolean;
+  displayOrder?: number;
 } 

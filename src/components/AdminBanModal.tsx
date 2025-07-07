@@ -149,7 +149,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
 
   const handleBanUser = async (targetUser: UserRecord) => {
     if (targetUser.id === user?.uid) {
-      alert("You cannot ban yourself");
+      console.log('❌ You cannot ban yourself');
       return;
     }
 
@@ -165,7 +165,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
     const duration = parseInt(durationInput || '24');
     
     if (isNaN(duration) || duration <= 0) {
-      alert('Invalid duration');
+      console.log('❌ Invalid duration');
       return;
     }
 
@@ -201,10 +201,10 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
 
       await logUserAction(user, 'admin_action', `Banned user ${targetUser.displayName} (${targetUser.email}) for ${duration} hours. Reason: ${reason}`);
       
-      alert(`User ${targetUser.displayName} has been banned successfully`);
+      console.log(`✅ User ${targetUser.displayName} has been banned successfully`);
       await loadData(); // Reload all data
     } catch (error) {
-      console.error('Error banning user:', error);
+      console.error('❌ Failed to ban user:', error);
       alert('Failed to ban user');
     }
   };
@@ -279,7 +279,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
       await logUserAction(user, 'admin_action', `Unbanned IP: ${ip}`);
       await loadBannedIPs();
     } catch (error) {
-      console.error('Error unbanning IP:', error);
+      console.error('❌ Failed to unban IP:', error);
       alert('Failed to unban IP');
     }
   };
@@ -295,7 +295,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
       await logUserAction(user, 'admin_action', `Unbanned user: ${email}`);
       await loadBannedUsers();
     } catch (error) {
-      console.error('Error unbanning user:', error);
+      console.error('❌ Failed to unban user:', error);
       alert('Failed to unban user');
     }
   };
@@ -304,7 +304,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
     e.preventDefault();
     
     if (!manualBanForm.target || !manualBanForm.reason) {
-      alert('Please fill in all fields');
+      console.log('❌ Please fill in all fields');
       return;
     }
 
@@ -316,7 +316,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
         // Validate IP format
         const ipRegex = /^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/;
         if (!ipRegex.test(manualBanForm.target)) {
-          alert('Please enter a valid IP address');
+          console.log('❌ Please enter a valid IP address');
           return;
         }
 
@@ -335,7 +335,7 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
         // Validate email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(manualBanForm.target)) {
-          alert('Please enter a valid email address');
+          console.log('❌ Please enter a valid email address');
           return;
         }
 
@@ -362,9 +362,9 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
 
       // Reload data
       await loadData();
-      alert('Ban applied successfully');
+      console.log('✅ Ban applied successfully');
     } catch (error) {
-      console.error('Error applying manual ban:', error);
+      console.error('❌ Failed to apply ban:', error);
       alert('Failed to apply ban');
     }
   };
@@ -402,9 +402,9 @@ const AdminBanModal: React.FC<AdminBanModalProps> = ({ onClose }) => {
 
       await logUserAction(user, 'admin_action', `Banned IP ${violation.ip} and user ${violation.userId} from violation`);
       await loadData();
-      alert('Ban applied successfully');
+      console.log('✅ Ban applied successfully');
     } catch (error) {
-      console.error('Error banning from violation:', error);
+      console.error('❌ Failed to apply ban:', error);
       alert('Failed to apply ban');
     }
   };

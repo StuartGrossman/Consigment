@@ -8,6 +8,7 @@ import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/apiService';
 import NotificationModal from './NotificationModal';
 import BulkActionsModal from './BulkActionsModal';
+import BulkBarcodeGenerationModal from './BulkBarcodeGenerationModal';
 import POSModal from './POSModal';
 import InventoryScanningModal from './InventoryScanningModal';
 import { testDataFiles } from '../assets/test-data';
@@ -58,6 +59,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
     type: 'info' as 'success' | 'error' | 'info' | 'warning'
   });
   const [showBulkActionsModal, setShowBulkActionsModal] = useState(false);
+  const [showBulkBarcodeModal, setShowBulkBarcodeModal] = useState(false);
   const [isPOSModalOpen, setIsPOSModalOpen] = useState(false);
   const [isScanningModalOpen, setIsScanningModalOpen] = useState(false);
   const { user } = useAuth();
@@ -67,7 +69,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
     {
       id: 'approve',
       name: 'Approve Items',
-      description: 'Mark selected items as approved',
+      description: 'Mark selected items as approved with barcode generation',
       icon: '✅',
       color: 'green'
     },
@@ -77,6 +79,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
       description: 'Publish selected items for sale',
       icon: '🚀',
       color: 'blue'
+    },
+    {
+      id: 'send-to-pending',
+      name: 'Send to Pending',
+      description: 'Send selected items back to pending status',
+      icon: '↶',
+      color: 'orange'
     },
     {
       id: 'reject',
@@ -361,7 +370,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
              // Use the same API detection logic as apiService
        const getApiBaseUrl = () => {
          if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
-         if (import.meta.env.DEV) return 'http://localhost:8002';
+         if (import.meta.env.DEV) return 'http://localhost:8080';
          return ''; // Use relative URLs for production
        };
        const API_BASE_URL = getApiBaseUrl();
@@ -518,9 +527,11 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="space-y-6">
+          {/* Dashboard Header */}
+          <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Inventory Dashboard</h1>
           <p className="text-gray-600">Manage all items across all statuses</p>
@@ -1159,11 +1170,38 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         onClose={() => setShowBulkActionsModal(false)}
         selectedItems={selectedItems}
         availableActions={availableBulkActions}
-        onComplete={() => {
-          setSelectedItems([]);
-          fetchAllItems();
+        onComplete={(actionId) => {
+          if (actionId === 'approve') {
+            // For approval, show the bulk barcode generation modal
+            setShowBulkBarcodeModal(true);
+            setShowBulkActionsModal(false);
+          } else {
+            // For other actions, refresh the data
+            setSelectedItems([]);
+            setShowBulkActionsModal(false);
+            fetchAllItems();
+            showNotificationModal('Success', 'Bulk action completed successfully!', 'success');
+          }
         }}
       />
+
+      {/* Bulk Barcode Generation Modal */}
+      {showBulkBarcodeModal && (
+        <BulkBarcodeGenerationModal
+          isOpen={showBulkBarcodeModal}
+          onClose={() => {
+            setShowBulkBarcodeModal(false);
+            setSelectedItems([]);
+          }}
+          items={filteredItems.filter(item => selectedItems.includes(item.id))}
+          onComplete={(processedItems) => {
+            setShowBulkBarcodeModal(false);
+            setSelectedItems([]);
+            fetchAllItems();
+            showNotificationModal('Success', `Successfully approved ${processedItems.length} items with barcodes generated!`, 'success');
+          }}
+        />
+      )}
 
       {/* Notification Modal */}
       <NotificationModal
@@ -1189,6 +1227,8 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           fetchAllItems(); // Refresh the inventory list
         }}
       />
+        </div>
+      </div>
     </div>
   );
 };
@@ -1394,6 +1434,14 @@ interface ImportDataModalProps {
 }
 
 const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComplete }) => {
+  // Reset progress state when modal is closed
+  const handleClose = () => {
+    setAnalysisProgress(0);
+    setAnalysisStartTime(null);
+    setEstimatedTimeRemaining('');
+    setAnalysisStage('');
+    onClose();
+  };
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importType, setImportType] = useState<'csv' | 'json' | 'sql'>('csv');
   const [isUploading, setIsUploading] = useState(false);
@@ -1402,6 +1450,10 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
   const [showPreview, setShowPreview] = useState(false);
   const [aiResults, setAiResults] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStartTime, setAnalysisStartTime] = useState<number | null>(null);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string>('');
+  const [analysisStage, setAnalysisStage] = useState<string>('');
   const [selectedItemsForImport, setSelectedItemsForImport] = useState<string[]>([]);
   const { user } = useAuth();
 
@@ -1420,6 +1472,12 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
       setPreviewData([]);
       setAiResults(null);
       setSelectedItemsForImport([]);
+      
+      // Reset analysis progress state
+      setAnalysisProgress(0);
+      setAnalysisStartTime(null);
+      setEstimatedTimeRemaining('');
+      setAnalysisStage('');
     }
   };
 
@@ -1504,7 +1562,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
           setUploadProgress(50);
           
           try {
-            const importResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002'}/api/admin/import-processed-items`, {
+            const importResponse = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/admin/import-processed-items`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -1597,10 +1655,61 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
 
     setIsAnalyzing(true);
     setAiResults(null);
+    setAnalysisProgress(0);
+    setAnalysisStartTime(Date.now());
+    setAnalysisStage('Initializing analysis...');
+    
+    // Start progress simulation
+    const progressInterval = setInterval(() => {
+      setAnalysisProgress(prev => {
+        if (prev >= 95) {
+          clearInterval(progressInterval);
+          return 95;
+        }
+        return prev + Math.random() * 3 + 1; // Random increment between 1-4%
+      });
+    }, 500);
+
+    // Update analysis stages based on progress
+    const stageInterval = setInterval(() => {
+      setAnalysisProgress(currentProgress => {
+        if (currentProgress < 20) {
+          setAnalysisStage('Validating file format...');
+        } else if (currentProgress < 40) {
+          setAnalysisStage('Parsing data structure...');
+        } else if (currentProgress < 60) {
+          setAnalysisStage('Analyzing field mappings...');
+        } else if (currentProgress < 80) {
+          setAnalysisStage('Processing with AI...');
+        } else if (currentProgress < 95) {
+          setAnalysisStage('Finalizing results...');
+        }
+        return currentProgress;
+      });
+    }, 1000);
+
+    // Calculate estimated time remaining
+    const timeInterval = setInterval(() => {
+      if (analysisStartTime) {
+        const elapsed = (Date.now() - analysisStartTime) / 1000;
+        const progress = analysisProgress / 100;
+        if (progress > 0) {
+          const estimatedTotal = elapsed / progress;
+          const remaining = estimatedTotal - elapsed;
+          if (remaining > 0) {
+            if (remaining < 60) {
+              setEstimatedTimeRemaining(`${Math.ceil(remaining)} seconds`);
+            } else {
+              setEstimatedTimeRemaining(`${Math.ceil(remaining / 60)} minutes`);
+            }
+          }
+        }
+      }
+    }, 2000);
     
     try {
       // Create a manual fetch request to the analyze-data endpoint
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8002'}/api/admin/analyze-data`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/admin/analyze-data`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1647,6 +1756,13 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
         });
       }
     } finally {
+      // Clear all intervals and complete progress
+      clearInterval(progressInterval);
+      clearInterval(stageInterval);
+      clearInterval(timeInterval);
+      setAnalysisProgress(100);
+      setAnalysisStage('Analysis complete!');
+      setEstimatedTimeRemaining('');
       setIsAnalyzing(false);
     }
   };
@@ -1726,7 +1842,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
               <h2 className="text-2xl font-bold text-gray-800">Import Data</h2>
               <p className="text-gray-600 mt-1">Upload CSV, JSON, or SQL data sheets to import inventory items</p>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button onClick={handleClose} className="text-gray-400 hover:text-gray-600">
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -1871,15 +1987,54 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
               {/* Analysis Loading State */}
               {isAnalyzing && (
                 <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-                  <div className="flex items-center space-x-4">
+                  <div className="flex items-start space-x-4">
                     <div className="flex-shrink-0">
                       <svg className="w-8 h-8 text-blue-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">Analyzing Data</h3>
-                      <p className="text-sm text-gray-600">Processing and formatting your data structure...</p>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold text-gray-800">Analyzing Data</h3>
+                        <div className="text-sm text-gray-600">
+                          {analysisProgress.toFixed(0)}% complete
+                        </div>
+                      </div>
+                      
+                      {/* Progress Bar */}
+                      <div className="w-full bg-blue-200 rounded-full h-3 mb-3">
+                        <div 
+                          className="bg-blue-500 h-3 rounded-full transition-all duration-500 ease-out"
+                          style={{ width: `${analysisProgress}%` }}
+                        ></div>
+                      </div>
+                      
+                      {/* Current Stage */}
+                      <p className="text-sm font-medium text-gray-700 mb-2">
+                        {analysisStage}
+                      </p>
+                      
+                      {/* Time Estimate */}
+                      {estimatedTimeRemaining && (
+                        <div className="flex items-center text-sm text-gray-600">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Estimated time remaining: {estimatedTimeRemaining}
+                        </div>
+                      )}
+                      
+                      {/* File Size Info */}
+                      {selectedFile && (
+                        <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+                          <div className="text-xs text-blue-800">
+                            <strong>Processing:</strong> {selectedFile.name} ({formatFileSize(selectedFile.size)})
+                          </div>
+                          <div className="text-xs text-blue-700 mt-1">
+                            File type: {importType.toUpperCase()} • {selectedFile.size > 1000000 ? 'Large file - may take longer' : 'Standard processing time'}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -2139,7 +2294,7 @@ const ImportDataModal: React.FC<ImportDataModalProps> = ({ onClose, onImportComp
           <div className="sticky bottom-0 bg-gray-50 px-6 py-4 border-t border-gray-200">
             <div className="flex justify-between items-center">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium"
               >
                 Cancel

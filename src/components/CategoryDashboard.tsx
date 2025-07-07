@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { apiService, Category, CreateCategoryData, UpdateCategoryData } from '../services/apiService';
+import { apiService } from '../services/apiService';
+import { Category, CreateCategoryData, UpdateCategoryData } from '../types';
 
 interface CategoryDashboardProps {
   isOpen: boolean;
@@ -22,11 +23,14 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
     description: '',
     icon: '',
     attributes: [] as string[],
-    isActive: true
+    isActive: true,
+    displayOrder: 0
   });
   const [newAttribute, setNewAttribute] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [draggedCategoryId, setDraggedCategoryId] = useState<string | null>(null);
+  const [processingItemId, setProcessingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -68,7 +72,8 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
       description: '',
       icon: '',
       attributes: [],
-      isActive: true
+      isActive: true,
+      displayOrder: categories.length // Set to end of list by default
     });
     setImageFile(null);
     setImagePreview('');
@@ -83,7 +88,8 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
       description: category.description,
       icon: category.icon,
       attributes: [...category.attributes],
-      isActive: category.isActive
+      isActive: category.isActive,
+      displayOrder: category.displayOrder || 0
     });
     setImagePreview(category.bannerImage);
     setImageFile(null);
@@ -98,18 +104,27 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
         setFormData(prev => ({ ...prev, icon: '📦' })); // Default category icon
       }
       
+      // Calculate the next displayOrder for new categories
+      const nextDisplayOrder = isCreating 
+        ? Math.max(...categories.map(c => c.displayOrder || 0)) + 10
+        : formData.displayOrder;
+
       const categoryData: CreateCategoryData | UpdateCategoryData = {
         name: formData.name.trim() || 'New Category',
         description: formData.description.trim(),
         icon: formData.icon.trim() || '📦',
         bannerImage: imagePreview || '',
         attributes: formData.attributes,
-        isActive: formData.isActive
+        isActive: formData.isActive,
+        displayOrder: nextDisplayOrder
       };
       
       if (isCreating) {
-        await apiService.createCategory(categoryData as CreateCategoryData);
+        console.log('🆕 Creating new category with data:', categoryData);
+        const newCategory = await apiService.createCategory(categoryData as CreateCategoryData);
+        console.log('✅ New category created:', newCategory);
       } else if (isEditing && selectedCategory) {
+        console.log('✏️ Updating category with data:', categoryData);
         await apiService.updateCategory(selectedCategory.id, categoryData);
       }
       
@@ -143,8 +158,6 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
     }
   };
 
-
-
   const handleCancel = () => {
     setIsCreating(false);
     setIsEditing(false);
@@ -154,7 +167,8 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
       description: '',
       icon: '',
       attributes: [],
-      isActive: true
+      isActive: true,
+      displayOrder: 0
     });
     setImageFile(null);
     setImagePreview('');
@@ -176,6 +190,156 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
       ...prev,
       attributes: prev.attributes.filter((_, i) => i !== index)
     }));
+  };
+
+  const handleMoveCategory = async (categoryId: string, direction: 'up' | 'down') => {
+    const sortedCategories = [...categories].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+    const currentIndex = sortedCategories.findIndex(cat => cat.id === categoryId);
+    
+    if (currentIndex === -1) return;
+    
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sortedCategories.length) return;
+    
+    const currentCategory = sortedCategories[currentIndex];
+    const targetCategory = sortedCategories[targetIndex];
+    
+    try {
+      setLoading(true);
+      setProcessingItemId(categoryId);
+      
+      // Swap display orders
+      const currentOrder = currentCategory.displayOrder || 0;
+      const targetOrder = targetCategory.displayOrder || 0;
+      
+      // Update both categories
+      await Promise.all([
+        apiService.updateCategory(currentCategory.id, { displayOrder: targetOrder }),
+        apiService.updateCategory(targetCategory.id, { displayOrder: currentOrder })
+      ]);
+      
+      // Optimistically update the local state for immediate visual feedback
+      const updatedCategories = categories.map(cat => {
+        if (cat.id === currentCategory.id) {
+          return { ...cat, displayOrder: targetOrder };
+        }
+        if (cat.id === targetCategory.id) {
+          return { ...cat, displayOrder: currentOrder };
+        }
+        return cat;
+      });
+      
+      setCategories(updatedCategories);
+      
+      // Dispatch event to notify other components that categories have been reordered
+      window.dispatchEvent(new CustomEvent('categoriesUpdated', {
+        detail: { action: 'categories_reordered' }
+      }));
+      
+      // Refresh categories from server to ensure consistency
+      setTimeout(() => {
+        fetchCategories();
+      }, 100);
+      
+    } catch (error) {
+      console.error('Error moving category:', error);
+      // Refresh categories on error to ensure UI is in sync
+      await fetchCategories();
+    } finally {
+      setLoading(false);
+      setProcessingItemId(null);
+    }
+  };
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, categoryId: string) => {
+    setDraggedCategoryId(categoryId);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', categoryId);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetCategoryId: string) => {
+    e.preventDefault();
+    
+    if (!draggedCategoryId || draggedCategoryId === targetCategoryId) {
+      setDraggedCategoryId(null);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setProcessingItemId(draggedCategoryId);
+      
+      console.log('🔄 Starting category reorder...');
+      console.log('Dragged category ID:', draggedCategoryId);
+      console.log('Target category ID:', targetCategoryId);
+      
+      // Get current sorted categories
+      const sortedCategories = [...categories].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+      const draggedIndex = sortedCategories.findIndex(cat => cat.id === draggedCategoryId);
+      const targetIndex = sortedCategories.findIndex(cat => cat.id === targetCategoryId);
+      
+      console.log('Current sorted categories:', sortedCategories.map(c => ({ id: c.id, name: c.name, displayOrder: c.displayOrder })));
+      console.log('Dragged index:', draggedIndex, 'Target index:', targetIndex);
+      
+      if (draggedIndex === -1 || targetIndex === -1) {
+        console.error('❌ Invalid indices found');
+        return;
+      }
+      
+      // Create new order array
+      const newOrder = [...sortedCategories];
+      const [draggedCategory] = newOrder.splice(draggedIndex, 1);
+      newOrder.splice(targetIndex, 0, draggedCategory);
+      
+      console.log('New order:', newOrder.map(c => ({ id: c.id, name: c.name, newDisplayOrder: newOrder.indexOf(c) })));
+      
+      // Update display orders for all affected categories
+      // Use a larger increment to avoid conflicts and ensure unique ordering
+      const updatePromises = newOrder.map((category, index) => {
+        const newDisplayOrder = index * 10; // Use increments of 10 to avoid conflicts
+        console.log(`📝 Updating ${category.name} (${category.id}) with displayOrder: ${newDisplayOrder}`);
+        return apiService.updateCategory(category.id, { displayOrder: newDisplayOrder });
+      });
+      
+      console.log('🚀 Sending update requests to backend...');
+      await Promise.all(updatePromises);
+      console.log('✅ All update requests completed successfully');
+      
+      // Optimistically update the local state for immediate visual feedback
+      const updatedCategories = categories.map(cat => {
+        const newIndex = newOrder.findIndex(newCat => newCat.id === cat.id);
+        if (newIndex !== -1) {
+          return { ...cat, displayOrder: newIndex * 10 }; // Use same increment as backend update
+        }
+        return cat;
+      });
+      
+      setCategories(updatedCategories);
+      
+      // Dispatch event to notify other components that categories have been reordered
+      window.dispatchEvent(new CustomEvent('categoriesUpdated', {
+        detail: { action: 'categories_reordered' }
+      }));
+      
+    } catch (error) {
+      console.error('Error reordering categories:', error);
+      // Refresh categories on error to ensure UI is in sync
+      await fetchCategories();
+    } finally {
+      setLoading(false);
+      setDraggedCategoryId(null);
+      setProcessingItemId(null);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCategoryId(null);
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -316,7 +480,7 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
 
                   <div className="space-y-6">
                     {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">Category Name</label>
                         <input
@@ -351,6 +515,20 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
                             ))}
                           </div>
                         </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Display Order</label>
+                        <input
+                          type="number"
+                          value={formData.displayOrder}
+                          onChange={(e) => setFormData(prev => ({ ...prev, displayOrder: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="0"
+                          min="0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Lower numbers appear first on the main page
+                        </p>
                       </div>
                     </div>
 
@@ -457,14 +635,116 @@ const CategoryDashboard: React.FC<CategoryDashboardProps> = ({ isOpen, onClose }
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center text-gray-500">
-                <div className="text-center">
-                  <div className="text-6xl mb-4">🏷️</div>
-                  <p className="text-xl font-medium text-gray-700">Select a category to edit</p>
-                  <p className="text-sm text-gray-500 mt-2">or create a new category to get started</p>
-                  <div className="mt-4 text-sm text-gray-400">
-                    <p>Current categories: {categories.length}</p>
-                    <p>Active categories: {categories.filter(c => c.isActive).length}</p>
+              <div className="flex-1 flex flex-col">
+                {/* Category Reordering Section */}
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  <div className="p-6 border-b border-gray-200">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">📋 Category Display Order</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Drag and drop categories to change their order on the main page. Categories with lower numbers appear first. 
+                      You can also use the up/down arrows for precise control.
+                    </p>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-6">
+                    <div className="space-y-2">
+                    {[...categories]
+                      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                      .map((category, index) => (
+                        <div
+                          key={category.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, category.id)}
+                          onDragOver={handleDragOver}
+                          onDrop={(e) => handleDrop(e, category.id)}
+                          onDragEnd={handleDragEnd}
+                          className={`flex items-center gap-3 p-3 rounded-lg border transition-all duration-200 cursor-move ${
+                            draggedCategoryId === category.id
+                              ? 'bg-blue-50 border-blue-300 shadow-lg opacity-50 transform scale-105'
+                              : draggedCategoryId && draggedCategoryId !== category.id
+                              ? 'bg-gray-100 border-gray-300'
+                              : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 text-gray-500">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                            </svg>
+                            <span className="text-sm font-medium">#{category.displayOrder || 0}</span>
+                          </div>
+                          <span className="text-xl">{category.icon}</span>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900">{category.name}</h4>
+                            <p className="text-sm text-gray-600">{category.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {loading && (draggedCategoryId === category.id || processingItemId === category.id) ? (
+                              <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleMoveCategory(category.id, 'up')}
+                                  disabled={index === 0 || loading}
+                                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title="Move up"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleMoveCategory(category.id, 'down')}
+                                  disabled={index === categories.length - 1 || loading}
+                                  className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title="Move down"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* Drop zone for end of list */}
+                      <div
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedCategoryId) {
+                            const sortedCategories = categories.sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+                            const lastCategory = sortedCategories[sortedCategories.length - 1];
+                            if (lastCategory && lastCategory.id !== draggedCategoryId) {
+                              handleDrop(e, lastCategory.id);
+                            }
+                          }
+                        }}
+                        className={`h-8 border-2 border-dashed rounded-lg transition-colors ${
+                          draggedCategoryId ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
+                        }`}
+                      />
+                    </div>
+                    
+                    <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-700">
+                        💡 <strong>Tip:</strong> You can also edit individual categories to set their display order manually.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Stats Section */}
+                <div className="flex-1 flex items-center justify-center text-gray-500">
+                  <div className="text-center">
+                    <div className="text-6xl mb-4">🏷️</div>
+                    <p className="text-xl font-medium text-gray-700">Select a category to edit</p>
+                    <p className="text-sm text-gray-500 mt-2">or create a new category to get started</p>
+                    <div className="mt-4 text-sm text-gray-400">
+                      <p>Current categories: {categories.length}</p>
+                      <p>Active categories: {categories.filter(c => c.isActive).length}</p>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { db } from '../config/firebase';
 import { ConsignmentItem, AuthUser, Category } from '../types';
 import BarcodeGenerationModal from './BarcodeGenerationModal';
 import BulkBarcodeGenerationModal from './BulkBarcodeGenerationModal';
+
 import { apiService } from '../services/apiService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 import { useCategories } from '../hooks/useCategories';
@@ -31,7 +32,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
   const { throttledAction, isActionDisabled, isActionProcessing } = useCriticalActionThrottle();
   
   // Modal states
-  const [showApproveModal, setShowApproveModal] = useState(false);
+
   const [showBarcodeModal, setShowBarcodeModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -39,6 +40,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
   const [showBulkRejectModal, setShowBulkRejectModal] = useState(false);
   const [showBulkApproveModal, setShowBulkApproveModal] = useState(false);
   const [showBulkBarcodeModal, setShowBulkBarcodeModal] = useState(false);
+
 
   const [selectedItem, setSelectedItem] = useState<ConsignmentItem | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -176,13 +178,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
     });
   };
 
-  const handleApproveClick = async (item: ConsignmentItem) => {
-    await throttledAction(`approve-${item.id}`, async () => {
-      setSelectedItem(item);
-      // Skip confirmation modal and go directly to barcode generation
-      setShowBarcodeModal(true);
-    });
-  };
+
 
   const handleRejectClick = async (item: ConsignmentItem) => {
     await throttledAction(`reject-${item.id}`, async () => {
@@ -192,14 +188,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
     });
   };
 
-  const confirmApprove = async () => {
-    if (!selectedItem) return;
-    
-    await throttledAction(`confirm-approve-${selectedItem.id}`, async () => {
-      setShowApproveModal(false);
-      setShowBarcodeModal(true);
-    });
-  };
+
 
   const handleBarcodeConfirmed = async (item: ConsignmentItem, barcodeData: string) => {
     // Remove from pending list since it's now approved with barcode
@@ -298,14 +287,16 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
                 Review and approve items for consignment ({filteredItems.length} items)
               </p>
             </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
-            >
-              <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none p-2 -m-2 mobile-touch-target"
+              >
+                <svg className="h-5 w-5 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -530,17 +521,6 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleApproveClick(item);
-                            }}
-                            disabled={processingItemId === item.id || isActionDisabled(`approve-${item.id}`)}
-                            className="mobile-admin-button mobile-admin-button-approve disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {processingItemId === item.id ? 'Processing...' : 
-                             isActionProcessing(`approve-${item.id}`) ? 'Opening...' : 'Approve Item'}
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
                               handleRejectClick(item);
                             }}
                             disabled={processingItemId === item.id || isActionDisabled(`reject-${item.id}`)}
@@ -655,38 +635,7 @@ const AdminModal: React.FC<AdminModalProps> = ({ isOpen, onClose, user, onDataCh
         </div>
       )}
 
-      {/* Approve Confirmation Modal */}
-      {showApproveModal && selectedItem && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="flex items-center mb-4">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                <span className="text-green-600 text-xl">✅</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Approve Item</h3>
-            </div>
-            <p className="text-gray-600 mb-6">
-              Approving "<span className="font-medium">{selectedItem.title}</span>" will generate a barcode label that must be printed.
-              After printing, the item will be available to employees for 3 days before going live to all customers.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => setShowApproveModal(false)}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmApprove}
-                disabled={selectedItem ? isActionDisabled(`confirm-approve-${selectedItem.id}`) : false}
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {selectedItem && isActionProcessing(`confirm-approve-${selectedItem.id}`) ? 'Processing...' : 'Generate Label & Approve'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Reject Modal */}
       {showRejectModal && selectedItem && (

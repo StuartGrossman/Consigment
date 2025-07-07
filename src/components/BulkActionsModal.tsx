@@ -21,7 +21,7 @@ interface BulkActionsModalProps {
   onClose: () => void;
   selectedItems: string[];
   availableActions: BulkAction[];
-  onComplete: () => void;
+  onComplete: (actionId?: string) => void;
 }
 
 const BulkActionsModal: React.FC<BulkActionsModalProps> = ({ 
@@ -71,7 +71,12 @@ const BulkActionsModal: React.FC<BulkActionsModalProps> = ({
       let result;
       switch (action.id) {
         case 'approve':
-          result = await apiService.bulkUpdateItemStatus([itemId], 'approved');
+          // For approval, we'll handle this in the parent component with barcode generation
+          // Just mark as completed for now
+          result = { success: true };
+          break;
+        case 'send-to-pending':
+          result = await apiService.bulkUpdateItemStatus([itemId], 'pending');
           break;
         case 'reject':
           result = await apiService.bulkUpdateItemStatus([itemId], 'rejected');
@@ -107,7 +112,7 @@ const BulkActionsModal: React.FC<BulkActionsModalProps> = ({
   };
 
   const handleComplete = () => {
-    onComplete();
+    onComplete(selectedAction?.id);
     onClose();
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useSharedCart } from '../hooks/useSharedCart';
 import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
 
@@ -38,14 +38,78 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
     }
   }, [isOpen, getUserSharedCarts]);
 
+  // Enhanced cleanup function
+  const cleanupCamera = useCallback(() => {
+    console.log('🧹 Performing comprehensive camera cleanup (MobileScanner)...');
+    
+    // Stop barcode scanning
+    if (codeReaderRef.current) {
+      console.log('🛑 Resetting barcode reader');
+      try {
+        codeReaderRef.current.reset();
+      } catch (error) {
+        console.log('🛑 Error resetting barcode reader (expected):', error);
+      }
+      codeReaderRef.current = null;
+    }
+    
+    // Stop camera stream
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      console.log(`🛑 Stopping ${stream.getTracks().length} media tracks`);
+      stream.getTracks().forEach(track => {
+        console.log(`🛑 Stopping track: ${track.kind} (${track.label})`);
+        track.stop();
+      });
+      videoRef.current.srcObject = null;
+    }
+    
+    // Reset video element
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0;
+      videoRef.current.src = '';
+      videoRef.current.load();
+    }
+    
+    setUseCamera(false);
+    setIsScanning(false);
+    setCameraLoading(false);
+    
+    // Additional cleanup to ensure camera is fully released
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      // Force release any remaining camera handles
+      navigator.mediaDevices.getUserMedia({ video: false })
+        .then(stream => {
+          stream.getTracks().forEach(track => {
+            console.log(`🧹 Force stopping track: ${track.kind}`);
+            track.stop();
+          });
+        })
+        .catch(error => {
+          console.log('🧹 Expected error during cleanup (no camera access):', error);
+        });
+    }
+  }, []);
+
   // Cleanup camera on unmount
   useEffect(() => {
     return () => {
-      stopCamera();
+      console.log('🗑️ MobileScanner component unmounting - cleaning up camera');
+      cleanupCamera();
     };
-  }, []);
+  }, [cleanupCamera]);
+
+  // Ensure camera is stopped when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      console.log('🚪 MobileScanner modal closed - ensuring camera cleanup');
+      cleanupCamera();
+    }
+  }, [isOpen, cleanupCamera]);
 
   const startCamera = async () => {
+    console.log('📹 Starting camera (MobileScanner)...');
     setCameraLoading(true);
     setScanError(null);
     
@@ -67,6 +131,7 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
           const onLoadedMetadata = () => {
             video.play()
               .then(() => {
+                console.log('✅ Camera started successfully (MobileScanner)');
                 startBarcodeScanning();
                 setUseCamera(true);
                 setCameraLoading(false);
@@ -80,7 +145,7 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
         });
       }
     } catch (error) {
-      console.error('❌ Camera setup failed:', error);
+      console.error('❌ Camera setup failed (MobileScanner):', error);
       setScanError('Unable to access camera. Please check permissions.');
       setUseCamera(false);
       setCameraLoading(false);
@@ -88,19 +153,8 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
   };
 
   const stopCamera = () => {
-    // Stop barcode scanning
-    if (codeReaderRef.current) {
-      codeReaderRef.current.reset();
-      codeReaderRef.current = null;
-    }
-    
-    // Stop camera stream
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-      setUseCamera(false);
-    }
+    console.log('🛑 Stopping camera (MobileScanner)...');
+    cleanupCamera();
   };
 
   const startBarcodeScanning = async () => {
@@ -144,11 +198,15 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
       successMsg.textContent = '✅ Item added to cart!';
       document.body.appendChild(successMsg);
       
+      // Close modal after successful scan
+      console.log('🚪 Closing modal after successful scan');
       setTimeout(() => {
         if (document.body.contains(successMsg)) {
           document.body.removeChild(successMsg);
         }
-      }, 2000);
+        // Close the modal after showing success message
+        onClose();
+      }, 1500);
       
     } catch (error) {
       console.error('❌ Error adding item:', error);
@@ -177,11 +235,17 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
     }
   };
 
+  const handleClose = () => {
+    console.log('🚪 Closing MobileSharedCartScanner modal');
+    cleanupCamera();
+    onClose();
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4" onClick={handleClose}>
+      <div className="bg-white rounded-lg w-full max-w-md max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white p-4">
           <div className="flex justify-between items-center">
@@ -190,7 +254,7 @@ const MobileSharedCartScanner: React.FC<MobileSharedCartScannerProps> = ({ isOpe
               <p className="text-green-100 text-sm">Scan items for shared cart</p>
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="text-white hover:text-gray-200"
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">

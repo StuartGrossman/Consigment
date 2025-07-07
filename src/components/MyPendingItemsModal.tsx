@@ -25,11 +25,12 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
   }, [isOpen, user]);
 
   useEffect(() => {
-    // Filter to show pending, rejected, and returned items
-    const filtered = myItems.filter(item => 
+    // Filter to show only pending and rejected items (no refunded items)
+    const statusFiltered = myItems.filter(item => 
       item.status === 'pending' || item.status === 'rejected'
     );
-    setFilteredItems(filtered);
+    
+    setFilteredItems(statusFiltered);
   }, [myItems]);
 
   const fetchMyItems = async () => {
@@ -127,10 +128,9 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
       ));
       
       setEditingItem(null);
-      alert('Item updated successfully');
+      console.log('✅ Item updated successfully');
     } catch (error) {
-      console.error('Error updating item:', error);
-      alert('Failed to update item. Please try again.');
+      console.error('❌ Failed to update item:', error);
     } finally {
       setProcessingAction(null);
     }
@@ -144,10 +144,9 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
       // Remove from local state
       setMyItems(prev => prev.filter(i => i.id !== itemId));
       setEditingItem(null);
-      alert('Item deleted successfully');
+      console.log('✅ Item deleted successfully');
     } catch (error) {
-      console.error('Error deleting item:', error);
-      alert('Failed to delete item. Please try again.');
+      console.error('❌ Failed to delete item:', error);
     } finally {
       setProcessingAction(null);
     }
@@ -175,9 +174,6 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
   const getStatusDescription = (item: ConsignmentItem) => {
     switch (item.status) {
       case 'pending':
-        if (item.returnedToShop) {
-          return '🔄 Your item has been returned to the shop due to a refund and is now pending re-review.';
-        }
         return 'Your item is waiting for admin review. Please bring the physical item to the front desk.';
       case 'rejected':
         return 'Your item was rejected during review. You can edit and resubmit it.';
@@ -196,7 +192,7 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
             <div>
               <h2 className="text-xl sm:text-2xl font-bold text-gray-800">My Pending Items</h2>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                Track your pending, rejected, and returned items • Click to edit items
+                Manage your pending and rejected items • Click to edit or delete
               </p>
             </div>
             <button
@@ -222,11 +218,16 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-6m-10 0h6m0 0L12 18l-4-5" />
                 </svg>
               </div>
-              <p className="text-gray-500 text-lg">No pending, rejected, or returned items</p>
-              <p className="text-gray-400 text-sm mt-2">Items that are approved, live, or sold are not shown here</p>
+              <p className="text-gray-500 text-lg">
+                No pending or rejected items
+              </p>
+              <p className="text-gray-400 text-sm mt-2">
+                Items that are approved, live, or sold are not shown here
+              </p>
             </div>
           ) : (
-            <div className="space-y-4 sm:space-y-6">
+            <>
+              <div className="space-y-4 sm:space-y-6">
               {filteredItems.map((item) => (
                 <div 
                   key={item.id} 
@@ -295,19 +296,6 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                             </p>
                           </div>
                         )}
-
-                        {/* Returned Item Notice */}
-                        {item.returnedToShop && item.refundReason && (
-                          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 mt-3">
-                            <h5 className="text-sm font-medium text-orange-900 mb-1">🔄 Item Returned to Shop:</h5>
-                            <p className="text-sm text-orange-800 mb-2">
-                              This item was returned due to a customer refund: {item.refundReason}
-                            </p>
-                            <p className="text-xs text-orange-600">
-                              Your item is now back in our inventory for potential re-sale. No action needed from you.
-                            </p>
-                          </div>
-                        )}
                       </div>
 
                       {/* Instructions */}
@@ -332,7 +320,8 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>

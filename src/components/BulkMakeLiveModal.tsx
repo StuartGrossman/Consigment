@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ConsignmentItem } from '../types';
 import { apiService } from '../services/apiService';
+import BulkBarcodeGenerationModal from './BulkBarcodeGenerationModal';
 
 interface BulkMakeLiveModalProps {
   isOpen: boolean;
@@ -31,6 +32,8 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
   const [processingErrors, setProcessingErrors] = useState<string[]>([]);
   const [showErrorDetails, setShowErrorDetails] = useState(false);
   const [isCancelled, setIsCancelled] = useState(false);
+  const [showBarcodeModal, setShowBarcodeModal] = useState(false);
+  const [itemsNeedingBarcodes, setItemsNeedingBarcodes] = useState<ConsignmentItem[]>([]);
   
   // Constants for retry and timeout handling
   const MAX_RETRIES = 2;
@@ -72,6 +75,8 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
       validationErrors.push('No items provided for processing');
     }
     
+    const itemsMissingBarcodes: ConsignmentItem[] = [];
+    
     items.forEach((item, index) => {
       if (!item.id) {
         validationErrors.push(`Item ${index + 1}: Missing item ID`);
@@ -84,8 +89,12 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
       }
       if (!item.barcodeData || !item.barcodeImageUrl) {
         validationErrors.push(`Item ${index + 1}: Missing barcode - please generate barcode first`);
+        itemsMissingBarcodes.push(item);
       }
     });
+    
+    // Store items that need barcodes for later use
+    setItemsNeedingBarcodes(itemsMissingBarcodes);
     
     if (validationErrors.length > 0) {
       setProcessingErrors(validationErrors);
@@ -262,6 +271,72 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
     onComplete(completedItems);
   };
 
+  const handleGenerateBarcodes = () => {
+    setShowBarcodeModal(true);
+  };
+
+  const handleBarcodeGenerationComplete = (processedItems: ConsignmentItem[]) => {
+    setShowBarcodeModal(false);
+    
+    // Update the items with new barcode data
+    const updatedItems = items.map(item => {
+      const updatedItem = processedItems.find(p => p.id === item.id);
+      return updatedItem || item;
+    });
+    
+    // Re-initialize the modal with updated items
+    // We need to force a re-initialization by clearing the state
+    setProcessedItems([]);
+    setCurrentStep('preparing');
+    setCurrentItemIndex(0);
+    setProcessingErrors([]);
+    setShowErrorDetails(false);
+    setIsCancelled(false);
+    setItemsNeedingBarcodes([]);
+    
+    // Use setTimeout to ensure state is cleared before re-initializing
+    setTimeout(() => {
+      // Force re-initialization with updated items
+      const validationErrors: string[] = [];
+      const newItemsMissingBarcodes: ConsignmentItem[] = [];
+      
+      updatedItems.forEach((item, index) => {
+        if (!item.id) {
+          validationErrors.push(`Item ${index + 1}: Missing item ID`);
+        }
+        if (!item.title) {
+          validationErrors.push(`Item ${index + 1}: Missing item title`);
+        }
+        if (item.status !== 'approved') {
+          validationErrors.push(`Item ${index + 1}: Item must be approved to go live`);
+        }
+        if (!item.barcodeData || !item.barcodeImageUrl) {
+          validationErrors.push(`Item ${index + 1}: Missing barcode - please generate barcode first`);
+          newItemsMissingBarcodes.push(item);
+        }
+      });
+      
+      setItemsNeedingBarcodes(newItemsMissingBarcodes);
+      
+      if (validationErrors.length === 0) {
+        // All items now have barcodes, start processing
+        const initialItems: ProcessedLiveItem[] = updatedItems.map(item => ({
+          item,
+          status: 'pending',
+          retryCount: 0,
+          startTime: undefined,
+          endTime: undefined
+        }));
+        
+        setProcessedItems(initialItems);
+        startBulkProcessing();
+      } else {
+        setProcessingErrors(validationErrors);
+        setShowErrorDetails(true);
+      }
+    }, 100);
+  };
+
   if (!isOpen) return null;
 
   const completedCount = processedItems.filter(item => item.status === 'completed').length;
@@ -366,6 +441,29 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
                       {error}
                     </div>
                   ))}
+                </div>
+              )}
+              
+              {/* Generate Barcodes Button */}
+              {itemsNeedingBarcodes.length > 0 && (
+                <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h4 className="text-blue-800 font-medium">🔄 Generate Missing Barcodes</h4>
+                      <p className="text-blue-600 text-sm mt-1">
+                        {itemsNeedingBarcodes.length} item{itemsNeedingBarcodes.length > 1 ? 's' : ''} need{itemsNeedingBarcodes.length === 1 ? 's' : ''} barcode{itemsNeedingBarcodes.length > 1 ? 's' : ''} generated
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleGenerateBarcodes}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Generate Barcodes
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -517,16 +615,36 @@ const BulkMakeLiveModal: React.FC<BulkMakeLiveModalProps> = ({
               </button>
             )}
             {processingErrors.length > 0 && (
-              <button
-                onClick={onClose}
-                className="btn-danger"
-              >
-                Close
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="btn-cancel"
+                >
+                  Cancel
+                </button>
+                {itemsNeedingBarcodes.length > 0 && (
+                  <button
+                    onClick={handleGenerateBarcodes}
+                    className="btn-success"
+                  >
+                    🔄 Generate Barcodes & Retry
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
       </div>
+      
+      {/* BulkBarcodeGenerationModal */}
+      {showBarcodeModal && (
+        <BulkBarcodeGenerationModal
+          isOpen={showBarcodeModal}
+          onClose={() => setShowBarcodeModal(false)}
+          items={itemsNeedingBarcodes}
+          onComplete={handleBarcodeGenerationComplete}
+        />
+      )}
     </div>
   );
 };

@@ -12,7 +12,7 @@ const getApiBaseUrl = () => {
     
     // Development - use localhost with correct port
     if (import.meta.env.DEV) {
-        return 'http://localhost:8002';
+        return 'http://localhost:8080';
     }
     
     // Production - check if we're on Firebase hosting
@@ -334,7 +334,7 @@ class ApiService {
             await this.makeRequest('/api/admin/approve-item', {
                 method: 'POST',
                 body: JSON.stringify({
-                    itemId,
+                    pending_item_id: itemId,
                 }),
             });
             
@@ -534,6 +534,59 @@ class ApiService {
         }
     }
 
+    async searchUsers(query: string): Promise<{
+        success: boolean;
+        users?: any[];
+        customers?: any[];
+        total: number;
+    }> {
+        try {
+            console.log('🔍 [USER SEARCH] Searching users with query:', query);
+            const response = await this.makeRequest(`/api/admin/search-customers?q=${encodeURIComponent(query)}`, {
+                method: 'GET',
+            });
+            
+            const result = await response.json();
+            console.log('🔍 [USER SEARCH] Search results:', result);
+            
+            return result;
+        } catch (error) {
+            console.error('❌ [USER SEARCH] Failed to search users:', error);
+            // Fallback to getAllUsers if search endpoint doesn't exist
+            try {
+                console.log('🔍 [USER SEARCH] Falling back to getAllUsers...');
+                const allUsers = await this.getAllUsers();
+                if (allUsers && Array.isArray(allUsers)) {
+                    const filteredUsers = allUsers.filter(user => 
+                        user.displayName?.toLowerCase().includes(query.toLowerCase()) ||
+                        user.email?.toLowerCase().includes(query.toLowerCase()) ||
+                        user.phoneNumber?.includes(query)
+                    );
+                    console.log('🔍 [USER SEARCH] Filtered results:', filteredUsers);
+                    return {
+                        success: true,
+                        users: filteredUsers,
+                        total: filteredUsers.length
+                    };
+                } else {
+                    console.log('🔍 [USER SEARCH] getAllUsers returned invalid data:', allUsers);
+                    return {
+                        success: true,
+                        users: [],
+                        total: 0
+                    };
+                }
+            } catch (fallbackError) {
+                console.error('❌ [USER SEARCH] Fallback also failed:', fallbackError);
+                return {
+                    success: true,
+                    users: [],
+                    total: 0
+                };
+            }
+        }
+    }
+
     async banUser(userId: string, email: string, ipAddress: string, reason: string, durationHours: number = 24): Promise<void> {
         try {
             await this.makeRequest('/api/admin/ban-user', {
@@ -626,7 +679,7 @@ class ApiService {
                 await logUserAction(
                     user, 
                     'refund_issued', 
-                    `Issued refund: ${refundReason} - $${result.refundAmount} store credit added, item returned to pending`,
+                    `Issued refund: ${refundReason} - $${result.refundAmount} store credit added, item returned to pending for resale`,
                     itemId
                 );
             }
@@ -781,13 +834,23 @@ class ApiService {
         item?: any;
         available: boolean;
     }> {
+        console.log('🔍 [API] Starting barcode lookup for:', barcodeData);
+        console.log('🔍 [API] API Base URL:', API_BASE_URL);
+        console.log('🔍 [API] Endpoint:', `/api/admin/lookup-item-by-barcode/${barcodeData}`);
+        
         try {
+            console.log('🔍 [API] Making request to backend...');
             const response = await this.makeRequest(`/api/admin/lookup-item-by-barcode/${barcodeData}`);
+            console.log('🔍 [API] Response status:', response.status);
+            console.log('🔍 [API] Response headers:', Object.fromEntries(response.headers.entries()));
+            
             const result = await response.json();
+            console.log('🔍 [API] Response body:', result);
             
             // Log the barcode lookup action
             const user = auth.currentUser;
             if (user && result.success) {
+                console.log('🔍 [API] Logging user action for successful lookup');
                 await logUserAction(
                     user, 
                     'barcode_lookup', 
@@ -797,9 +860,15 @@ class ApiService {
                 );
             }
             
+            console.log('🔍 [API] Returning result:', result);
             return result;
         } catch (error) {
-            console.error('❌ Failed to lookup item by barcode:', error);
+            console.error('❌ [API] Failed to lookup item by barcode:', error);
+            console.error('❌ [API] Error details:', {
+                message: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : 'No stack trace',
+                name: error instanceof Error ? error.name : 'Unknown error type'
+            });
             throw error;
         }
     }
@@ -1005,6 +1074,36 @@ class ApiService {
         }
     }
 
+    async getUserRewardsInfoById(userId: string): Promise<{
+        success: boolean;
+        totalPoints: number;
+        totalEarned: number;
+        totalRedeemed: number;
+        pointValue: number;
+        minimumRedemption: number;
+        history: any[];
+    }> {
+        try {
+            console.log('🔍 [USER REWARDS] Getting rewards info for user ID:', userId);
+            const response = await this.makeRequest(`/api/admin/user-rewards/${userId}`);
+            const result = await response.json();
+            console.log('🔍 [USER REWARDS] Rewards info result:', result);
+            return result;
+        } catch (error) {
+            console.error('❌ [USER REWARDS] Failed to get user rewards info by ID:', error);
+            // Return default values if the endpoint doesn't exist
+            return {
+                success: false,
+                totalPoints: 0,
+                totalEarned: 0,
+                totalRedeemed: 0,
+                pointValue: 0.01,
+                minimumRedemption: 100,
+                history: []
+            };
+        }
+    }
+
     // Shared Cart Methods for Multi-Device POS
     async createSharedCart(): Promise<{
         success: boolean;
@@ -1126,6 +1225,7 @@ class ApiService {
                 bannerImage: '/mountain-trail.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: -1, // Hiking should appear first
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1137,6 +1237,7 @@ class ApiService {
                 bannerImage: '/alpine-climbing.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 0,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1148,6 +1249,7 @@ class ApiService {
                 bannerImage: '/campsite-evening.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 1,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1159,6 +1261,7 @@ class ApiService {
                 bannerImage: '/skiing-powder.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 2,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1170,6 +1273,7 @@ class ApiService {
                 bannerImage: '/snowboard-jump.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 3,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1181,6 +1285,7 @@ class ApiService {
                 bannerImage: '/whitewater-rafting.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 4,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1192,6 +1297,7 @@ class ApiService {
                 bannerImage: '/mountain-biking.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 5,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
@@ -1203,6 +1309,7 @@ class ApiService {
                 bannerImage: '/outdoor-clothing.jpg',
                 attributes: [],
                 isActive: true,
+                displayOrder: 6,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             }
@@ -1219,12 +1326,17 @@ class ApiService {
             const result = await response.json();
             
             if (result.success) {
-                return result.categories;
+                // Sort categories by display order
+                return result.categories.sort((a: Category, b: Category) => 
+                    (a.displayOrder || 0) - (b.displayOrder || 0)
+                );
             }
             throw new Error(result.message || 'Failed to fetch categories');
         } catch (error) {
             console.warn('Backend categories unavailable, using hardcoded fallback:', error);
-            return this.getHardcodedCategories();
+            return this.getHardcodedCategories().sort((a, b) => 
+                (a.displayOrder || 0) - (b.displayOrder || 0)
+            );
         }
     }
 
@@ -1237,17 +1349,26 @@ class ApiService {
             const result = await response.json();
             
             if (result.success) {
-                return result.categories;
+                // Sort categories by display order and filter active ones
+                return result.categories
+                    .filter((cat: Category) => cat.isActive)
+                    .sort((a: Category, b: Category) => 
+                        (a.displayOrder || 0) - (b.displayOrder || 0)
+                    );
             }
             throw new Error(result.message || 'Failed to fetch active categories');
         } catch (error) {
             console.warn('Backend categories unavailable, using hardcoded fallback:', error);
-            return this.getHardcodedCategories();
+            return this.getHardcodedCategories()
+                .filter(cat => cat.isActive)
+                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
         }
     }
 
     async createCategory(categoryData: CreateCategoryData): Promise<Category> {
         try {
+            console.log('🌐 Sending POST request to /api/categories with data:', categoryData);
+            
             const response = await this.makeRequest('/api/categories', {
                 method: 'POST',
                 headers: {
@@ -1257,19 +1378,24 @@ class ApiService {
             });
             
             const result = await response.json();
+            console.log('📡 Response for category creation:', result);
             
             if (result.success) {
+                console.log('✅ Successfully created category:', result.category);
                 return result.category;
             }
+            console.error('❌ Failed to create category:', result.message);
             throw new Error(result.message || 'Failed to create category');
         } catch (error) {
-            console.error('Error creating category:', error);
+            console.error('❌ Error creating category:', error);
             throw error;
         }
     }
 
     async updateCategory(categoryId: string, updateData: UpdateCategoryData): Promise<Category> {
         try {
+            console.log(`🌐 Sending PUT request to /api/categories/${categoryId} with data:`, updateData);
+            
             const response = await this.makeRequest(`/api/categories/${categoryId}`, {
                 method: 'PUT',
                 headers: {
@@ -1279,13 +1405,16 @@ class ApiService {
             });
             
             const result = await response.json();
+            console.log(`📡 Response for category ${categoryId}:`, result);
             
             if (result.success) {
+                console.log(`✅ Successfully updated category ${categoryId}`);
                 return result.category;
             }
+            console.error(`❌ Failed to update category ${categoryId}:`, result.message);
             throw new Error(result.message || 'Failed to update category');
         } catch (error) {
-            console.error('Error updating category:', error);
+            console.error(`❌ Error updating category ${categoryId}:`, error);
             throw error;
         }
     }
@@ -1310,18 +1439,285 @@ class ApiService {
     async initializeDefaultCategories(): Promise<Category[]> {
         try {
             const response = await this.makeRequest('/api/categories/initialize-default', {
-                method: 'POST'
+                method: 'POST',
             });
-            
+
             const result = await response.json();
-            
             if (result.success) {
                 return result.categories || [];
             }
-            throw new Error(result.message || 'Failed to initialize default categories');
+            throw new Error(result.message || 'Failed to initialize categories');
         } catch (error) {
-            console.warn('Could not initialize backend categories, using hardcoded fallback:', error);
-            return this.getHardcodedCategories();
+            console.error('❌ Failed to initialize default categories:', error);
+            throw error;
+        }
+    }
+
+    async getItemsByStatus(status: string): Promise<{
+        success: boolean;
+        items?: any[];
+        total?: number;
+    }> {
+        try {
+            const response = await this.makeRequest(`/api/admin/items-by-status?status=${status}`, {
+                method: 'GET',
+            });
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error(`❌ Failed to get items by status ${status}:`, error);
+            throw error;
+        }
+    }
+
+    async getRefundedItemsPending(): Promise<{
+        success: boolean;
+        items?: any[];
+        total?: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/refunded-items-pending', {
+                method: 'GET',
+            });
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to get refunded items pending:', error);
+            throw error;
+        }
+    }
+
+    async getInStorePickupItems(): Promise<{
+        success: boolean;
+        items?: any[];
+        total?: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/in-store-pickup-items', {
+                method: 'GET',
+            });
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to get in-store pickup items:', error);
+            throw error;
+        }
+    }
+
+    async processInStorePickupPayment(itemId: string, paymentMethod: string = 'cash', paymentAmount?: number): Promise<{
+        success: boolean;
+        message: string;
+        transactionId: string;
+        amount: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/process-instore-pickup-payment', {
+                method: 'POST',
+                body: JSON.stringify({
+                    item_id: itemId,
+                    payment_method: paymentMethod,
+                    payment_amount: paymentAmount
+                }),
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result;
+            }
+            throw new Error(result.message || 'Failed to process in-store payment');
+        } catch (error) {
+            console.error('❌ Failed to process in-store pickup payment:', error);
+            throw error;
+        }
+    }
+
+    async addToInStoreCart(itemId: string): Promise<{
+        success: boolean;
+        message: string;
+        cart_item: any;
+        total_amount: number;
+        items_count: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/add-to-instore-cart', {
+                method: 'POST',
+                body: JSON.stringify({
+                    item_id: itemId
+                }),
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result;
+            }
+            throw new Error(result.message || 'Failed to add item to in-store cart');
+        } catch (error) {
+            console.error('❌ Failed to add item to in-store cart:', error);
+            throw error;
+        }
+    }
+
+    async getInStoreCart(): Promise<{
+        success: boolean;
+        cart: {
+            items: any[];
+            total_amount: number;
+            items_count: number;
+        };
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/instore-cart', {
+                method: 'GET',
+            });
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to get in-store cart:', error);
+            throw error;
+        }
+    }
+
+    async checkoutInStoreCart(paymentMethod: string = 'cash'): Promise<{
+        success: boolean;
+        message: string;
+        processed_items: any[];
+        total_amount: number;
+        payment_method: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/checkout-instore-cart', {
+                method: 'POST',
+                body: JSON.stringify({
+                    payment_method: paymentMethod
+                }),
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result;
+            }
+            throw new Error(result.message || 'Failed to checkout in-store cart');
+        } catch (error) {
+            console.error('❌ Failed to checkout in-store cart:', error);
+            throw error;
+        }
+    }
+
+    async clearInStoreCart(): Promise<{
+        success: boolean;
+        message: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/clear-instore-cart', {
+                method: 'POST',
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result;
+            }
+            throw new Error(result.message || 'Failed to clear in-store cart');
+        } catch (error) {
+            console.error('❌ Failed to clear in-store cart:', error);
+            throw error;
+        }
+    }
+
+    async reactivateRefundedItem(data: {
+        itemId: string;
+        newCategory: string;
+        adminNotes?: string;
+    }): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        newStatus: string;
+        newCategory: string;
+        sellerNotified: boolean;
+        processedAt: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/reactivate-refunded-item', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result;
+            }
+            throw new Error(result.message || 'Failed to reactivate item');
+        } catch (error) {
+            console.error('❌ Failed to reactivate refunded item:', error);
+            throw error;
+        }
+    }
+
+    async getUnshippedItems(): Promise<{
+        success: boolean;
+        items?: any[];
+        count?: number;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/unshipped-items');
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to get unshipped items:', error);
+            throw error;
+        }
+    }
+
+    async markItemShippedForDelivery(data: {
+        item_id: string;
+        tracking_number?: string;
+        shipping_carrier?: string;
+    }): Promise<{
+        success: boolean;
+        message: string;
+        tracking_number?: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/mark-item-shipped', {
+                method: 'POST',
+                body: JSON.stringify(data),
+            });
+
+            const result = await response.json();
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to mark item as shipped:', error);
+            throw error;
+        }
+    }
+
+    async markItemPickedUp(itemId: string): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        itemTitle: string;
+        buyerName: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/mark-item-picked-up', {
+                method: 'POST',
+                body: JSON.stringify({
+                    item_id: itemId
+                }),
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                return result;
+            }
+            throw new Error(result.message || 'Failed to mark item as picked up');
+        } catch (error) {
+            console.error('❌ Failed to mark item as picked up:', error);
+            throw error;
         }
     }
 }

@@ -116,7 +116,11 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex items-center justify-between h-16">
                         {/* Logo */}
-                        <div className="flex items-center gap-3 flex-shrink-0">
+                        <button 
+                            onClick={onNavigateToStore}
+                            className="flex items-center gap-3 flex-shrink-0 hover:opacity-80 transition-opacity cursor-pointer"
+                            title="Return to Home"
+                        >
                             <div className="w-8 h-8 sm:w-10 sm:h-10 bg-orange-500 rounded-lg flex items-center justify-center shadow-lg">
                                 <svg className="w-5 h-5 sm:w-6 sm:h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-9 7-6-2 1-14z" />
@@ -126,7 +130,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                                 <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
                                 <p className="text-xs text-gray-500">Mountain Consignment Store</p>
                             </div>
-                        </div>
+                        </button>
                         
                         <div className="desktop-nav-actions">
                             <div className="desktop-nav-buttons">
@@ -408,7 +412,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                                                             }}
                                                             className={`w-full text-left px-3 py-3 sm:py-2 text-sm rounded-lg transition-colors touch-manipulation ${showInventoryPage ? 'bg-orange-50 text-orange-700' : 'text-gray-700 hover:bg-gray-50 active:bg-gray-100'}`}
                                                         >
-                                                            📋 Inventory Dashboard
+                                                            <span className="text-xl sm:text-2xl">📋</span> Inventory Dashboard
                                                         </button>
                                                         <button
                                                             onClick={() => {

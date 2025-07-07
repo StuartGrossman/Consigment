@@ -1,5 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 
+import { Category } from '../types';
+
 interface FilterSidebarProps {
     filters: {
         category: string;
@@ -12,6 +14,7 @@ interface FilterSidebarProps {
         searchQuery: string;
     };
     filtersOpen: boolean;
+    categories: Category[];
     onFilterChange: (filterType: string, value: string) => void;
     onClearFilters: () => void;
     onToggleFilters: () => void;
@@ -21,6 +24,7 @@ interface FilterSidebarProps {
 const FilterSidebar: React.FC<FilterSidebarProps> = ({
     filters,
     filtersOpen,
+    categories,
     onFilterChange,
     onClearFilters,
     onToggleFilters,
@@ -114,16 +118,14 @@ const FilterSidebar: React.FC<FilterSidebarProps> = ({
                         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
                     >
                         <option value="">All Categories</option>
-                        <option value="Climbing">Climbing 🧗</option>
-                        <option value="Skiing">Skiing ⛷️</option>
-                        <option value="Hiking">Hiking 🥾</option>
-                        <option value="Camping">Camping ⛺</option>
-                        <option value="Mountaineering">Mountaineering 🏔️</option>
-                        <option value="Snowboarding">Snowboarding 🏂</option>
-                        <option value="Cycling">Cycling 🚵</option>
-                        <option value="Water Sports">Water Sports 🚣</option>
-                        <option value="Apparel">Apparel 👕</option>
-                        <option value="Footwear">Footwear 👟</option>
+                        {categories
+                            .filter(cat => cat.isActive)
+                            .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                            .map(category => (
+                                <option key={category.id} value={category.name}>
+                                    {category.name} {category.icon}
+                                </option>
+                            ))}
                     </select>
                 </div>
 

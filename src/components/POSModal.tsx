@@ -113,7 +113,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
         console.log('📊 Try scanning this barcode to test the system');
         
         // Show success message
-        alert(`Test item created!\nTitle: ${testItem.title}\nBarcode: ${barcodeData}\n\nThe barcode has been auto-filled in the input field. Click "Lookup" to test!`);
+        console.log(`✅ Test item created!\nTitle: ${testItem.title}\nBarcode: ${barcodeData}\n\nThe barcode has been auto-filled in the input field. Click "Lookup" to test!`);
       } else {
         throw new Error('No test items generated');
       }
@@ -131,7 +131,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
       // Use the same API detection logic as apiService
       const getApiBaseUrl = () => {
         if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
-        if (import.meta.env.DEV) return 'http://localhost:8002';
+        if (import.meta.env.DEV) return 'http://localhost:8080';
         return 'https://consignment-api-caua3ttntq-uc.a.run.app';
       };
       const API_BASE_URL = getApiBaseUrl();
@@ -157,7 +157,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
         });
         
         // Show a summary alert
-        alert(`Database Debug Results:\n\n✅ ${data.items_with_barcodes.length} items WITH barcodes\n❌ ${data.items_without_barcodes.length} items WITHOUT barcodes\n\nCheck console for detailed list.`);
+        console.log(`✅ Database Debug Results:\n\n✅ ${data.items_with_barcodes.length} items WITH barcodes\n❌ ${data.items_without_barcodes.length} items WITHOUT barcodes\n\nCheck console for detailed list.`);
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -477,7 +477,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
             ? `✅ Using existing cart!\n\nCart ID: ${result.cart_id}\nAccess Code: ${result.access_code}\nItems in cart: ${result.item_count}\n\nYou can scan items on your phone and they will appear in this cart.`
             : `✅ New cart created!\n\nCart ID: ${result.cart_id}\nAccess Code: ${result.access_code}\n\nYou can now scan items on your phone and they will appear in this cart. The cart will stay active until you complete the sale.`;
           
-          alert(message);
+          console.log(message);
           
           console.log('🛒 POS cart ready:', result);
         } else {
@@ -559,7 +559,7 @@ const POSModal: React.FC<POSModalProps> = ({ isOpen, onClose }) => {
       // Use the same API detection logic as apiService
       const getApiBaseUrl = () => {
         if (import.meta.env.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL;
-        if (import.meta.env.DEV) return 'http://localhost:8002';
+        if (import.meta.env.DEV) return 'http://localhost:8080';
         return 'https://consignment-api-caua3ttntq-uc.a.run.app';
       };
       const API_BASE_URL = getApiBaseUrl();

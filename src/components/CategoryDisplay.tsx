@@ -120,7 +120,7 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
 
               {/* Category Banner */}
               <div 
-                className="relative h-36 mb-6 rounded-xl overflow-hidden shadow-lg cursor-pointer group"
+                className="relative h-36 w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] overflow-hidden shadow-lg cursor-pointer group"
                 style={{
                   backgroundImage: `url(${getCategoryImage(category)})`,
                   backgroundSize: 'cover',
