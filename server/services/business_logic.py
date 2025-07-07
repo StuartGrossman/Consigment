@@ -186,8 +186,8 @@ class ItemLifecycleService:
     @staticmethod
     def _generate_barcode() -> str:
         """Generate a unique barcode for an item"""
-        timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
-        return f"CSG{timestamp}{str(hash(timestamp))[-4:]}"
+        from utils import generate_barcode_data
+        return generate_barcode_data()
     
     @staticmethod
     async def _log_item_action(item_id: str, user_id: str, action: str, description: str):

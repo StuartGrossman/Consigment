@@ -56,11 +56,48 @@ def generate_barcode_data() -> str:
     Generate unique barcode data for inventory items
     
     Returns:
-        str: Unique barcode string
+        str: Unique barcode string in format CSG{timestamp}{random_suffix}
     """
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')
+    # Use first 6 characters of UUID for uniqueness
     random_suffix = str(uuid.uuid4())[:6].upper()
-    return f"CSG{timestamp}{random_suffix}"
+    barcode = f"CSG{timestamp}{random_suffix}"
+    
+    # Ensure barcode is exactly 21 characters (CSG + 14 timestamp + 6 random)
+    if len(barcode) != 21:
+        # Pad or truncate if needed
+        barcode = barcode[:21].ljust(21, '0')
+    
+    return barcode
+
+
+def validate_barcode_format(barcode: str) -> bool:
+    """
+    Validate barcode format
+    
+    Args:
+        barcode: Barcode string to validate
+        
+    Returns:
+        bool: True if barcode follows correct format
+    """
+    if not barcode:
+        return False
+    
+    # Check if it starts with CSG
+    if not barcode.startswith('CSG'):
+        return False
+    
+    # Check if it's exactly 21 characters
+    if len(barcode) != 21:
+        return False
+    
+    # Check if the rest is alphanumeric
+    suffix = barcode[3:]  # Remove CSG prefix
+    if not suffix.isalnum():
+        return False
+    
+    return True
 
 
 def generate_cart_id() -> str:

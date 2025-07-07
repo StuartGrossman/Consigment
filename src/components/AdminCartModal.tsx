@@ -97,6 +97,12 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
   const [inventoryWarning, setInventoryWarning] = useState<string | null>(null);
   const [lastScannedBarcode, setLastScannedBarcode] = useState<string | null>(null);
 
+  // Barcode mapping state
+  const [showBarcodeMapping, setShowBarcodeMapping] = useState(false);
+  const [physicalBarcode, setPhysicalBarcode] = useState<string>('');
+  const [selectedSystemBarcode, setSelectedSystemBarcode] = useState<string>('');
+  const [isMappingBarcode, setIsMappingBarcode] = useState(false);
+
   // Barcode scanning state
   const [useCamera, setUseCamera] = useState(false);
   const [cameraLoading, setCameraLoading] = useState(false);
@@ -191,24 +197,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     }
   }, [selectedCustomer]);
 
-  // Auto-add items to cart when modal opens with items
-  useEffect(() => {
-    if (isOpen && items.length > 0) {
-      console.log('🛒 Auto-adding items to admin cart:', items);
-      
-      // Clear existing cart first
-      setAdminCart([]);
-      
-      // Add each item to the cart
-      items.forEach(async (item) => {
-        try {
-          await addItemToCart(item);
-        } catch (error) {
-          console.error('❌ Error auto-adding item to cart:', error);
-        }
-      });
-    }
-  }, [isOpen, items]);
+  // Note: Auto-add functionality removed - items should only be added manually or via scanning
 
   // Calculate final total after points
   const finalTotal = Math.max(0, cartTotal - (pointsToApply * 0.01)); // Assuming 1 point = $0.01
@@ -358,7 +347,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
       
       console.log('🔍 [SCANNER] Setting up decode callback...');
       
-      // Use the existing video stream instead of creating a new one
+      // Use optimized settings for faster scanning
       await codeReader.decodeFromVideoDevice(null, videoRef.current, (result: any, error: any) => {
         if (result) {
           console.log('✅ [SCANNER] Barcode detected!');
@@ -371,14 +360,12 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
         if (error) {
           if (error instanceof NotFoundException) {
             // This is normal - no barcode found in current frame
-            // Log more frequently to show scanning is active
-            if (Math.random() < 0.1) { // Log 10% of NotFoundException errors
-              console.log('🔍 [SCANNER] No barcode found in frame (scanning...)');
+            // Reduced logging for better performance
+            if (Math.random() < 0.05) { // Log only 5% of NotFoundException errors
+              console.log('🔍 [SCANNER] Scanning...');
             }
           } else {
             console.log('⚠️ [SCANNER] Scanning error:', error.message);
-            console.log('⚠️ [SCANNER] Error type:', error.constructor.name);
-            console.log('🔍 [SCANNER] Continuing to scan...');
           }
         }
       });
@@ -386,14 +373,14 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
       console.log('🎥 [SCANNER] Barcode scanner initialized successfully');
       console.log('🎥 [SCANNER] Scanner is now active and listening for barcodes');
       
-      // Add a periodic log to confirm scanning is active
+      // Add a periodic log to confirm scanning is active (less frequent for better performance)
       const scanInterval = setInterval(() => {
         if (codeReaderRef.current && useCamera) {
-          console.log('🔍 [SCANNER] Scanner is actively running...');
+          console.log('🔍 [SCANNER] Scanner active...');
         } else {
           clearInterval(scanInterval);
         }
-      }, 3000); // Log every 3 seconds
+      }, 5000); // Log every 5 seconds instead of 3
       
       // Store the interval ID for cleanup
       const cleanupInterval = () => {
@@ -411,6 +398,45 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
       });
       setScanError('Failed to initialize barcode scanner');
     }
+  };
+
+  // Show detailed success message for scanned items
+  const showScanSuccessMessage = (item: ConsignmentItem, isUpdate: boolean, quantity: number) => {
+    const successMsg = document.createElement('div');
+    successMsg.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg z-50 max-w-md';
+    
+    successMsg.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+        </div>
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-white">
+            ${isUpdate ? 'Cart Updated!' : 'Item Added to Cart!'}
+          </p>
+          <p class="text-sm text-green-100 mt-1 truncate">
+            <strong>${item.title}</strong>
+          </p>
+          <div class="text-xs text-green-100 mt-1 space-y-1">
+            <div>Price: <span class="font-medium">$${item.price}</span></div>
+            <div>Quantity: <span class="font-medium">${quantity}</span></div>
+            <div>Total: <span class="font-medium">$${(item.price * quantity).toFixed(2)}</span></div>
+            ${item.brand ? `<div>Brand: <span class="font-medium">${item.brand}</span></div>` : ''}
+            ${item.category ? `<div>Category: <span class="font-medium">${item.category}</span></div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(successMsg);
+    
+    setTimeout(() => {
+      if (document.body.contains(successMsg)) {
+        document.body.removeChild(successMsg);
+      }
+    }, 3000);
   };
 
   const processBarcodeResult = async (barcodeText: string) => {
@@ -444,6 +470,13 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
       if (result.success && result.available) {
         console.log('✅ [PROCESS] Item found and available:', result.item?.title);
         console.log('✅ [PROCESS] Adding item to cart...');
+        
+        // Check if item already exists in cart BEFORE adding
+        const existingCartItem = adminCart.find(cartItem => cartItem.item.id === result.item.id);
+        const isUpdate = existingCartItem !== undefined;
+        const newQuantity = isUpdate ? existingCartItem.quantity + 1 : 1;
+        
+        // Add item to cart
         await addItemToCart(result.item);
         setScanError(null);
         
@@ -453,28 +486,22 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
           codeReaderRef.current.reset();
         }
         
+        // Show detailed success message immediately after adding
+        console.log('🔄 [PROCESS] Creating detailed success message...');
+        showScanSuccessMessage(result.item, isUpdate, newQuantity);
+        
         // Close camera popup after showing success message
         setTimeout(() => {
           console.log('🔄 [PROCESS] Closing camera popup after success...');
           closeCameraPopup();
         }, 1500);
-        
-        // Show success message
-        console.log('🔄 [PROCESS] Creating success message...');
-        const successMsg = document.createElement('div');
-        successMsg.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-4 py-2 rounded-lg z-50';
-        successMsg.textContent = '✅ Item added to cart!';
-        document.body.appendChild(successMsg);
-        
-        setTimeout(() => {
-          if (document.body.contains(successMsg)) {
-            document.body.removeChild(successMsg);
-          }
-        }, 2000);
       } else {
         console.log('❌ [PROCESS] Item lookup failed:', result.message);
         console.log('❌ [PROCESS] Setting scan error...');
         setScanError(result.message || 'Item not available for sale');
+        // Show barcode mapping option for failed lookups
+        setShowBarcodeMapping(true);
+        setPhysicalBarcode(barcodeText);
       }
     } catch (error) {
       console.error('❌ [PROCESS] Error looking up item:', error);
@@ -484,11 +511,77 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
         stack: error instanceof Error ? error.stack : 'No stack trace'
       });
       setScanError('Failed to lookup item. Please try again.');
+      // Show barcode mapping option for failed lookups
+      setShowBarcodeMapping(true);
+      setPhysicalBarcode(barcodeText);
     } finally {
       console.log('🏁 [PROCESS] Finished processing barcode');
       console.log('🏁 [PROCESS] Setting scanning state to false...');
       setIsScanning(false);
     }
+  };
+
+  const mapBarcode = async () => {
+    if (!physicalBarcode || !selectedSystemBarcode) {
+      setScanError('Please select a system barcode to map to');
+      return;
+    }
+
+    setIsMappingBarcode(true);
+    try {
+      // Find the item with the selected system barcode
+      const item = items.find(item => item.barcodeData === selectedSystemBarcode);
+      if (!item) {
+        setScanError('Selected system barcode not found in items');
+        return;
+      }
+
+      // Call the API to create the barcode mapping
+      const response = await fetch(`http://localhost:8080/api/admin/map-barcode`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${await user?.getIdToken()}`
+        },
+        body: JSON.stringify({
+          physical_barcode: physicalBarcode,
+          system_barcode: selectedSystemBarcode,
+          item_id: item.id
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Barcode mapping created:', result);
+        
+        // Now try to lookup the item again with the mapped barcode
+        const lookupResult = await apiService.lookupItemByBarcode(physicalBarcode);
+        if (lookupResult.success && lookupResult.available) {
+          await addItemToCart(lookupResult.item, true);
+          setScanError(null);
+          setShowBarcodeMapping(false);
+          setPhysicalBarcode('');
+          setSelectedSystemBarcode('');
+        } else {
+          setScanError('Barcode mapped but item lookup still failed');
+        }
+      } else {
+        const errorData = await response.json();
+        setScanError(`Failed to map barcode: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error mapping barcode:', error);
+      setScanError('Failed to map barcode. Please try again.');
+    } finally {
+      setIsMappingBarcode(false);
+    }
+  };
+
+  const cancelBarcodeMapping = () => {
+    setShowBarcodeMapping(false);
+    setPhysicalBarcode('');
+    setSelectedSystemBarcode('');
+    setScanError(null);
   };
 
   const searchItems = async (query: string) => {
@@ -516,7 +609,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     }
   };
 
-  const addItemToCart = async (item: ConsignmentItem) => {
+  const addItemToCart = async (item: ConsignmentItem, showSuccessMessage: boolean = false) => {
     console.log('🛒 [CART] Adding item to cart:', item);
     console.log('🛒 [CART] Item details:', {
       id: item.id,
@@ -547,21 +640,26 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
       }
     }
     
+    // Track cart state for success message
+    const existingItem = adminCart.find(cartItem => cartItem.item.id === item.id);
+    const isUpdate = existingItem !== undefined;
+    const newQuantity = isUpdate ? existingItem.quantity + 1 : 1;
+    
     setAdminCart(prevCart => {
       console.log('🛒 [CART] Previous cart state:', prevCart);
-      const existingItem = prevCart.find(cartItem => cartItem.item.id === item.id);
-      console.log('🛒 [CART] Existing item found:', existingItem);
+      const existingCartItem = prevCart.find(cartItem => cartItem.item.id === item.id);
+      console.log('🛒 [CART] Existing item found:', existingCartItem);
       
-      if (existingItem) {
+      if (existingCartItem) {
         console.log('🛒 [CART] Item already in cart, updating quantity...');
-        const newQuantity = existingItem.quantity + 1;
+        const newQty = existingCartItem.quantity + 1;
         console.log('🛒 [CART] New quantity calculation:', {
-          currentQuantity: existingItem.quantity,
+          currentQuantity: existingCartItem.quantity,
           maxQuantity: currentInventory,
-          newQuantity
+          newQuantity: newQty
         });
         
-        if (newQuantity > currentInventory) {
+        if (newQty > currentInventory) {
           console.log('🛒 [CART] Cannot add more due to inventory limit');
           setInventoryWarning(`⚠️ Only ${currentInventory} available in inventory for "${item.title}"`);
           setTimeout(() => setInventoryWarning(null), 3000);
@@ -570,10 +668,16 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
         
         const updatedCart = prevCart.map(cartItem =>
           cartItem.item.id === item.id
-            ? { ...cartItem, quantity: newQuantity, total: newQuantity * cartItem.item.price }
+            ? { ...cartItem, quantity: newQty, total: newQty * cartItem.item.price }
             : cartItem
         );
         console.log('🛒 [CART] Updated cart (existing item):', updatedCart);
+        
+        // Show success message if requested
+        if (showSuccessMessage) {
+          setTimeout(() => showScanSuccessMessage(item, true, newQty), 100);
+        }
+        
         return updatedCart;
       } else {
         console.log('🛒 [CART] Adding new item to cart...');
@@ -584,6 +688,12 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
           total: item.price
         }];
         console.log('🛒 [CART] Updated cart (new item):', newCart);
+        
+        // Show success message if requested
+        if (showSuccessMessage) {
+          setTimeout(() => showScanSuccessMessage(item, false, 1), 100);
+        }
+        
         return newCart;
       }
     });
@@ -1147,7 +1257,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                         setSearchQuery(e.target.value);
                         searchItems(e.target.value);
                       }}
-                      placeholder="Search pending items..."
+                      placeholder="Search items..."
                       className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 text-sm"
                     />
                     <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1172,7 +1282,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                     {searchResults.map((item) => (
                       <button
                         key={item.id}
-                        onClick={async () => await addItemToCart(item)}
+                        onClick={async () => await addItemToCart(item, true)}
                         className="w-full p-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 flex items-center gap-3"
                       >
                         {item.images && item.images.length > 0 ? (
@@ -1230,11 +1340,66 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                 )}
                 
                 {adminCart.length === 0 ? (
-                  <div className="text-center py-8">
-                    <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
-                    </svg>
-                    <p className="text-gray-500">No items in cart. Search and add items above.</p>
+                  <div>
+                    <div className="text-center py-8">
+                      <svg className="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l-1 7H6l-1-7z" />
+                      </svg>
+                      <p className="text-gray-500">No items in cart. Search and add items above.</p>
+                    </div>
+                    
+                    {/* Show available items for manual addition */}
+                    {items.length > 0 && (
+                      <div className="mt-6">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <h4 className="font-medium text-blue-800">Items Available to Add</h4>
+                          </div>
+                          <p className="text-sm text-blue-700 mb-3">
+                            Click to add items to your cart:
+                          </p>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          {items.map((item) => (
+                            <div key={item.id} className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                {item.images && item.images.length > 0 ? (
+                                  <img 
+                                    src={item.images[0]} 
+                                    alt={item.title}
+                                    className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+                                    <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate">{item.title}</p>
+                                  <p className="text-sm text-gray-600">{item.brand} • {item.category}</p>
+                                  <p className="text-sm font-semibold text-blue-600">${item.price}</p>
+                                </div>
+                                <button
+                                  onClick={async () => await addItemToCart(item, true)}
+                                  className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors flex items-center gap-1"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                  </svg>
+                                  Add to Cart
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -1263,7 +1428,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                                 {cartItem.item.brand} • {cartItem.item.category} • ${cartItem.item.price}
                               </p>
                             </div>
-                            {/* Print and Copy Barcode Buttons - Only in Header */}
+                            {/* Print and Copy Barcode Buttons - Desktop Header */}
                             {cartItem.item.barcodeData && (
                               <div className="flex items-center gap-1 ml-2 flex-shrink-0">
                                 <button
@@ -1289,9 +1454,9 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                           </div>
                           {cartItem.item.barcodeData && (
                             <div className="mt-2">
-                              <p className="text-xs text-gray-500 mb-1">Barcode:</p>
-                              <div className="bg-white border border-gray-300 rounded px-3 py-2">
-                                <code className="text-sm font-mono text-gray-800 break-all">
+                              <p className="text-xs text-gray-500 mb-1">📊 Barcode:</p>
+                              <div className="bg-gray-50 border border-gray-200 rounded px-2 py-1">
+                                <code className="text-xs font-mono text-gray-800 break-words leading-relaxed select-all">
                                   {cartItem.item.barcodeData}
                                 </code>
                               </div>
@@ -1391,7 +1556,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                                 <div className="flex items-center gap-1 ml-2 flex-shrink-0">
                                   <button
                                     onClick={() => printBarcode(cartItem.item)}
-                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                    className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
                                     title="Print Barcode"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1400,7 +1565,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                                   </button>
                                   <button
                                     onClick={() => copyBarcode(cartItem.item.barcodeData!)}
-                                    className="p-1 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition-colors"
+                                    className="p-1.5 text-gray-600 hover:text-gray-800 hover:bg-gray-50 rounded transition-colors"
                                     title="Copy Barcode"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1421,12 +1586,12 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                           </button>
                         </div>
 
-                        {/* Barcode Display - Larger for Mobile */}
+                        {/* Barcode Display - Mobile Layout */}
                         {cartItem.item.barcodeData && (
                           <div className="bg-white border border-gray-300 rounded-lg p-3">
                             <p className="text-sm font-medium text-gray-700 mb-2">📊 Barcode:</p>
-                            <div className="bg-gray-50 border border-gray-200 rounded px-4 py-3">
-                              <code className="text-base font-mono text-gray-800 break-all leading-relaxed">
+                            <div className="bg-gray-50 border border-gray-200 rounded px-3 py-2">
+                              <code className="text-sm font-mono text-gray-800 break-words leading-relaxed select-all">
                                 {cartItem.item.barcodeData}
                               </code>
                             </div>
@@ -1856,6 +2021,149 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                 <p className="text-gray-600 text-sm">
                   Position the barcode within the scanning area. The item will be automatically added to the cart.
                 </p>
+                <div className="mt-2 text-xs text-gray-500 space-y-1">
+                  <p>💡 <strong>Tips for faster scanning:</strong></p>
+                  <p>• Hold the barcode steady and parallel to the camera</p>
+                  <p>• Ensure good lighting and avoid shadows</p>
+                  <p>• Keep the barcode within the orange border</p>
+                  <p>• Try different distances if scanning is slow</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Barcode Mapping Modal */}
+      {showBarcodeMapping && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[9999] flex items-center justify-center p-1 sm:p-4">
+          <div className="bg-white rounded-lg w-full max-w-2xl h-[95vh] sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col m-2">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-4">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-bold">🔗 Map Barcode</h3>
+                  <p className="text-orange-100 text-sm">Link physical barcode to system item</p>
+                </div>
+                <button
+                  onClick={cancelBarcodeMapping}
+                  className="text-white hover:text-gray-200 focus:outline-none"
+                >
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+              {/* Physical Barcode Display */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-gray-800 mb-2">Physical Barcode Scanned</h4>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="font-mono text-lg text-gray-800 break-all">{physicalBarcode}</div>
+                  <p className="text-sm text-gray-600 mt-2">This physical barcode doesn't match any system barcode. This usually happens when:</p>
+                  <ul className="text-sm text-gray-600 mt-1 ml-4 list-disc">
+                    <li>You have old physical barcodes printed in a different format</li>
+                    <li>The item was approved before the barcode format was standardized</li>
+                    <li>There's a mismatch between physical and system barcodes</li>
+                  </ul>
+                  <p className="text-sm text-gray-600 mt-2">Please select the correct item below to link this physical barcode.</p>
+                  <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                    <strong>System Barcode Format:</strong> CSG + timestamp + random suffix (e.g., CSG202507071744347F09)
+                  </div>
+                </div>
+              </div>
+
+              {/* System Barcode Selection */}
+              <div className="mb-6">
+                <h4 className="text-lg font-semibold text-gray-800 mb-2">Select System Item</h4>
+                <p className="text-sm text-gray-600 mb-3">Choose the item this physical barcode should be linked to:</p>
+                
+                {/* Search Box */}
+                <div className="mb-3">
+                  <input
+                    type="text"
+                    placeholder="Search items by title, brand, or category..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    onChange={(e) => searchItems(e.target.value)}
+                  />
+                </div>
+                
+                <div className="space-y-2 max-h-32 sm:max-h-48 md:max-h-60 overflow-y-auto">
+                  {(searchResults.length > 0 ? searchResults : items.filter(item => item.status === 'live' && item.barcodeData))
+                    .map(item => (
+                      <button
+                        key={item.id}
+                        onClick={() => setSelectedSystemBarcode(item.barcodeData!)}
+                        className={`w-full p-3 border rounded-lg text-left transition-colors ${
+                          selectedSystemBarcode === item.barcodeData
+                            ? 'border-orange-500 bg-orange-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="font-medium text-gray-800">{item.title}</div>
+                            <div className="text-sm text-gray-600">
+                              {item.brand && `${item.brand} • `}{item.category} • ${item.size || 'N/A'}
+                            </div>
+                            <div className="text-sm font-medium text-green-600">${item.price}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono text-xs text-gray-500 break-all">
+                              {item.barcodeData}
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+                
+                {items.filter(item => item.status === 'live' && item.barcodeData).length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    <div className="text-4xl mb-2">📦</div>
+                    <p>No items with barcodes found</p>
+                    <p className="text-sm">All items must have system barcodes to be mapped</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Error Display */}
+              {scanError && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{scanError}</p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3">
+                <button
+                  onClick={cancelBarcodeMapping}
+                  className="flex-1 py-3 px-6 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={mapBarcode}
+                  disabled={!selectedSystemBarcode || isMappingBarcode}
+                  className="flex-1 py-3 px-6 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isMappingBarcode ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      Mapping...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Map Barcode
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>

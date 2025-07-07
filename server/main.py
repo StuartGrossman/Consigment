@@ -266,8 +266,9 @@ async def import_processed_items(request: Request, admin_data: dict = Depends(ve
                 # Generate a unique item ID if not present
                 item_id = item.get('id', str(uuid.uuid4()))
                 
-                # Generate barcode data
-                barcode_data = f"CSG{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}{str(i).zfill(3)}"
+                # Generate barcode data using standardized format
+                from utils import generate_barcode_data
+                barcode_data = generate_barcode_data()
                 
                 # Prepare item data for database
                 item_doc_data = {
@@ -1952,8 +1953,8 @@ async def approve_pending_item(
         
         # Update item to approved status
         item_ref.update({
-            'status': 'approved',
-            'approvedAt': datetime.now(timezone.utc),
+                'status': 'approved',
+                'approvedAt': datetime.now(timezone.utc),
             'approvedBy': admin_id
         })
         
@@ -2931,1525 +2932,161 @@ async def ban_user(request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+
 @app.post("/api/admin/generate-test-data")
-async def generate_test_data(request: Request):
-    """Admin endpoint to generate test data for development"""
+async def generate_test_data(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Admin endpoint to generate test data using real database snapshot"""
     try:
-        auth_header = request.headers.get("authorization")
-        if not auth_header or not auth_header.startswith("Bearer "):
-            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        admin_user_id = admin_data.get('uid')
+        logger.info(f"Admin {admin_user_id} generating test data from snapshot")
         
-        token = auth_header.split("Bearer ")[1]
-        decoded_token = auth.verify_id_token(token)
-        admin_user_id = decoded_token['uid']
+        # Load snapshot data
+        import json
+        import os
         
-        # Verify admin status
-        admin_doc = db.collection('users').document(admin_user_id).get()
-        if not admin_doc.exists or not admin_doc.to_dict().get('isAdmin', False):
-            raise HTTPException(status_code=403, detail="Admin access required")
+        snapshot_file = os.path.join(os.path.dirname(__file__), 'test_data_snapshot.json')
         
-        logger.info(f"Admin {admin_user_id} generating test data")
+        if not os.path.exists(snapshot_file):
+            logger.error("Snapshot file not found")
+            raise HTTPException(status_code=500, detail="Test data snapshot not found")
         
-        # Comprehensive test data using outlet images with proper descriptions and tags
-        test_items = [
-            # Rock Climbing Gear
-            {
-                'title': 'Black Diamond Momentum Climbing Harness',
-                'description': 'Comfortable and adjustable climbing harness perfect for gym climbing and outdoor sport routes. Features breathable mesh waist belt, 4 gear loops, and adjustable leg loops. UIAA certified for safety.',
-                'price': 45.00,
-                'originalPrice': 69.95,
-                'brand': 'Black Diamond',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Blue',
-                'condition': 'Very Good',
-                'material': 'Nylon Webbing, Mesh',
-                'tags': ['climbing harness', 'gym climbing', 'sport climbing', 'adjustable', 'uiaa certified'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Vertical Adventures',
-                'sellerEmail': 'climb@vertical.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/rock-climbing-harness.jpg']
-            },
-            {
-                'title': 'Mammut 9.5mm Phoenix Dry Climbing Rope',
-                'description': '70m dynamic single rope with Dry treatment technology providing water resistance. Featuring UIAA and CE certified construction with middle mark for safe rappelling. Perfect for sport, trad, and alpine climbing.',
-                'price': 125.00,
-                'originalPrice': 179.95,
-                'brand': 'Mammut',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '70m x 9.5mm',
-                'color': 'Safety Orange',
-                'condition': 'Very Good',
-                'material': 'Nylon Core, Polyester Sheath',
-                'tags': ['dynamic rope', 'dry treatment', 'single rope', 'middle mark', 'uiaa certified'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Elite Climbing Gear',
-                'sellerEmail': 'elite@climbinggear.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-ropes.jpg']
-            },
-            {
-                'title': 'La Sportiva Solution Comp Climbing Shoes',
-                'description': 'Aggressive performance climbing shoe with P3 system for precise edging and hooking. Features sticky Vibram XS Grip2 rubber and Fast Lacing System. Perfect for advanced sport climbing and bouldering.',
-                'price': 129.00,
-                'originalPrice': 189.00,
-                'brand': 'La Sportiva',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '42',
-                'color': 'White/Lily Orange',
-                'condition': 'Excellent',
-                'material': 'Leather, Vibram XS Grip2',
-                'tags': ['aggressive climbing', 'sport climbing', 'bouldering', 'vibram rubber', 'performance'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Comp Climbing Pro',
-                'sellerEmail': 'comp@climbingpro.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-shoes.jpg']
-            },
-            {
-                'title': 'Black Diamond Positron Screwgate Carabiners (Set of 6)',
-                'description': 'High-strength screwgate carabiners with keylock nose for snag-free clipping. Features 24kN gate-open strength and smooth gate action. Perfect for belaying, rappelling, and anchor building.',
-                'price': 35.00,
-                'originalPrice': 59.95,
-                'brand': 'Black Diamond',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Standard',
-                'color': 'Silver',
-                'condition': 'Good',
-                'material': 'Aluminum Alloy',
-                'tags': ['carabiners', 'screwgate', 'keylock', 'belaying', 'anchors'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Safety First Climbing',
-                'sellerEmail': 'safety@climbing.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/carabiners.jpg']
-            },
-            {
-                'title': 'Petzl Meteor Climbing Helmet',
-                'description': 'Lightweight and comfortable climbing helmet with excellent ventilation. Features adjustable headband and chin strap. UIAA and CE certified for impact protection. Perfect for all types of climbing.',
-                'price': 55.00,
-                'originalPrice': 89.95,
-                'brand': 'Petzl',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Red',
-                'condition': 'Very Good',
-                'material': 'Polycarbonate Shell, EPS Foam',
-                'tags': ['climbing helmet', 'lightweight', 'ventilated', 'uiaa certified', 'impact protection'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Head Protection Pro',
-                'sellerEmail': 'head@protection.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-helmet.jpg']
-            },
-            {
-                'title': 'Black Diamond HotForge Quickdraws (Set of 12)',
-                'description': 'Lightweight quickdraws with wiregate carabiners for fast clipping. Features 24kN gate-open strength and color-coded dogbones. Perfect for sport climbing and gym use.',
-                'price': 85.00,
-                'originalPrice': 129.95,
-                'brand': 'Black Diamond',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '12cm',
-                'color': 'Mixed Colors',
-                'condition': 'Excellent',
-                'material': 'Aluminum, Nylon Webbing',
-                'tags': ['quickdraws', 'wiregate', 'sport climbing', 'lightweight', 'color coded'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Quick Draw Supply',
-                'sellerEmail': 'quick@drawsupply.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/quickdraws.jpg']
-            },
-            {
-                'title': 'Friction Labs Chalk Bag with Belt',
-                'description': 'Premium chalk bag with adjustable belt and fleece lining. Features secure closure and comfortable fit. Perfect for bouldering, sport climbing, and gym sessions.',
-                'price': 18.00,
-                'originalPrice': 29.95,
-                'brand': 'Friction Labs',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Standard',
-                'color': 'Black',
-                'condition': 'Good',
-                'material': 'Nylon, Fleece Lining',
-                'tags': ['chalk bag', 'fleece lining', 'adjustable belt', 'bouldering', 'gym climbing'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Chalk Master',
-                'sellerEmail': 'chalk@master.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/chalk-bag.jpg']
-            },
-            {
-                'title': 'Black Diamond ATC-XP Belay Device',
-                'description': 'Versatile belay device with extended plate for smooth rope handling. Features two rope slots for different diameters and textured surface for better grip. Perfect for gym and outdoor climbing.',
-                'price': 22.00,
-                'originalPrice': 34.95,
-                'brand': 'Black Diamond',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Standard',
-                'color': 'Silver',
-                'condition': 'Very Good',
-                'material': 'Aluminum Alloy',
-                'tags': ['belay device', 'atc', 'smooth handling', 'versatile', 'textured surface'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Belay Device Pro',
-                'sellerEmail': 'belay@device.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/belay-device.jpg']
-            },
-            {
-                'title': 'Friction Labs Premium Chalk (4oz)',
-                'description': 'High-quality climbing chalk with optimal moisture absorption. Features fine texture for better grip and long-lasting performance. Perfect for all climbing styles.',
-                'price': 12.00,
-                'originalPrice': 19.95,
-                'brand': 'Friction Labs',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '4oz',
-                'color': 'White',
-                'condition': 'New',
-                'material': 'Magnesium Carbonate',
-                'tags': ['climbing chalk', 'moisture absorption', 'premium', 'fine texture', 'long lasting'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Chalk Supply Co',
-                'sellerEmail': 'supply@chalk.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-chalk.jpg']
-            },
-            {
-                'title': 'Black Diamond C4 Camalot Set (0.3-3)',
-                'description': 'Complete set of camming devices for trad climbing. Features dual-axle design for wide range and color-coded sizing. Perfect for placing protection on traditional routes.',
-                'price': 245.00,
-                'originalPrice': 399.95,
-                'brand': 'Black Diamond',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '0.3-3',
-                'color': 'Mixed Colors',
-                'condition': 'Very Good',
-                'material': 'Aluminum, Steel Springs',
-                'tags': ['cams', 'trad climbing', 'dual axle', 'color coded', 'protection'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Trad Climbing Gear',
-                'sellerEmail': 'trad@climbing.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-cams.jpg']
-            },
-            {
-                'title': 'DMM Wallnuts Set (1-11)',
-                'description': 'Complete set of passive protection nuts for trad climbing. Features color-coded sizing and durable construction. Perfect for placing protection in cracks and fissures.',
-                'price': 65.00,
-                'originalPrice': 99.95,
-                'brand': 'DMM',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '1-11',
-                'color': 'Mixed Colors',
-                'condition': 'Good',
-                'material': 'Aluminum Alloy',
-                'tags': ['nuts', 'passive protection', 'trad climbing', 'color coded', 'crack protection'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Passive Protection Pro',
-                'sellerEmail': 'passive@protection.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-nuts.jpg']
-            },
-            {
-                'title': 'Osprey Mutant 38L Climbing Pack',
-                'description': 'Versatile climbing backpack with rope carry system and gear organization. Features hydration compatibility and durable construction. Perfect for cragging and multi-pitch routes.',
-                'price': 95.00,
-                'originalPrice': 149.95,
-                'brand': 'Osprey',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '38L',
-                'color': 'Black',
-                'condition': 'Very Good',
-                'material': 'Nylon, Ripstop',
-                'tags': ['climbing pack', 'rope carry', 'gear organization', 'hydration', 'durable'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Pack Solutions',
-                'sellerEmail': 'pack@solutions.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/climbing-backpack.jpg']
-            },
-            
-            # Skiing Gear
-            {
-                'title': 'Salomon QST 106 Ski Boots - Men\'s',
-                'description': 'Versatile all-mountain ski boots with excellent flex for varied terrain. Features customizable fit with heat-moldable liner and adjustable buckles. Perfect for powder, groomers, and backcountry skiing.',
-                'price': 189.00,
-                'originalPrice': 299.95,
-                'brand': 'Salomon',
-                'category': 'Skiing Gear',
-                'gender': 'Men',
-                'size': '27.5',
-                'color': 'Black/Red',
-                'condition': 'Very Good',
-                'material': 'Polyurethane Shell, Heat-moldable Liner',
-                'tags': ['ski boots', 'all mountain', 'heat moldable', 'adjustable', 'versatile'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Ski Boot Pro',
-                'sellerEmail': 'boots@skipro.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-boots.jpg']
-            },
-            {
-                'title': 'Atomic Bent Chetler 100 Skis (2023)',
-                'description': 'Lightweight all-mountain skis with playful feel and excellent float. Features carbon layering for responsiveness and rocker-camber-rocker profile. Perfect for powder and variable conditions.',
-                'price': 299.00,
-                'originalPrice': 499.95,
-                'brand': 'Atomic',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': '184cm',
-                'color': 'Black/White',
-                'condition': 'Excellent',
-                'material': 'Wood Core, Carbon Fiber',
-                'tags': ['skis', 'all mountain', 'lightweight', 'powder', 'carbon fiber'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Atomic Ski Specialist',
-                'sellerEmail': 'atomic@skispecialist.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/skis.jpg']
-            },
-            {
-                'title': 'Black Diamond Expedition Carbon Ski Poles',
-                'description': 'Ultralight carbon fiber ski poles with adjustable length. Features comfortable grips and durable construction. Perfect for backcountry skiing and mountaineering.',
-                'price': 45.00,
-                'originalPrice': 79.95,
-                'brand': 'Black Diamond',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': 'Adjustable 110-130cm',
-                'color': 'Black',
-                'condition': 'Very Good',
-                'material': 'Carbon Fiber, Aluminum',
-                'tags': ['ski poles', 'carbon fiber', 'adjustable', 'ultralight', 'backcountry'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Pole Master',
-                'sellerEmail': 'poles@master.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-poles.jpg']
-            },
-            {
-                'title': 'POC Obex SPIN Ski Helmet',
-                'description': 'Advanced ski helmet with SPIN technology for rotational impact protection. Features adjustable ventilation and comfortable fit. Perfect for all-mountain and freestyle skiing.',
-                'price': 75.00,
-                'originalPrice': 129.95,
-                'brand': 'POC',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'White',
-                'condition': 'Excellent',
-                'material': 'Polycarbonate Shell, EPS Foam',
-                'tags': ['ski helmet', 'spin technology', 'rotational protection', 'adjustable ventilation'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Helmet Safety Pro',
-                'sellerEmail': 'helmet@safety.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-helmet.jpg']
-            },
-            {
-                'title': 'Oakley Flight Deck XM Ski Goggles',
-                'description': 'Premium ski goggles with Prizm lens technology for enhanced visibility. Features spherical lens design and comfortable fit. Perfect for all light conditions.',
-                'price': 89.00,
-                'originalPrice': 149.95,
-                'brand': 'Oakley',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': 'Large',
-                'color': 'Black/Red',
-                'condition': 'Very Good',
-                'material': 'Polycarbonate Lens, O Matter Frame',
-                'tags': ['ski goggles', 'prizm lens', 'spherical', 'enhanced visibility', 'all conditions'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Goggle Vision Pro',
-                'sellerEmail': 'goggles@vision.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-goggles.jpg']
-            },
-            {
-                'title': 'Hestra Army Leather Ski Gloves',
-                'description': 'Premium leather ski gloves with excellent warmth and dexterity. Features waterproof membrane and adjustable wrist closure. Perfect for cold weather skiing.',
-                'price': 65.00,
-                'originalPrice': 109.95,
-                'brand': 'Hestra',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': 'Large',
-                'color': 'Brown',
-                'condition': 'Good',
-                'material': 'Leather, Gore-Tex Membrane',
-                'tags': ['ski gloves', 'leather', 'waterproof', 'warm', 'dexterity'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Glove Master',
-                'sellerEmail': 'gloves@master.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-gloves.jpg']
-            },
-            {
-                'title': 'Arc\'teryx Beta AR Ski Jacket',
-                'description': 'Versatile ski jacket with Gore-Tex Pro technology for waterproof protection. Features adjustable hood and multiple pockets. Perfect for backcountry and resort skiing.',
-                'price': 199.00,
-                'originalPrice': 349.95,
-                'brand': 'Arc\'teryx',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Black',
-                'condition': 'Very Good',
-                'material': 'Gore-Tex Pro, Nylon',
-                'tags': ['ski jacket', 'gore tex', 'waterproof', 'versatile', 'backcountry'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Jacket Pro',
-                'sellerEmail': 'jacket@pro.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-jacket.jpg']
-            },
-            {
-                'title': 'Patagonia Powder Bowl Ski Pants',
-                'description': 'Insulated ski pants with waterproof shell and comfortable fit. Features adjustable waist and reinforced knees. Perfect for cold weather and powder skiing.',
-                'price': 85.00,
-                'originalPrice': 149.95,
-                'brand': 'Patagonia',
-                'category': 'Skiing Gear',
-                'gender': 'Unisex',
-                'size': '32x32',
-                'color': 'Navy',
-                'condition': 'Good',
-                'material': 'Waterproof Shell, Insulated',
-                'tags': ['ski pants', 'insulated', 'waterproof', 'adjustable', 'powder'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Pants Pro',
-                'sellerEmail': 'pants@pro.com',
-                'isTestData': True,
-                'images': ['/src/assets/outlet images/ski-pants.jpg']
-            },
-            {
-                'title': 'GoPro Hero 12 Black Action Camera',
-                'description': '5.3K60 video recording with Emmy Award-winning HyperSmooth 6.0 stabilization. Waterproof to 33ft without housing. Includes Hero 12 Black camera, Enduro battery, curved adhesive mount, mounting buckle, and USB-C cable.',
-                'price': 379.00,
-                'originalPrice': 499.99,
-                'brand': 'GoPro',
-                'category': 'Electronics',
-                'gender': 'Unisex',
-                'size': '2.4 x 1.7 x 1.4 in',
-                'color': 'Black',
-                'condition': 'Like New',
-                'material': 'Aluminum Alloy Housing',
-                'tags': ['action camera', '5.3k video', 'waterproof', 'hypermooth'],
-                'status': 'pending',
-                'sellerId': 'outdoor_videographer_001',
-                'sellerName': 'Adventure Filmmaker',
-                'sellerEmail': 'films@adventures.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1530103862676-de8c9debad1d?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Apple Watch Ultra 2 - GPS + Cellular',
-                'description': 'Rugged titanium smartwatch designed for endurance athletes and outdoor adventurers. Features precision dual-frequency GPS, up to 36 hours battery life, and the brightest Apple Watch display ever.',
-                'price': 689.00,
-                'originalPrice': 799.00,
-                'brand': 'Apple',
-                'category': 'Electronics',
-                'gender': 'Unisex',
-                'size': '49mm',
-                'color': 'Natural Titanium',
-                'condition': 'Excellent',
-                'material': 'Grade 5 Titanium',
-                'tags': ['smartwatch', 'gps', 'cellular', 'titanium', 'apple'],
-                'status': 'pending',
-                'sellerId': 'apple_enthusiast_pro',
-                'sellerName': 'Premium Tech Consignment',
-                'sellerEmail': 'premium@techconsign.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1510017098667-27dfc7150c83?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'DJI Mini 4 Pro Drone',
-                'description': 'Compact drone with 4K/60fps HDR video, omnidirectional obstacle sensing, and 34-minute max flight time. Perfect for aerial photography and videography.',
-                'price': 759.00,
-                'originalPrice': 1069.00,
-                'brand': 'DJI',
-                'category': 'Electronics',
-                'gender': 'Unisex',
-                'size': 'Foldable Design',
-                'color': 'Gray',
-                'condition': 'Very Good',
-                'material': 'Magnesium Alloy Frame',
-                'tags': ['drone', '4k video', 'aerial photography', 'compact'],
-                'status': 'pending',
-                'sellerId': 'aerial_photographer',
-                'sellerName': 'Sky View Productions',
-                'sellerEmail': 'sky@aerialphoto.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1508614589041-895b88991e3e?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Insta360 X3 360° Action Camera',
-                'description': '360° action camera with 5.7K video recording, invisible selfie stick effect, and FlowState stabilization. Perfect for immersive content creation.',
-                'price': 349.00,
-                'originalPrice': 449.99,
-                'brand': 'Insta360',
-                'category': 'Electronics',
-                'gender': 'Unisex',
-                'size': 'Compact',
-                'color': 'Black',
-                'condition': 'Very Good',
-                'material': 'Aluminum Alloy',
-                'tags': ['360 camera', '5.7k video', 'action camera', 'stabilization'],
-                'status': 'pending',
-                'sellerId': 'content_creator_360',
-                'sellerName': '360 Content Studio',
-                'sellerEmail': 'create@360studio.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Climbing & Mountaineering - Enhanced with more realistic descriptions
-            {
-                'title': 'Black Diamond Momentum Climbing Shoes - Men\'s',
-                'description': 'Comfortable all-day climbing shoe perfect for beginners and gym sessions. Features sticky BD NeoFriction rubber, breathable Engineered Knit Technology upper, and a generous fit for comfort during extended climbing sessions.',
-                'price': 55.00,
-                'originalPrice': 89.95,
-                'brand': 'Black Diamond',
-                'category': 'Footwear',
-                'gender': 'Men',
-                'size': '10.5',
-                'color': 'Ash',
-                'condition': 'Good',
-                'material': 'Engineered Knit, NeoFriction Rubber',
-                'tags': ['climbing shoes', 'beginner friendly', 'gym climbing'],
-                'status': 'pending',
-                'sellerId': 'rock_climber_pro',
-                'sellerName': 'Vertical Adventures',
-                'sellerEmail': 'climb@vertical.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1517654077773-8a82e5eaf8c8?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'La Sportiva Solution Comp Climbing Shoes - Women\'s',
-                'description': 'Aggressive performance climbing shoe with P3 system for precise edging and hooking. Features sticky Vibram XS Grip2 rubber and Fast Lacing System. Perfect for advanced sport climbing and bouldering.',
-                'price': 129.00,
-                'originalPrice': 189.00,
-                'brand': 'La Sportiva',
-                'category': 'Footwear',
-                'gender': 'Women',
-                'size': '7.5',
-                'color': 'White/Lily Orange',
-                'condition': 'Excellent',
-                'material': 'Leather, Vibram XS Grip2',
-                'tags': ['aggressive climbing', 'sport climbing', 'bouldering'],
-                'status': 'pending',
-                'sellerId': 'comp_climber_pro',
-                'sellerName': 'Elite Climbing Gear',
-                'sellerEmail': 'elite@climbinggear.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Mammut 9.5mm Phoenix Dry Climbing Rope',
-                'description': '70m dynamic single rope with Dry treatment technology providing water resistance. Featuring UIAA and CE certified construction with middle mark for safe rappelling. Perfect for sport, trad, and alpine climbing.',
-                'price': 125.00,
-                'originalPrice': 179.95,
-                'brand': 'Mammut',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': '70m x 9.5mm',
-                'color': 'Safety Orange',
-                'condition': 'Very Good',
-                'material': 'Nylon Core, Polyester Sheath',
-                'tags': ['dynamic rope', 'dry treatment', 'single rope', 'middle mark'],
-                'status': 'pending',
-                'sellerId': admin_user_id,
-                'sellerName': 'Mountain Guide Services',
-                'sellerEmail': 'guides@mountain.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1464207687429-7505649dae38?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Black Diamond Solution Climbing Harness',
-                'description': 'Lightweight all-around harness with Dual Core Construction for strength and comfort. Features four gear loops, belay loop rated to 15 kN, and adjustable leg loops. Perfect for sport climbing and multipitch routes.',
-                'price': 45.00,
-                'originalPrice': 65.00,
-                'brand': 'Black Diamond',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Ultra Blue',
-                'condition': 'Good',
-                'material': 'Nylon Webbing',
-                'tags': ['climbing harness', 'sport climbing', 'multipitch'],
-                'status': 'pending',
-                'sellerId': 'climbing_instructor_001',
-                'sellerName': 'Rock Climbing Academy',
-                'sellerEmail': 'instruct@rockacademy.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1464207687429-7505649dae38?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Petzl GriGri+ Belay Device',
-                'description': 'Assisted-braking belay device with anti-panic handle and top-rope mode selector. Features cam-assisted blocking for added security. Compatible with 8.5-11mm dynamic ropes.',
-                'price': 85.00,
-                'originalPrice': 109.95,
-                'brand': 'Petzl',
-                'category': 'Climbing Gear',
-                'gender': 'Unisex',
-                'size': 'Standard',
-                'color': 'Red',
-                'condition': 'Like New',
-                'material': 'Aluminum Alloy',
-                'tags': ['belay device', 'assisted braking', 'safety'],
-                'status': 'pending',
-                'sellerId': 'safety_first_climbing',
-                'sellerName': 'Climbing Safety Experts',
-                'sellerEmail': 'safety@climbsafe.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1522163182402-834f871fd851?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Camping Gear - Enhanced with professional descriptions
-            {
-                'title': 'Big Agnes Copper Spur HV UL2 Tent',
-                'description': 'Award-winning ultralight 2-person backpacking tent with High Volume hub design for maximum livability. Features two large vestibules (8.5 + 8.5 sq ft), DAC Featherlite NFL poles, and proprietary tent fabrics. Trail weight: 2 lbs 12 oz.',
-                'price': 315.00,
-                'originalPrice': 449.95,
-                'brand': 'Big Agnes',
-                'category': 'Camping Gear',
-                'gender': 'Unisex',
-                'size': '2 Person',
-                'color': 'Gray/Orange',
-                'condition': 'Excellent',
-                'material': 'Ripstop Nylon, DAC Featherlite Poles',
-                'tags': ['ultralight', 'backpacking', 'freestanding', 'dual vestibule'],
-                'status': 'pending',
-                'sellerId': 'backpack_camper_001',
-                'sellerName': 'Lightweight Adventures',
-                'sellerEmail': 'ultralight@camping.net',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'REI Co-op Half Dome 4 Plus Tent',
-                'description': 'Spacious 4-person family tent with color-coded poles and clips for easy setup. Features two doors, two vestibules, and 60 sq ft of floor space. Great for car camping and base camps.',
-                'price': 189.00,
-                'originalPrice': 269.00,
-                'brand': 'REI Co-op',
-                'category': 'Camping Gear',
-                'gender': 'Unisex',
-                'size': '4 Person',
-                'color': 'Red/Gray',
-                'condition': 'Very Good',
-                'material': '75D Polyester, Aluminum Poles',
-                'tags': ['family tent', 'car camping', 'spacious', 'dual doors'],
-                'status': 'pending',
-                'sellerId': 'family_camper_pro',
-                'sellerName': 'Family Outdoor Adventures',
-                'sellerEmail': 'family@outdooradventures.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Jetboil Flash Cooking System',
-                'description': 'Integrated cooking system that boils water in 100 seconds flat. Features FluxRing heat exchanger, push-button ignition, and insulated cozy. Includes 1L FluxRing cooking cup and fuel stabilizer.',
-                'price': 75.00,
-                'originalPrice': 109.95,
-                'brand': 'Jetboil',
-                'category': 'Camping Gear',
-                'gender': 'Unisex',
-                'size': '1.0L',
-                'color': 'Carbon',
-                'condition': 'Very Good',
-                'material': 'Aluminum, Stainless Steel',
-                'tags': ['integrated stove', 'fast boiling', 'lightweight', 'backpacking'],
-                'status': 'pending',
-                'sellerId': 'camp_cook_expert',
-                'sellerName': 'Outdoor Chef',
-                'sellerEmail': 'cook@outdoors.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1570737845904-972921524d9f?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1587712284248-91c0f8df4de4?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Western Mountaineering UltraLite Sleeping Bag',
-                'description': '20°F rated sleeping bag with 850+ fill power goose down. Weighs only 2 lbs 1 oz. Features differential cut construction and full-length zipper with draft tube.',
-                'price': 385.00,
-                'originalPrice': 520.00,
-                'brand': 'Western Mountaineering',
-                'category': 'Sleep Systems',
-                'gender': 'Unisex',
-                'size': 'Regular',
-                'color': 'Red',
-                'condition': 'Excellent',
-                'material': '850+ Fill Goose Down, Microfiber Shell',
-                'tags': ['down sleeping bag', 'ultralight', '20 degree', 'premium'],
-                'status': 'pending',
-                'sellerId': 'sleep_system_expert',
-                'sellerName': 'Backcountry Sleep Co',
-                'sellerEmail': 'sleep@backcountry.gear',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Therm-a-Rest NeoAir XLite Sleeping Pad',
-                'description': 'Award-winning ultralight inflatable sleeping pad with Triangular Core Matrix construction. R-value 4.2, weighs 12 oz. Packs to size of water bottle.',
-                'price': 129.00,
-                'originalPrice': 199.95,
-                'brand': 'Therm-a-Rest',
-                'category': 'Sleep Systems',
-                'gender': 'Unisex',
-                'size': 'Regular',
-                'color': 'Lemon Curry',
-                'condition': 'Very Good',
-                'material': '30D Ripstop Nylon',
-                'tags': ['sleeping pad', 'ultralight', 'insulated', 'compact'],
-                'status': 'pending',
-                'sellerId': 'comfort_camping_pro',
-                'sellerName': 'Sleep Comfort Specialists',
-                'sellerEmail': 'comfort@camping.experts',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1478131143081-80f7f84ca84d?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'MSR PocketRocket 2 Ultralight Stove',
-                'description': 'Ultralight canister stove weighing just 2.6 oz. Features WindClip technology and improved pot supports. Boils 1 liter of water in 3.5 minutes.',
-                'price': 35.00,
-                'originalPrice': 49.95,
-                'brand': 'MSR',
-                'category': 'Camping Gear',
-                'gender': 'Unisex',
-                'size': 'Ultralight',
-                'color': 'Red',
-                'condition': 'Good',
-                'material': 'Stainless Steel, Aluminum',
-                'tags': ['ultralight stove', 'canister', 'windproof', 'compact'],
-                'status': 'pending',
-                'sellerId': 'minimalist_camper',
-                'sellerName': 'Ultralight Gear Co',
-                'sellerEmail': 'minimal@ultralightgear.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1570737845904-972921524d9f?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1587712284248-91c0f8df4de4?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Jackets & Outerwear
-            {
-                'title': "Arc'teryx Atom LT Vest - Men's",
-                'description': 'Versatile synthetic insulation vest perfect for layering. Wind and weather resistant.',
-                'price': 129.00,
-                'originalPrice': 189.00,
-                'brand': "Arc'teryx",
-                'category': 'Jackets & Coats',
-                'gender': 'Men',
-                'size': 'Large',
-                'color': 'Black',
-                'condition': 'Excellent',
-                'material': 'Coreloft Synthetic',
-                'tags': ['layering', 'insulation', 'vest'],
-                'status': 'pending',
-                'sellerId': 'layer_master_pro',
-                'sellerName': 'Layering Systems',
-                'sellerEmail': 'layers@system.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Patagonia Torrentshell 3L Rain Jacket',
-                'description': 'Waterproof, breathable rain jacket with 3-layer H2No Performance Standard shell.',
-                'price': 95.00,
-                'originalPrice': 149.00,
-                'brand': 'Patagonia',
-                'category': 'Jackets & Coats',
-                'gender': 'Women',
-                'size': 'Medium',
-                'color': 'Navy Blue',
-                'condition': 'Very Good',
-                'material': 'Recycled Nylon',
-                'tags': ['rain jacket', 'waterproof', 'breathable'],
-                'status': 'pending',
-                'sellerId': 'rain_gear_specialist',
-                'sellerName': 'Weather Protection Co',
-                'sellerEmail': 'rain@weather.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1578489758854-f134a358f08b?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Footwear
-            {
-                'title': 'Salomon X Ultra 3 GTX Hiking Shoes',
-                'description': 'Gore-Tex waterproof hiking shoes with Contagrip sole for superior grip on any terrain.',
-                'price': 99.00,
-                'originalPrice': 149.95,
-                'brand': 'Salomon',
-                'category': 'Footwear',
-                'gender': 'Men',
-                'size': '10',
-                'color': 'Black/Magnet',
-                'condition': 'Excellent',
-                'material': 'Synthetic, Gore-Tex',
-                'tags': ['waterproof', 'hiking', 'trail running'],
-                'status': 'pending',
-                'sellerId': 'fast_hiker_001',
-                'sellerName': 'Speed Trail Adventures',
-                'sellerEmail': 'fast@trails.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Merrell Moab 3 Waterproof Hiking Boots',
-                'description': 'Durable waterproof hiking boots with Vibram TC5+ outsole and protective rubber toe cap.',
-                'price': 85.00,
-                'originalPrice': 129.95,
-                'brand': 'Merrell',
-                'category': 'Footwear',
-                'gender': 'Women',
-                'size': '8.5',
-                'color': 'Earth',
-                'condition': 'Good',
-                'material': 'Leather, Mesh',
-                'tags': ['waterproof', 'hiking boots', 'vibram sole'],
-                'status': 'pending',
-                'sellerId': 'trail_explorer_pro',
-                'sellerName': 'Day Hiking Specialists',
-                'sellerEmail': 'explore@trails.net',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Backpacks
-            {
-                'title': 'Osprey Atmos AG 65 Backpack',
-                'description': 'Anti-Gravity suspension system provides exceptional comfort for multi-day backpacking trips.',
-                'price': 185.00,
-                'originalPrice': 270.00,
-                'brand': 'Osprey',
-                'category': 'Backpacks',
-                'gender': 'Men',
-                'size': 'Medium (65L)',
-                'color': 'Abyss Grey',
-                'condition': 'Very Good',
-                'material': 'Nylon Ripstop',
-                'tags': ['backpacking', 'anti-gravity', 'multi-day'],
-                'status': 'pending',
-                'sellerId': 'backpack_expert_001',
-                'sellerName': 'Long Distance Trekking',
-                'sellerEmail': 'trek@longdistance.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1581833971358-2c8b550f87b3?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1525971118847-e5eb07203437?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Deuter Speed Lite 26 Daypack',
-                'description': 'Lightweight daypack perfect for hiking, climbing, and everyday adventures.',
-                'price': 65.00,
-                'originalPrice': 95.00,
-                'brand': 'Deuter',
-                'category': 'Backpacks',
-                'gender': 'Unisex',
-                'size': '26L',
-                'color': 'Alpine Green',
-                'condition': 'Excellent',
-                'material': 'Ripstop Nylon',
-                'tags': ['daypack', 'lightweight', 'climbing'],
-                'status': 'pending',
-                'sellerId': 'day_hiker_specialist',
-                'sellerName': 'Single Day Adventures',
-                'sellerEmail': 'day@adventures.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1622260614927-9cd71154b3a2?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Winter Sports
-            {
-                'title': 'Rossignol Experience 88 Ti Skis',
-                'description': 'All-mountain skis with titanal construction for stability and performance on any terrain.',
-                'price': 385.00,
-                'originalPrice': 649.95,
-                'brand': 'Rossignol',
-                'category': 'Winter Sports',
-                'gender': 'Unisex',
-                'size': '172cm',
-                'color': 'Black/Yellow',
-                'condition': 'Good',
-                'material': 'Wood Core, Titanal',
-                'tags': ['all-mountain', 'titanal', 'carving'],
-                'status': 'pending',
-                'sellerId': 'ski_instructor_pro',
-                'sellerName': 'Alpine Ski School',
-                'sellerEmail': 'ski@alpine.school',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1578758002140-b1d10f48aa31?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Burton Custom Snowboard',
-                'description': 'Versatile all-mountain snowboard with camber profile for power and precision.',
-                'price': 289.00,
-                'originalPrice': 429.95,
-                'brand': 'Burton',
-                'category': 'Winter Sports',
-                'gender': 'Men',
-                'size': '158cm',
-                'color': 'Blue Graphics',
-                'condition': 'Very Good',
-                'material': 'Wood Core, Fiberglass',
-                'tags': ['all-mountain', 'camber', 'freestyle'],
-                'status': 'pending',
-                'sellerId': 'snowboard_pro_rider',
-                'sellerName': 'Mountain Boarders',
-                'sellerEmail': 'ride@mountain.board',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1578758002140-b1d10f48aa31?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Water Sports
-            {
-                'title': 'BOTE Flood Aero Inflatable SUP',
-                'description': 'High-quality inflatable stand-up paddleboard with pump and paddle included.',
-                'price': 589.00,
-                'originalPrice': 799.00,
-                'brand': 'BOTE',
-                'category': 'Water Sports',
-                'gender': 'Unisex',
-                'size': "11'6\"",
-                'color': 'Teal',
-                'condition': 'Like New',
-                'material': 'Military Grade PVC',
-                'tags': ['SUP', 'inflatable', 'paddle included'],
-                'status': 'pending',
-                'sellerId': 'paddle_board_expert',
-                'sellerName': 'Lake Adventures',
-                'sellerEmail': 'paddle@lake.adventures',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1505142468610-359e7d316be0?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'NRS Women\'s Endurance Splash Jacket',
-                'description': 'Lightweight paddling jacket with breathable fabric and adjustable fit.',
-                'price': 75.00,
-                'originalPrice': 119.95,
-                'brand': 'NRS',
-                'category': 'Water Sports',
-                'gender': 'Women',
-                'size': 'Small',
-                'color': 'Purple',
-                'condition': 'Good',
-                'material': 'Ripstop Nylon',
-                'tags': ['paddling', 'kayaking', 'breathable'],
-                'status': 'pending',
-                'sellerId': 'kayak_enthusiast_001',
-                'sellerName': 'River Running Co',
-                'sellerEmail': 'kayak@river.runs',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1578758002140-b1d10f48aa31?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Cycling
-            {
-                'title': 'Specialized Stumpjumper Comp Mountain Bike',
-                'description': 'Full suspension mountain bike with 29" wheels and modern geometry for trail riding.',
-                'price': 2199.00,
-                'originalPrice': 3299.00,
-                'brand': 'Specialized',
-                'category': 'Cycling',
-                'gender': 'Unisex',
-                'size': 'Large',
-                'color': 'Red/Black',
-                'condition': 'Good',
-                'material': 'Carbon Fiber',
-                'tags': ['mountain bike', 'full suspension', '29er'],
-                'status': 'pending',
-                'sellerId': 'mtb_rider_pro',
-                'sellerName': 'Single Track Adventures',
-                'sellerEmail': 'mtb@singletrack.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Giro Montaro MIPS Helmet',
-                'description': 'Mountain bike helmet with MIPS technology for enhanced protection and comfort.',
-                'price': 89.00,
-                'originalPrice': 149.95,
-                'brand': 'Giro',
-                'category': 'Cycling',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Matte Blue',
-                'condition': 'Excellent',
-                'material': 'Polycarbonate',
-                'tags': ['MIPS', 'mountain bike', 'safety'],
-                'status': 'pending',
-                'sellerId': 'safe_rider_001',
-                'sellerName': 'Bike Safety Pro',
-                'sellerEmail': 'safety@bike.protection',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1558658044-4c1e7c7a0b47?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Fishing
-            {
-                'title': 'Orvis Helios 3D Fly Rod',
-                'description': 'Premium fly fishing rod with exceptional feel and accuracy for serious anglers.',
-                'price': 549.00,
-                'originalPrice': 798.00,
-                'brand': 'Orvis',
-                'category': 'Fishing',
-                'gender': 'Unisex',
-                'size': '9\'0" 5wt',
-                'color': 'Olive',
-                'condition': 'Excellent',
-                'material': 'Carbon Fiber',
-                'tags': ['fly fishing', 'premium', 'trout'],
-                'status': 'pending',
-                'sellerId': 'fly_fisher_expert',
-                'sellerName': 'Trout Stream Outfitters',
-                'sellerEmail': 'fly@trout.streams',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Simms G3 Guide Stockingfoot Waders',
-                'description': 'Breathable chest waders with reinforced construction for demanding fishing conditions.',
-                'price': 379.00,
-                'originalPrice': 599.95,
-                'brand': 'Simms',
-                'category': 'Fishing',
-                'gender': 'Men',
-                'size': 'Large',
-                'color': 'Dark Stone',
-                'condition': 'Good',
-                'material': 'Gore-Tex Pro',
-                'tags': ['waders', 'breathable', 'fly fishing'],
-                'status': 'pending',
-                'sellerId': 'wading_specialist',
-                'sellerName': 'Deep Water Access',
-                'sellerEmail': 'wade@river.access',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Accessories
-            {
-                'title': 'Hydro Flask 32oz Wide Mouth',
-                'description': 'Insulated stainless steel water bottle that keeps drinks cold for 24 hours or hot for 12 hours.',
-                'price': 25.00,
-                'originalPrice': 44.95,
-                'brand': 'Hydro Flask',
-                'category': 'Accessories',
-                'gender': 'Unisex',
-                'size': '32oz',
-                'color': 'Pacific Blue',
-                'condition': 'Good',
-                'material': 'Stainless Steel',
-                'tags': ['insulated', 'water bottle', 'hydration'],
-                'status': 'pending',
-                'sellerId': 'hydration_expert',
-                'sellerName': 'Water Bottle Station',
-                'sellerEmail': 'hydrate@water.bottles',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Black Diamond Spot 325 Headlamp',
-                'description': 'Reliable LED headlamp with 325 lumens and red night vision. Waterproof design.',
-                'price': 25.00,
-                'originalPrice': 39.95,
-                'brand': 'Black Diamond',
-                'category': 'Accessories',
-                'gender': 'Unisex',
-                'size': 'One Size',
-                'color': 'Aluminum',
-                'condition': 'Very Good',
-                'material': 'Aluminum, Plastic',
-                'tags': ['headlamp', 'LED', 'waterproof'],
-                'status': 'pending',
-                'sellerId': 'night_navigation_pro',
-                'sellerName': 'Head Light Specialists',
-                'sellerEmail': 'night@navigation.lights',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop'
-                ]
-            },
-            
-            # Base Layers & Clothing
-            {
-                'title': 'Smartwool Merino 150 Base Layer',
-                'description': 'Lightweight merino wool base layer with natural odor resistance and temperature regulation.',
-                'price': 45.00,
-                'originalPrice': 75.00,
-                'brand': 'Smartwool',
-                'category': 'Base Layers',
-                'gender': 'Women',
-                'size': 'Medium',
-                'color': 'Deep Navy',
-                'condition': 'Very Good',
-                'material': 'Merino Wool',
-                'tags': ['merino wool', 'base layer', 'odor resistant'],
-                'status': 'pending',
-                'sellerId': 'wool_specialist_001',
-                'sellerName': 'Natural Fibers Co',
-                'sellerEmail': 'wool@natural.fibers',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop',
-                    'https://images.unsplash.com/photo-1544966503-7cc5ac882d5e?w=800&h=600&fit=crop'
-                ]
-            },
-            {
-                'title': 'Patagonia Baggies Shorts 5-inch',
-                'description': 'Quick-dry recycled nylon shorts perfect for hiking, swimming, and everyday wear. Features DWR finish, mesh liner, and elastic waistband with drawstring.',
-                'price': 32.00,
-                'originalPrice': 55.00,
-                'brand': 'Patagonia',
-                'category': 'Shorts',
-                'gender': 'Men',
-                'size': '32',
-                'color': 'Navy Blue',
-                'condition': 'Good',
-                'material': 'Recycled Nylon DWR',
-                'tags': ['quick dry', 'versatile', 'recycled', 'water repellent'],
-                'status': 'pending',
-                'sellerId': 'shorts_enthusiast',
-                'sellerName': 'Summer Hikes Co',
-                'sellerEmail': 'shorts@summer.hikes',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1551524164-6cf17af1cb87?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Additional Comprehensive Categories
-            
-            # Mountain Biking & Cycling
-            {
-                'title': 'Trek Fuel EX 8 Full Suspension Mountain Bike',
-                'description': '29" full suspension trail bike with 130mm travel front and rear. Features Shimano XT 12-speed drivetrain, RockShox suspension, and Trek\'s Alpha Platinum Aluminum frame.',
-                'price': 2899.00,
-                'originalPrice': 3999.00,
-                'brand': 'Trek',
-                'category': 'Cycling',
-                'gender': 'Unisex',
-                'size': 'Large (19.5")',
-                'color': 'Matte Trek Black',
-                'condition': 'Very Good',
-                'material': 'Alpha Platinum Aluminum',
-                'tags': ['full suspension', 'trail bike', '29er', 'shimano xt'],
-                'status': 'pending',
-                'sellerId': 'mountain_bike_shop',
-                'sellerName': 'Trail Bike Specialists',
-                'sellerEmail': 'bikes@trailspecialists.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Fox Racing Rampage Pro Carbon MIPS Helmet',
-                'description': 'Full-face mountain bike helmet with MIPS technology and carbon fiber shell. Features Magnetic Visor System and dual-density EPS liner.',
-                'price': 189.00,
-                'originalPrice': 299.00,
-                'brand': 'Fox Racing',
-                'category': 'Cycling',
-                'gender': 'Unisex',
-                'size': 'Medium',
-                'color': 'Matte Black',
-                'condition': 'Excellent',
-                'material': 'Carbon Fiber, EPS Foam',
-                'tags': ['full face helmet', 'mips', 'mountain biking', 'carbon'],
-                'status': 'pending',
-                'sellerId': 'downhill_rider_pro',
-                'sellerName': 'Gravity Sports',
-                'sellerEmail': 'gravity@downnhill.sports',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1558658044-4c1e7c7a0b47?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Shimano SPD Pedals PD-M520',
-                'description': 'Clipless mountain bike pedals with dual-sided entry and adjustable release tension. Includes cleats and mounting hardware.',
-                'price': 35.00,
-                'originalPrice': 59.99,
-                'brand': 'Shimano',
-                'category': 'Cycling',
-                'gender': 'Unisex',
-                'size': 'Standard',
-                'color': 'Black',
-                'condition': 'Good',
-                'material': 'Aluminum Alloy',
-                'tags': ['clipless pedals', 'mountain bike', 'dual sided'],
-                'status': 'pending',
-                'sellerId': 'bike_component_pro',
-                'sellerName': 'Component Specialists',
-                'sellerEmail': 'components@bikeshop.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1571068316344-75bc76f77890?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1558618047-3c8c76ca7d13?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Fishing Gear
-            {
-                'title': 'Sage X 9\' 5wt Fly Rod',
-                'description': 'High-performance fly rod with KonneticHD Technology. Delivers exceptional accuracy and feel for trout fishing. Includes protective tube and sock.',
-                'price': 649.00,
-                'originalPrice': 925.00,
-                'brand': 'Sage',
-                'category': 'Fishing',
-                'gender': 'Unisex',
-                'size': '9\'0" 5wt',
-                'color': 'Sage Green',
-                'condition': 'Like New',
-                'material': 'KonneticHD Carbon Fiber',
-                'tags': ['fly rod', 'trout', 'premium', 'sage'],
-                'status': 'pending',
-                'sellerId': 'fly_fishing_guide',
-                'sellerName': 'Western Rivers Outfitters',
-                'sellerEmail': 'guide@westernrivers.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1445020556993-2b4ac8027ac3?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Patagonia Swiftcurrent Expedition Waders',
-                'description': 'Premium chest waders with H2No 4-layer waterproof/breathable fabric. Features reinforced knees, gravel guards, and stocking foot design.',
-                'price': 449.00,
-                'originalPrice': 649.00,
-                'brand': 'Patagonia',
-                'category': 'Fishing',
-                'gender': 'Men',
-                'size': 'Large',
-                'color': 'Forge Grey',
-                'condition': 'Very Good',
-                'material': 'H2No 4-Layer Fabric',
-                'tags': ['chest waders', 'breathable', 'reinforced', 'stocking foot'],
-                'status': 'pending',
-                'sellerId': 'fly_fishing_outfitter',
-                'sellerName': 'Angler\'s Paradise',
-                'sellerEmail': 'fish@anglersparadise.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1464822759844-d150ad6d1ccf?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1445020556993-2b4ac8027ac3?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Running & Fitness
-            {
-                'title': 'Garmin Forerunner 255 GPS Running Watch',
-                'description': 'Advanced GPS running watch with training metrics, recovery advisor, and up to 14-day battery life. Features multi-band GPS and running power.',
-                'price': 279.00,
-                'originalPrice': 349.99,
-                'brand': 'Garmin',
-                'category': 'Electronics',
-                'gender': 'Unisex',
-                'size': '45.6mm',
-                'color': 'Tidal Blue',
-                'condition': 'Excellent',
-                'material': 'Fiber-reinforced Polymer',
-                'tags': ['running watch', 'gps', 'training metrics', 'long battery'],
-                'status': 'pending',
-                'sellerId': 'running_coach_pro',
-                'sellerName': 'Marathon Training Co',
-                'sellerEmail': 'coach@marathontraining.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            {
-                'title': 'Hoka Clifton 9 Running Shoes - Women\'s',
-                'description': 'Lightweight daily trainer with maximum cushioning. Features early stage Meta-Rocker technology and engineered mesh upper for breathability.',
-                'price': 95.00,
-                'originalPrice': 139.95,
-                'brand': 'Hoka',
-                'category': 'Footwear',
-                'gender': 'Women',
-                'size': '8.5',
-                'color': 'Dazzling Blue',
-                'condition': 'Good',
-                'material': 'Engineered Mesh, EVA Midsole',
-                'tags': ['running shoes', 'maximum cushion', 'daily trainer'],
-                'status': 'pending',
-                'sellerId': 'running_store_pro',
-                'sellerName': 'Fleet Feet Running',
-                'sellerEmail': 'run@fleetfeet.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Yoga & Fitness
-            {
-                'title': 'Manduka PRO Yoga Mat 6mm',
-                'description': 'Professional-grade yoga mat with superior cushioning and grip. Features closed-cell construction and lifetime guarantee. Non-toxic and emissions-tested.',
-                'price': 89.00,
-                'originalPrice': 128.00,
-                'brand': 'Manduka',
-                'category': 'Fitness',
-                'gender': 'Unisex',
-                'size': '71" x 24" x 6mm',
-                'color': 'Black',
-                'condition': 'Very Good',
-                'material': 'PVC-free, Non-toxic',
-                'tags': ['yoga mat', 'professional grade', 'lifetime guarantee'],
-                'status': 'pending',
-                'sellerId': 'yoga_instructor_pro',
-                'sellerName': 'Zen Yoga Studio',
-                'sellerEmail': 'zen@yogastudio.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Travel & Luggage
-            {
-                'title': 'Patagonia Black Hole Duffel 55L',
-                'description': 'Weather-resistant duffel bag made from recycled polyester ripstop. Features removable padded shoulder straps and multiple carry options.',
-                'price': 89.00,
-                'originalPrice': 129.00,
-                'brand': 'Patagonia',
-                'category': 'Travel Gear',
-                'gender': 'Unisex',
-                'size': '55L',
-                'color': 'Classic Navy',
-                'condition': 'Very Good',
-                'material': 'Recycled Polyester Ripstop',
-                'tags': ['duffel bag', 'weather resistant', 'travel', 'recycled'],
-                'status': 'pending',
-                'sellerId': 'adventure_traveler',
-                'sellerName': 'Global Adventure Gear',
-                'sellerEmail': 'travel@adventuregear.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1622260614927-9cd71154b3a2?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Additional Premium Electronics
-            {
-                'title': 'Suunto 9 Peak Pro GPS Sports Watch',
-                'description': 'Ultra-durable GPS sports watch with sapphire crystal glass and grade 5 titanium bezel. Features 170+ sport modes and up to 300 hours battery life.',
-                'price': 459.00,
-                'originalPrice': 649.00,
-                'brand': 'Suunto',
-                'category': 'Electronics',
-                'gender': 'Unisex',
-                'size': '43mm',
-                'color': 'All Black',
-                'condition': 'Excellent',
-                'material': 'Grade 5 Titanium, Sapphire Crystal',
-                'tags': ['gps watch', 'ultra durable', 'long battery', '170 sports'],
-                'status': 'pending',
-                'sellerId': 'endurance_athlete_pro',
-                'sellerName': 'Ultra Endurance Gear',
-                'sellerEmail': 'ultra@endurancegear.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1434494878577-86c23bcb06b9?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1510017098667-27dfc7150c83?w=800&h=600&fit=crop&q=80'
-                ]
-            },
-            
-            # Accessories & Gear
-            {
-                'title': 'Yeti Rambler 20oz Tumbler with MagSlider Lid',
-                'description': 'Double-wall vacuum insulated tumbler with MagSlider Lid. Keeps drinks cold for hours and hot drinks hot. Dishwasher safe.',
-                'price': 25.00,
-                'originalPrice': 35.00,
-                'brand': 'Yeti',
-                'category': 'Accessories',
-                'gender': 'Unisex',
-                'size': '20oz',
-                'color': 'Navy',
-                'condition': 'Very Good',
-                'material': '18/8 Stainless Steel',
-                'tags': ['insulated tumbler', 'vacuum sealed', 'magslider'],
-                'status': 'pending',
-                'sellerId': 'gear_accessories_pro',
-                'sellerName': 'Premium Accessories Co',
-                'sellerEmail': 'accessories@premiumgear.com',
-                'isTestData': True,
-                'images': [
-                    'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=800&h=600&fit=crop&q=80',
-                    'https://images.unsplash.com/photo-1506629905607-5b9e4b1d7440?w=800&h=600&fit=crop&q=80'
-                ]
-            }
-        ]
+        with open(snapshot_file, 'r', encoding='utf-8') as f:
+            snapshot_data = json.load(f)
         
-        created_items = []
-        for item_data in test_items:
-            # Add common fields
-            item_data.update({
-                'createdAt': datetime.now(timezone.utc),
-                'lastUpdated': datetime.now(timezone.utc),
-                'views': 0,
-                'isTestData': True  # Flag to identify test data
-            })
-            
-            # Add to Firestore
-            doc_ref = db.collection('items').add(item_data)
-            created_items.append({
-                'id': doc_ref[1].id,
-                'title': item_data['title'],
-                'brand': item_data['brand'],
-                'category': item_data['category']
-            })
+        items_created = 0
+        categories_created = 0
+        users_created = 0
         
-        # Log admin action
-        db.collection('adminActions').add({
-            'adminId': admin_user_id,
-            'action': 'test_data_generated',
-            'details': f'Generated {len(created_items)} diverse test items across multiple categories',
-            'timestamp': datetime.now(timezone.utc),
-            'itemCount': len(created_items)
-        })
+        # Create categories first
+        for category_data in snapshot_data.get('categories', []):
+            try:
+                # Create new document ID
+                category_ref = db.collection('categories').document()
+                
+                # Prepare category data
+                category_doc = {
+                    'name': category_data.get('name', 'Unknown Category'),
+                    'description': category_data.get('description', ''),
+                    'image': category_data.get('image', ''),
+                    'icon': category_data.get('icon', ''),
+                    'active': category_data.get('active', True),
+                    'order': category_data.get('order', 0),
+                    'subcategories': category_data.get('subcategories', []),
+                    'itemCount': 0,  # Will be updated as items are added
+                    'featured': category_data.get('featured', False),
+                    'color': category_data.get('color', '#6B7280'),
+                    'bannerImage': category_data.get('bannerImage', ''),
+                'isTestData': True,
+                    'createdAt': firestore.SERVER_TIMESTAMP
+                }
+                
+                # Remove None values
+                category_doc = {k: v for k, v in category_doc.items() if v is not None}
+                
+                category_ref.set(category_doc)
+                categories_created += 1
+                logger.info(f"Created category: {category_data.get('name')}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create category {category_data.get('name', 'Unknown')}: {e}")
+                continue
         
-        logger.info(f"Successfully generated {len(created_items)} test items")
+        # Create test users
+        for user_data in snapshot_data.get('users', []):
+            try:
+                # Create new document ID
+                user_ref = db.collection('users').document()
+                
+                # Prepare user data with test identifiers
+                user_doc = {
+                    'displayName': f"Test User {users_created + 1}",
+                    'email': f"testuser{users_created + 1}@example.com",
+                    'isAdmin': user_data.get('isAdmin', False),
+                    'totalEarnings': user_data.get('totalEarnings', 0),
+                    'totalSales': user_data.get('totalSales', 0),
+                    'itemsListed': user_data.get('itemsListed', 0),
+                    'itemsSold': user_data.get('itemsSold', 0),
+                    'memberSince': firestore.SERVER_TIMESTAMP,
+                    'lastSignIn': firestore.SERVER_TIMESTAMP,
+                    'status': user_data.get('status', 'active'),
+                    'isTestData': True
+                }
+                
+                user_ref.set(user_doc)
+                users_created += 1
+                logger.info(f"Created test user: {user_doc['displayName']}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create test user: {e}")
+                continue
+        
+        # Create items using snapshot data
+        for item_data in snapshot_data.get('items', []):
+            try:
+                # Create new document ID
+                item_ref = db.collection('items').document()
+                
+                # Prepare item data
+                item_doc = {
+                    'title': item_data.get('title', 'Unknown Item'),
+                    'description': item_data.get('description', ''),
+                    'price': float(item_data.get('price', 0)),
+                    'category': item_data.get('category', 'General'),
+                    'subcategory': item_data.get('subcategory', ''),
+                    'brand': item_data.get('brand', ''),
+                    'condition': item_data.get('condition', 'Good'),
+                    'size': item_data.get('size', ''),
+                    'color': item_data.get('color', ''),
+                    'material': item_data.get('material', ''),
+                    'weight': item_data.get('weight', ''),
+                    'dimensions': item_data.get('dimensions', ''),
+                    'status': 'pending',  # Always start as pending for test data
+                    'sellerId': admin_user_id,  # Use current admin as seller
+                    'sellerName': 'Test Seller',
+                    'sellerEmail': 'testseller@example.com',
+                    'sellerPhone': '+1234567890',
+                    'images': item_data.get('images', []),
+                    'tags': item_data.get('tags', []),
+                    'featured': item_data.get('featured', False),
+                    'notes': item_data.get('notes', ''),
+                    'adminNotes': 'Generated from database snapshot',
+                    'createdAt': firestore.SERVER_TIMESTAMP,
+                    'isTestData': True
+                }
+                
+                # Add optional fields if they exist
+                if item_data.get('fulfillmentMethod'):
+                    item_doc['fulfillmentMethod'] = item_data['fulfillmentMethod']
+                if item_data.get('paymentType'):
+                    item_doc['paymentType'] = item_data['paymentType']
+                if item_data.get('barcodeData'):
+                    item_doc['barcodeData'] = item_data['barcodeData']
+                
+                # Remove None values
+                item_doc = {k: v for k, v in item_doc.items() if v is not None}
+                
+                item_ref.set(item_doc)
+                items_created += 1
+                logger.info(f"Created item: {item_data.get('title')}")
+                
+            except Exception as e:
+                logger.error(f"Failed to create item {item_data.get('title', 'Unknown')}: {e}")
+                continue
+        
+        logger.info(f"Test data generation completed: {items_created} items, {categories_created} categories, {users_created} users")
         
         return {
-            "success": True,
-            "message": f"Successfully generated {len(created_items)} diverse test items across multiple categories",
-            "itemCount": len(created_items),
-            "items": created_items
+            'success': True,
+            'message': f'Successfully generated test data from snapshot',
+            'items_created': items_created,
+            'categories_created': categories_created,
+            'users_created': users_created,
+            'snapshot_metadata': snapshot_data.get('metadata', {})
         }
         
     except Exception as e:
         logger.error(f"Error generating test data: {e}")
-        if isinstance(e, HTTPException):
-            raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
 @app.post("/api/admin/remove-test-data")
 async def remove_test_data(request: Request):
     """Admin endpoint to remove all test data"""
@@ -5519,11 +4156,126 @@ async def debug_barcodes(admin_data: dict = Depends(verify_admin_access)):
             detail=f"Debug failed: {str(e)}"
         )
 
+
+@app.post("/api/admin/regenerate-barcodes")
+async def regenerate_barcodes(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Regenerate barcodes for items with old or invalid formats"""
+    try:
+        from utils import generate_barcode_data, validate_barcode_format
+        
+        data = await request.json()
+        item_ids = data.get('item_ids', [])  # Optional: specific items to regenerate
+        force_all = data.get('force_all', False)  # Regenerate all items
+        
+        items_ref = db.collection('items')
+        updated_items = []
+        skipped_items = []
+        
+        if force_all:
+            # Get all items
+            query = items_ref
+        elif item_ids:
+            # Get specific items
+            query = items_ref.where('__name__', 'in', item_ids)
+        else:
+            # Get items with invalid barcode format
+            query = items_ref
+        
+        for doc in query.get():
+            item_data = doc.to_dict()
+            item_id = doc.id
+            
+            current_barcode = item_data.get('barcodeData', '')
+            
+            # Check if barcode needs regeneration
+            needs_regeneration = (
+                not current_barcode or 
+                not validate_barcode_format(current_barcode) or
+                not current_barcode.startswith('CSG') or
+                len(current_barcode) != 21
+            )
+            
+            if needs_regeneration or force_all:
+                # Generate new barcode
+                new_barcode = generate_barcode_data()
+                
+                # Update item
+                doc_ref = db.collection('items').document(item_id)
+                doc_ref.update({
+                    'barcodeData': new_barcode,
+                    'barcodeGeneratedAt': datetime.now(timezone.utc),
+                    'adminNotes': f"Barcode regenerated by {admin_data.get('email', 'admin')} on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}"
+                })
+                
+                updated_items.append({
+                    'id': item_id,
+                    'title': item_data.get('title', 'Unknown'),
+                    'old_barcode': current_barcode,
+                    'new_barcode': new_barcode
+                })
+            else:
+                skipped_items.append({
+                    'id': item_id,
+                    'title': item_data.get('title', 'Unknown'),
+                    'barcode': current_barcode
+                })
+        
+        return {
+            "success": True,
+            "message": f"Regenerated barcodes for {len(updated_items)} items, skipped {len(skipped_items)}",
+            "updated_items": updated_items,
+            "skipped_items": skipped_items
+        }
+        
+    except Exception as e:
+        logger.error(f"Error regenerating barcodes: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to regenerate barcodes: {str(e)}"
+        )
+
 @app.get("/api/admin/lookup-item-by-barcode/{barcode_data}")
 async def lookup_item_by_barcode(barcode_data: str, admin_data: dict = Depends(verify_admin_access)):
     """Lookup item by barcode data for POS system"""
     try:
         logger.info(f"🔍 Looking up item by barcode: '{barcode_data}' (length: {len(barcode_data)})")
+        
+        # First, check if this is a mapped barcode (physical barcode)
+        barcode_mapping_ref = db.collection('barcode_mappings').document(barcode_data)
+        mapped_item = barcode_mapping_ref.get()
+        
+        if mapped_item.exists:
+            mapped_data = mapped_item.to_dict()
+            system_barcode = mapped_data.get('system_barcode')
+            logger.info(f"🔗 Found barcode mapping: {barcode_data} -> {system_barcode}")
+            
+            # Look up the item using the system barcode
+            items_ref = db.collection('items')
+            query = items_ref.where('barcodeData', '==', system_barcode).limit(1)
+            docs = query.stream()
+            
+            for doc in docs:
+                item_data = doc.to_dict()
+                item_data['id'] = doc.id
+                logger.info(f"✅ Found item via barcode mapping: {item_data.get('title')} | Status: {item_data.get('status')}")
+                
+                # Check if item is available for sale
+                if item_data.get('status') not in ['approved', 'live']:
+                    logger.warning(f"Item found but not available: {item_data.get('status')}")
+                    return {
+                        "success": False,
+                        "message": f"Item '{item_data.get('title', 'Unknown')}' is not available for sale (Status: {item_data.get('status', 'Unknown')})",
+                        "item": item_data,
+                        "available": False
+                    }
+                
+                logger.info(f"✅ Found available item via mapping: {item_data.get('title')} - ${item_data.get('price')}")
+                return {
+                    "success": True,
+                    "message": "Item found and available",
+                    "item": item_data,
+                    "available": True
+                }
         
         # Debug: Check recent items with barcodes
         logger.info("🔍 Checking recent items with barcodes...")
@@ -5616,6 +4368,125 @@ async def lookup_item_by_barcode(barcode_data: str, admin_data: dict = Depends(v
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to lookup item: {str(e)}"
+        )
+
+@app.post("/api/admin/map-barcode")
+async def map_barcode(request: Request, admin_data: dict = Depends(verify_admin_access)):
+    """Map a physical barcode to a system barcode"""
+    try:
+        data = await request.json()
+        physical_barcode = data.get('physical_barcode')
+        system_barcode = data.get('system_barcode')
+        item_id = data.get('item_id')
+        
+        if not physical_barcode or not system_barcode or not item_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="physical_barcode, system_barcode, and item_id are required"
+            )
+        
+        # Verify the system barcode exists
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        
+        if not item_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Item not found"
+            )
+        
+        item_data = item_doc.to_dict()
+        if item_data.get('barcodeData') != system_barcode:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="System barcode does not match item's barcode"
+            )
+        
+        # Create or update the barcode mapping
+        mapping_ref = db.collection('barcode_mappings').document(physical_barcode)
+        mapping_data = {
+            'physical_barcode': physical_barcode,
+            'system_barcode': system_barcode,
+            'item_id': item_id,
+            'item_title': item_data.get('title', ''),
+            'mapped_at': datetime.now(timezone.utc),
+            'mapped_by': admin_data.get('uid'),
+            'mapped_by_name': admin_data.get('name', 'Admin')
+        }
+        
+        mapping_ref.set(mapping_data)
+        
+        logger.info(f"✅ Mapped barcode {physical_barcode} to system barcode {system_barcode} for item {item_id}")
+        
+        return {
+            "success": True,
+            "message": f"Barcode {physical_barcode} mapped to {system_barcode}",
+            "mapping": mapping_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error mapping barcode: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to map barcode: {str(e)}"
+        )
+
+@app.get("/api/admin/barcode-mappings")
+async def get_barcode_mappings(admin_data: dict = Depends(verify_admin_access)):
+    """Get all barcode mappings"""
+    try:
+        mappings_ref = db.collection('barcode_mappings')
+        mappings = []
+        
+        for doc in mappings_ref.stream():
+            mapping_data = doc.to_dict()
+            mapping_data['id'] = doc.id
+            mappings.append(mapping_data)
+        
+        return {
+            "success": True,
+            "mappings": mappings,
+            "count": len(mappings)
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Error getting barcode mappings: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get barcode mappings: {str(e)}"
+        )
+
+@app.delete("/api/admin/barcode-mappings/{physical_barcode}")
+async def delete_barcode_mapping(physical_barcode: str, admin_data: dict = Depends(verify_admin_access)):
+    """Delete a barcode mapping"""
+    try:
+        mapping_ref = db.collection('barcode_mappings').document(physical_barcode)
+        mapping_doc = mapping_ref.get()
+        
+        if not mapping_doc.exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Barcode mapping not found"
+            )
+        
+        mapping_ref.delete()
+        
+        logger.info(f"✅ Deleted barcode mapping for {physical_barcode}")
+        
+        return {
+            "success": True,
+            "message": f"Barcode mapping for {physical_barcode} deleted"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error deleting barcode mapping: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete barcode mapping: {str(e)}"
         )
 
 @app.post("/api/admin/process-inhouse-sale")
