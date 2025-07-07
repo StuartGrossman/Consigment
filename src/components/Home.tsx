@@ -751,21 +751,33 @@ const Home: React.FC = () => {
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                            {[
-                                { name: 'Climbing', icon: '🧗', color: 'from-red-500 to-orange-500' },
-                                { name: 'Skiing', icon: '⛷️', color: 'from-blue-500 to-cyan-500' },
-                                { name: 'Hiking', icon: '🥾', color: 'from-green-500 to-emerald-500' },
-                                { name: 'Camping', icon: '⛺', color: 'from-purple-500 to-pink-500' },
-                                { name: 'Mountaineering', icon: '🏔️', color: 'from-gray-500 to-slate-500' },
-                                { name: 'Snowboarding', icon: '🏂', color: 'from-indigo-500 to-blue-500' },
-                                { name: 'Cycling', icon: '🚵', color: 'from-yellow-500 to-orange-500' },
-                                { name: 'Water Sports', icon: '🚣', color: 'from-teal-500 to-cyan-500' }
-                            ].map((category, index) => (
-                                <div key={index} className={`bg-gradient-to-br ${category.color} rounded-xl p-6 text-center cursor-pointer hover:scale-105 transition-transform`}>
-                                    <div className="text-4xl mb-3">{category.icon}</div>
-                                    <h3 className="text-white font-semibold">{category.name}</h3>
-                                </div>
-                            ))}
+                            {realCategories
+                                .filter(cat => cat.isActive)
+                                .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                                .slice(0, 8) // Show first 8 categories
+                                .map((category, index) => {
+                                    // Fallback colors for categories
+                                    const fallbackColors = [
+                                        'from-red-500 to-orange-500',
+                                        'from-blue-500 to-cyan-500',
+                                        'from-green-500 to-emerald-500',
+                                        'from-purple-500 to-pink-500',
+                                        'from-gray-500 to-slate-500',
+                                        'from-indigo-500 to-blue-500',
+                                        'from-yellow-500 to-orange-500',
+                                        'from-teal-500 to-cyan-500'
+                                    ];
+                                    
+                                    return (
+                                        <div 
+                                            key={category.id} 
+                                            className={`bg-gradient-to-br ${fallbackColors[index % fallbackColors.length]} rounded-xl p-6 text-center cursor-pointer hover:scale-105 transition-transform`}
+                                        >
+                                            <div className="text-4xl mb-3">{category.icon || '📦'}</div>
+                                            <h3 className="text-white font-semibold">{category.name}</h3>
+                                        </div>
+                                    );
+                                })}
                         </div>
                         
                         <div className="text-center mt-12">
@@ -860,7 +872,7 @@ const Home: React.FC = () => {
                                 </svg>
                             </div>
                             <div>
-                                <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
+                                        <h1 className="text-lg sm:text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
                                 <p className="text-xs text-gray-500">Mountain Consignment Store</p>
                             </div>
                         </button>
@@ -1394,32 +1406,32 @@ const Home: React.FC = () => {
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                                 {/* Search Input and Filter Button - Side by Side */}
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
                                     <div className="flex gap-3">
                                         {/* Search Input */}
                                         <div className="flex-1 relative">
-                                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                                </svg>
-                                            </div>
-                                            <input
-                                                type="text"
-                                                value={filters.searchQuery}
-                                                onChange={(e) => handleFilterChangeWithMobileClose('searchQuery', e.target.value)}
-                                                placeholder="Search for outdoor gear, brands, categories..."
-                                                className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                                            />
-                                            {filters.searchQuery && (
-                                                <button
-                                                    onClick={() => handleFilterChangeWithMobileClose('searchQuery', '')}
-                                                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
-                                                >
-                                                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                                     </svg>
-                                                </button>
-                                            )}
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    value={filters.searchQuery}
+                                                onChange={(e) => handleFilterChangeWithMobileClose('searchQuery', e.target.value)}
+                                                    placeholder="Search for outdoor gear, brands, categories..."
+                                                    className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                                                />
+                                                {filters.searchQuery && (
+                                                    <button
+                                                    onClick={() => handleFilterChangeWithMobileClose('searchQuery', '')}
+                                                        className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                                                    >
+                                                        <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                )}
                                         </div>
 
                                         {/* Filter Toggle Button - Compact */}
@@ -1438,15 +1450,15 @@ const Home: React.FC = () => {
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                             </svg>
                                         </button>
-                                    </div>
-                                    {filters.searchQuery && (
-                                        <div className="mt-2 text-center">
-                                            <p className="text-sm text-gray-600">
-                                                Searching through titles, descriptions, brands, categories, and more
-                                            </p>
+                                            </div>
+                                            {filters.searchQuery && (
+                                                <div className="mt-2 text-center">
+                                                    <p className="text-sm text-gray-600">
+                                                        Searching through titles, descriptions, brands, categories, and more
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
 
                                 {/* Collapsible Filter Panel */}
                                 <div className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all duration-300 ${filtersOpen ? 'max-h-none opacity-100' : 'max-h-0 opacity-0'}`}>
@@ -1630,115 +1642,127 @@ const Home: React.FC = () => {
                     ? (
                         <div className="flex justify-center items-center min-h-[40vh]">
                             <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-orange-500"></div>
-                        </div>
+                                    </div>
                     )
                     : (
                         <>
-                            {Object.entries(getItemsByCategory()).map(([category, items]) => (
-                                <React.Fragment key={category}>
-                                    {/* Category Banner - FULL WIDTH, OUTSIDE CONTAINER */}
-                                    <div
-                                        className="relative h-48 w-full overflow-hidden shadow-lg cursor-pointer group"
-                                        style={{
-                                            backgroundImage: `url(${getCategoryImage(category)})`,
-                                            backgroundSize: 'cover',
-                                            backgroundPosition: 'center',
-                                        }}
-                                        onClick={() => handleCategoryFilter(category)}
-                                    >
-                                        {/* Overlay */}
-                                        <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
-                                        {/* Content */}
-                                        <div className="relative h-full flex items-center px-6">
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-4xl">{getCategoryIcon(category)}</div>
-                                                <div>
-                                                    <h3 className="text-xl font-bold text-white mb-1">Explore {category}</h3>
-                                                    <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {/* Items Row for this Category */}
-                                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-                                        {/* Category Header with View All Button */}
-                                        <div className="flex items-center justify-between mb-4">
-                                            <div className="flex items-center gap-3">
-                                                <h2 className="text-xl font-bold text-gray-900">{category}</h2>
-                                                <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={() => handleCategoryFilter(category)}
-                                                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
-                                                title={`View all ${category} items`}
-                                            >
-                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                                View All
-                                            </button>
-                                        </div>
-                                        {/* Items Row (Horizontal Scroll) */}
-                                        <div className="relative overflow-hidden">
-                                            <div 
-                                                className="pb-4 overflow-x-auto scrollbar-hide"
-                                                data-category={category}
-                                                style={{ 
-                                                    scrollbarWidth: 'none',
-                                                    msOverflowStyle: 'none',
-                                                    WebkitOverflowScrolling: 'touch'
+                            {/* Get categories ordered by displayOrder */}
+                            {(() => {
+                                const itemsByCategory = getItemsByCategory();
+                                const orderedCategories = realCategories
+                                    .filter(cat => cat.isActive)
+                                    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                                    .filter(cat => itemsByCategory[cat.name] && itemsByCategory[cat.name].length > 0);
+
+                                return orderedCategories.map((category) => {
+                                    const items = itemsByCategory[category.name] || [];
+                                    return (
+                                        <React.Fragment key={category.name}>
+                                            {/* Category Banner - FULL WIDTH, OUTSIDE CONTAINER */}
+                                            <div
+                                                className="relative h-48 w-full overflow-hidden shadow-lg cursor-pointer group"
+                                                style={{
+                                                    backgroundImage: `url(${getCategoryImage(category.name)})`,
+                                                    backgroundSize: 'cover',
+                                                    backgroundPosition: 'center',
                                                 }}
+                                                onClick={() => handleCategoryFilter(category.name)}
                                             >
-                                                <div className="flex gap-4 w-max">
-                                                    {items.map((item) => (
-                                                        <div key={item.id} className="w-72 flex-shrink-0">
-                                                            <ItemCard 
-                                                                item={item} 
-                                                                isAdmin={isAdmin}
-                                                                onClick={handleItemClick}
-                                                            />
+                                                {/* Overlay */}
+                                                <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
+                                                {/* Content */}
+                                                <div className="relative h-full flex items-center px-6">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="text-4xl">{getCategoryIcon(category.name)}</div>
+                                                        <div>
+                                                            <h3 className="text-xl font-bold text-white mb-1">Explore {category.name}</h3>
+                                                            <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
                                                         </div>
-                                                    ))}
+                                                    </div>
                                                 </div>
                                             </div>
-                                            {/* Left/Right Scroll Shadows and Arrows (if needed) */}
-                                            <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-gray-50 to-transparent pointer-events-none z-10" />
-                                            <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none z-10" />
-                                            <div className="hidden lg:block">
-                                                <button
-                                                    onClick={() => {
-                                                        const container = document.querySelector(`[data-category="${category}"]`);
-                                                        if (container) {
-                                                            container.scrollBy({ left: -300, behavior: 'smooth' });
-                                                        }
-                                                    }}
-                                                    className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                                    </svg>
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        const container = document.querySelector(`[data-category="${category}"]`);
-                                                        if (container) {
-                                                            container.scrollBy({ left: 300, behavior: 'smooth' });
-                                                        }
-                                                    }}
-                                                    className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
-                                                >
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                                    </svg>
-                                                </button>
+                                            {/* Items Row for this Category */}
+                                            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+                                                {/* Category Header with View All Button */}
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <h2 className="text-xl font-bold text-gray-900">{category.name}</h2>
+                                                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
+                                                            {items.length} {items.length === 1 ? 'item' : 'items'}
+                                                        </span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleCategoryFilter(category.name)}
+                                                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
+                                                        title={`View all ${category.name} items`}
+                                                    >
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                        View All
+                                                    </button>
+                                                </div>
+                                                {/* Items Row (Horizontal Scroll) */}
+                                                <div className="relative overflow-hidden">
+                                                    <div 
+                                                        className="pb-4 overflow-x-auto scrollbar-hide"
+                                                        data-category={category.name}
+                                                        style={{ 
+                                                            scrollbarWidth: 'none',
+                                                            msOverflowStyle: 'none',
+                                                            WebkitOverflowScrolling: 'touch'
+                                                        }}
+                                                    >
+                                                        <div className="flex gap-4 w-max">
+                                                            {items.map((item) => (
+                                                                <div key={item.id} className="w-72 flex-shrink-0">
+                                                                    <ItemCard 
+                                                                        item={item} 
+                                                                        isAdmin={isAdmin}
+                                                                        onClick={handleItemClick}
+                                                                    />
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    {/* Left/Right Scroll Shadows and Arrows (if needed) */}
+                                                    <div className="absolute top-0 left-0 w-8 h-full bg-gradient-to-r from-gray-50 to-transparent pointer-events-none z-10" />
+                                                    <div className="absolute top-0 right-0 w-8 h-full bg-gradient-to-l from-gray-50 to-transparent pointer-events-none z-10" />
+                                                    <div className="hidden lg:block">
+                                                        <button
+                                                            onClick={() => {
+                                                                const container = document.querySelector(`[data-category="${category.name}"]`);
+                                                                if (container) {
+                                                                    container.scrollBy({ left: -300, behavior: 'smooth' });
+                                                                }
+                                                            }}
+                                                            className="absolute left-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                                            </svg>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const container = document.querySelector(`[data-category="${category.name}"]`);
+                                                                if (container) {
+                                                                    container.scrollBy({ left: 300, behavior: 'smooth' });
+                                                                }
+                                                            }}
+                                                            className="absolute right-2 top-1/2 transform -translate-y-1/2 bg-white/90 hover:bg-white text-gray-700 rounded-full p-2 shadow-lg transition-all duration-200 z-20"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </div>
-                                </React.Fragment>
-                            ))}
+                                        </React.Fragment>
+                                    );
+                                });
+                            })()}
                         </>
                     )
             )}
