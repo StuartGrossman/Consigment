@@ -24,9 +24,12 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
   const [foundItem, setFoundItem] = useState<ConsignmentItem | null>(null);
   const [isNewItem, setIsNewItem] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanSuccess, setScanSuccess] = useState(false);
+  const [lastScannedCode, setLastScannedCode] = useState<string>('');
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Item form state
   const [itemForm, setItemForm] = useState({
@@ -46,6 +49,12 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
   const cleanupCamera = useCallback(() => {
     console.log('🧹 Performing comprehensive camera cleanup...');
     stopCamera();
+    
+    // Clear any pending scan timeouts
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
     
     // Additional cleanup to ensure camera is fully released
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -81,6 +90,8 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
       setIsNewItem(false);
       setScanError(null);
       setIsProcessing(false);
+      setScanSuccess(false);
+      setLastScannedCode('');
       setItemForm({
         title: '',
         description: '',
@@ -129,14 +140,22 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
       console.log('📹 Starting camera initialization...');
       setCameraLoading(true);
       setScanError(null);
+      setScanSuccess(false);
       
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
+      // Enhanced camera constraints for better scanning
+      const constraints = {
+        video: {
           facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
-        } 
-      });
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          aspectRatio: { ideal: 16/9 },
+          focusMode: 'continuous',
+          exposureMode: 'continuous',
+          whiteBalanceMode: 'continuous'
+        }
+      };
+      
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       console.log('✅ Camera stream obtained');
       videoRef.current.srcObject = stream;
@@ -214,7 +233,12 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
           const barcodeText = result.getText();
           console.log('🎯 Barcode detected successfully:', barcodeText);
           console.log('📊 Barcode format:', result.getBarcodeFormat());
-          processBarcodeResult(barcodeText);
+          
+          // Debounce to prevent multiple scans of the same code
+          if (barcodeText !== lastScannedCode) {
+            setLastScannedCode(barcodeText);
+            processBarcodeResult(barcodeText);
+          }
         }
         
         if (error && !(error instanceof NotFoundException)) {
@@ -235,9 +259,17 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
     setScannedBarcode(barcodeText);
     
     try {
+      // Show success feedback
+      setScanSuccess(true);
+      
       // Stop scanning to prevent multiple detections
       console.log('🛑 Stopping scanner to prevent multiple detections');
       stopCamera();
+      
+      // Clear success feedback after a delay
+      scanTimeoutRef.current = setTimeout(() => {
+        setScanSuccess(false);
+      }, 2000);
       
       // Look up item by barcode
       console.log('🔍 Looking up item by barcode in database...');
@@ -256,22 +288,17 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
         setFoundItem(response.item);
         setIsNewItem(false);
         
-        // Pre-fill form with existing item data
-        setItemForm({
-          title: response.item.title || '',
-          description: response.item.description || '',
-          category: response.item.category || '',
-          brand: response.item.brand || '',
-          condition: response.item.condition || 'good',
-          gender: response.item.gender || 'unisex',
-          size: response.item.size || '',
-          color: response.item.color || '',
-          price: response.item.price || 0,
-          barcodeData: barcodeText
-        });
+        // Show notification that item already exists
+        setScanError('Item with this barcode already exists in the database.');
         
-        // Add item to in-store cart immediately
-        await addItemToInStoreCart(response.item.id);
+        // Restart scanning after a delay
+        setTimeout(() => {
+          if (isOpen && currentStep === 'scanning') {
+            console.log('🔄 Restarting camera after existing item found');
+            setScanError(null);
+            startCamera();
+          }
+        }, 3000);
         
       } else {
         console.log('🆕 No existing item found for barcode:', barcodeText);
@@ -298,36 +325,6 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
           startCamera();
         }
       }, 2000);
-    }
-  };
-
-  const addItemToInStoreCart = async (itemId: string) => {
-    try {
-      console.log('🛒 Adding item to in-store cart:', itemId);
-      setIsProcessing(true);
-      
-      const response = await apiService.addToInStoreCart(itemId);
-      
-      if (response.success) {
-        console.log('✅ Item added to in-store cart successfully');
-        console.log('📊 Cart details:', {
-          cart_item: response.cart_item,
-          total_amount: response.total_amount,
-          items_count: response.items_count
-        });
-        
-        // Close modal and notify parent
-        console.log('🚪 Closing modal after successful cart addition');
-        onItemAdded?.(foundItem!);
-        onClose();
-      } else {
-        throw new Error(response.message || 'Failed to add item to cart');
-      }
-      
-    } catch (error) {
-      console.error('❌ Error adding item to in-store cart:', error);
-      setScanError(`Failed to add item to cart: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsProcessing(false);
     }
   };
 
@@ -382,8 +379,9 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
           barcodeData: itemData.barcodeData
         };
         
-        console.log('🛒 Adding newly created item to in-store cart');
-        await addItemToInStoreCart(response.itemId);
+        console.log('✅ New inventory item created successfully');
+        onItemAdded?.(newItem);
+        onClose();
         
       } else {
         throw new Error(response.message || 'Failed to create item');
@@ -410,13 +408,15 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
     setIsNewItem(false);
     setScanError(null);
     setIsProcessing(false);
+    setScanSuccess(false);
+    setLastScannedCode('');
   };
 
   if (!isOpen) return null;
 
   return (
     <div 
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-50 p-4 pt-20"
       onClick={handleClose}
     >
       <div 
@@ -428,12 +428,12 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold text-gray-900">
-                {currentStep === 'scanning' ? '📷 Scan Barcode' : '✏️ Edit Item'}
+                {currentStep === 'scanning' ? '📷 Scan New Item' : '✏️ Create New Item'}
               </h2>
               <p className="text-gray-600 mt-1">
                 {currentStep === 'scanning' 
-                  ? 'Point camera at barcode to scan and add to cart' 
-                  : `${isNewItem ? 'Create new item' : 'Update existing item'}`
+                  ? 'Point camera at barcode to scan and create new inventory item' 
+                  : 'Enter details for the new item'
                 }
               </p>
             </div>
@@ -469,7 +469,7 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
                     <div className="text-white text-center">
                       <div className="text-2xl mb-2">📷</div>
                       <div className="text-sm">Point camera at barcode</div>
-                      <div className="text-xs mt-1">Item will be added to cart automatically</div>
+                      <div className="text-xs mt-1">New items will be added to inventory</div>
                     </div>
                   </div>
                 </div>
@@ -484,18 +484,19 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
                   </div>
                 )}
                 
-                {/* Processing Overlay */}
-                {isProcessing && (
-                  <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                {/* Success Overlay */}
+                {scanSuccess && (
+                  <div className="absolute inset-0 bg-green-500 bg-opacity-75 flex items-center justify-center">
                     <div className="text-white text-center">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto mb-2"></div>
-                      <div>Adding to cart...</div>
+                      <div className="text-4xl mb-2">✅</div>
+                      <div className="text-lg font-semibold">Barcode Scanned!</div>
+                      <div className="text-sm">Processing...</div>
                     </div>
                   </div>
                 )}
                 
                 {/* Scanning Status */}
-                {isScanning && !cameraLoading && !isProcessing && (
+                {isScanning && !cameraLoading && !scanSuccess && (
                   <div className="absolute bottom-4 left-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm">
                     🔍 Scanning...
                   </div>
@@ -725,7 +726,7 @@ const InventoryScanningModal: React.FC<InventoryScanningModalProps> = ({
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                       </svg>
-                      Create & Add to Cart
+                      Create Item
                     </>
                   )}
                 </button>

@@ -531,50 +531,56 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-6">
           {/* Dashboard Header */}
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Inventory Dashboard</h1>
+          <h1 className="text-2xl lg:text-3xl font-bold text-gray-900">Inventory Dashboard</h1>
           <p className="text-gray-600">Manage all items across all statuses</p>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setIsScanningModalOpen(true)}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Scan Item
-          </button>
-          <button
-            onClick={() => setShowImportModal(true)}
-            className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-            Import Data
-          </button>
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l3-3m0 0l-3-3m3 3H9" />
-            </svg>
-            Export Data
-          </button>
-          <button
-            onClick={() => setShowBulkDiscountModal(true)}
-            className="bg-orange-500 text-white px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-            </svg>
-            Auto-Discount
-          </button>
-          <div className="text-sm text-gray-500">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4">
+          <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 sm:gap-4">
+            <button
+              onClick={() => setIsScanningModalOpen(true)}
+              className="bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span className="hidden sm:inline">Scan Item</span>
+              <span className="sm:hidden">Scan</span>
+            </button>
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="bg-gray-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+              </svg>
+              <span className="hidden sm:inline">Import Data</span>
+              <span className="sm:hidden">Import</span>
+            </button>
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="bg-white text-gray-700 border border-gray-300 px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l3-3m0 0l-3-3m3 3H9" />
+              </svg>
+              <span className="hidden sm:inline">Export Data</span>
+              <span className="sm:hidden">Export</span>
+            </button>
+            <button
+              onClick={() => setShowBulkDiscountModal(true)}
+              className="bg-orange-500 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-600 transition-colors text-sm font-medium flex items-center justify-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+              </svg>
+              <span className="hidden sm:inline">Auto-Discount</span>
+              <span className="sm:hidden">Discount</span>
+            </button>
+          </div>
+          <div className="text-sm text-gray-500 text-center sm:text-left">
             Total: {items.length} items | Filtered: {filteredItems.length} items
           </div>
         </div>
@@ -582,33 +588,35 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
 
       {/* View Mode Toggle */}
       <div className="bg-white rounded-lg border p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <span className="text-sm font-medium text-gray-700">View Mode:</span>
             <div className="flex rounded-lg border border-gray-300 overflow-hidden">
               <button
                 onClick={() => setViewMode('individual')}
-                className={`px-4 py-2 text-sm font-medium ${
+                className={`px-3 sm:px-4 py-2 text-sm font-medium ${
                   viewMode === 'individual'
                     ? 'bg-orange-500 text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                Individual Items
+                <span className="hidden sm:inline">Individual Items</span>
+                <span className="sm:hidden">Individual</span>
               </button>
               <button
                 onClick={() => setViewMode('grouped')}
-                className={`px-4 py-2 text-sm font-medium ${
+                className={`px-3 sm:px-4 py-2 text-sm font-medium ${
                   viewMode === 'grouped'
                     ? 'bg-orange-500 text-white'
                     : 'bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                Grouped by Similarity
+                <span className="hidden sm:inline">Grouped by Similarity</span>
+                <span className="sm:hidden">Grouped</span>
               </button>
             </div>
           </div>
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-gray-500 text-center sm:text-left">
             {viewMode === 'individual' 
               ? `Showing ${filteredItems.length} individual items`
               : `Showing ${groupedItems.length} item groups`
@@ -618,16 +626,16 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
       </div>
 
       {/* Enhanced Search Bar */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 mb-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
-          <h3 className="text-xl font-semibold text-gray-900">Search Inventory</h3>
+          <h3 className="text-lg sm:text-xl font-semibold text-gray-900">Search Inventory</h3>
         </div>
-        <div className="relative max-w-2xl">
+        <div className="relative w-full">
           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
             <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -638,7 +646,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by title, brand, seller, description, ID, or transaction..."
-            className="block w-full pl-12 pr-12 py-4 border border-gray-300 rounded-xl text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm"
+            className="block w-full pl-12 pr-12 py-3 sm:py-4 border border-gray-300 rounded-xl text-sm sm:text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all duration-200 shadow-sm"
           />
           {searchQuery && (
             <div className="absolute inset-y-0 right-0 pr-4 flex items-center">
@@ -672,17 +680,17 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
       </div>
 
       {/* Enhanced Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-6 mb-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
             <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
             </svg>
           </div>
-          <h4 className="text-xl font-semibold text-gray-900">Filter Results</h4>
+          <h4 className="text-lg sm:text-xl font-semibold text-gray-900">Filter Results</h4>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
           
           {/* Status Filter */}
           <div className="space-y-2">
@@ -827,14 +835,14 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
         {(statusFilter !== 'all' || categoryFilter !== 'all' || brandFilter !== 'all' || 
           conditionFilter !== 'all' || genderFilter !== 'all' || shippingFilter !== 'all' || 
           refundFilter !== 'all') && (
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="mt-6 p-3 sm:p-4 bg-blue-50 border border-blue-200 rounded-lg">
             <div className="flex items-center gap-2 mb-3">
               <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z" />
               </svg>
               <span className="text-sm font-semibold text-blue-900">Active Filters</span>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1 sm:gap-2">
               {statusFilter !== 'all' && (
                 <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
                   Status: {statusFilter}
@@ -888,7 +896,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left">
+                <th className="px-3 sm:px-6 py-3 text-left">
                   <input
                     type="checkbox"
                     checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
@@ -896,13 +904,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                     className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                   />
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shelf Time</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                <th className="hidden sm:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                <th className="hidden lg:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Shelf Time</th>
+                <th className="hidden md:table-cell px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seller</th>
+                <th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -910,7 +918,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                 // Individual Items View
                 filteredItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => handleItemSelect(item.id)}>
-                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selectedItems.includes(item.id)}
@@ -918,13 +926,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         {item.images && item.images.length > 0 && (
                           <img
                             src={item.images[0]}
                             alt={item.title}
-                            className="h-10 w-10 rounded-lg object-cover mr-3"
+                            className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg object-cover mr-2 sm:mr-3"
                           />
                         )}
                         <div className="min-w-0 flex-1">
@@ -936,6 +944,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                             {item.gender && ` • ${item.gender}`}
                             {item.size && ` • Size ${item.size}`}
                           </div>
+                          {/* Status badge for mobile */}
+                          <div className="sm:hidden mt-1">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
+                              {item.status}
+                            </span>
+                          </div>
                           {/* Description with proper truncation */}
                           {item.description && (
                             <div className="text-xs text-gray-600 mt-1">
@@ -945,12 +959,12 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="hidden sm:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
                         {item.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       <div className="flex flex-col">
                         <span className={item.discountPercentage ? 'text-red-600 font-medium' : ''}>
                           ${item.price}
@@ -963,10 +977,10 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       1
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm">
                       {item.status === 'live' ? (
                         <div className="flex flex-col">
                           <span className={`${
@@ -985,18 +999,18 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         <span className="text-gray-500">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {item.sellerName}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex space-x-2">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col sm:flex-row sm:space-x-2 space-y-1 sm:space-y-0">
                         {item.status === 'live' && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDiscountClick(item);
                             }}
-                            className="text-orange-600 hover:text-orange-900"
+                            className="text-orange-600 hover:text-orange-900 text-xs sm:text-sm"
                           >
                             Discount
                           </button>
@@ -1007,7 +1021,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                               e.stopPropagation();
                               handleSingleItemAction(item.id, 'archived');
                             }}
-                            className="text-gray-600 hover:text-gray-900"
+                            className="text-gray-600 hover:text-gray-900 text-xs sm:text-sm"
                           >
                             Archive
                           </button>
@@ -1027,7 +1041,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                       setSelectedItems(prev => [...prev, ...group.items.map(item => item.id)]);
                     }
                   }}>
-                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={group.items.every(item => selectedItems.includes(item.id))}
@@ -1042,13 +1056,13 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         className="rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                       />
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         {group.representativeItem.images && group.representativeItem.images.length > 0 && (
                           <img
                             src={group.representativeItem.images[0]}
                             alt={group.title}
-                            className="h-10 w-10 rounded-lg object-cover mr-3"
+                            className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg object-cover mr-2 sm:mr-3"
                           />
                         )}
                         <div>
@@ -1058,10 +1072,20 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                             {group.brand && `${group.brand} • `}
                             {group.condition}
                           </div>
+                          {/* Status badges for mobile */}
+                          <div className="sm:hidden mt-1">
+                            <div className="flex flex-wrap gap-1">
+                              {[...new Set(group.items.map(item => item.status))].map(status => (
+                                <span key={status} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+                                  {status}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="hidden sm:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-wrap gap-1">
                         {[...new Set(group.items.map(item => item.status))].map(status => (
                           <span key={status} className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
@@ -1070,24 +1094,24 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                         ))}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       ${Math.min(...group.items.map(item => item.price))}
                       {group.items.length > 1 && ` - $${Math.max(...group.items.map(item => item.price))}`}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                         {group.quantity}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="hidden lg:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {group.items.some(item => item.status === 'live') ? 
                         getShelfTime(group.items.find(item => item.status === 'live')!) : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="hidden md:table-cell px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {[...new Set(group.items.map(item => item.sellerName))].join(', ')}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex space-x-2">
+                    <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex flex-col sm:flex-row sm:space-x-2 space-y-1 sm:space-y-0">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1098,7 +1122,7 @@ const InventoryDashboard: React.FC<InventoryDashboardProps> = () => {
                               }
                             });
                           }}
-                          className="text-gray-600 hover:text-gray-900"
+                          className="text-gray-600 hover:text-gray-900 text-xs sm:text-sm"
                         >
                           Archive All
                         </button>

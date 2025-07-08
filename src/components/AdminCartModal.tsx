@@ -91,6 +91,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [cardReaderAvailable, setCardReaderAvailable] = useState(false);
   const [isCheckingCardReader, setIsCheckingCardReader] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ConsignmentItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -1028,6 +1029,83 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     onClose();
   };
 
+  const handleRefreshCart = async () => {
+    try {
+      setIsRefreshing(true);
+      console.log('🔄 Refreshing admin cart data...');
+      
+      // Add a small delay to show the loading state
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Reload cart state from localStorage
+      const refreshedState = loadCartState();
+      
+      // Update the cart with fresh data
+      setAdminCart(refreshedState.cart);
+      setSelectedCustomer(refreshedState.customer);
+      setPointsToApply(refreshedState.points);
+      setPaymentMethod(refreshedState.paymentMethod);
+      
+      // Update customer info if customer is selected
+      if (refreshedState.customer) {
+        setCustomerInfo({
+          uid: refreshedState.customer.uid,
+          name: refreshedState.customer.displayName || refreshedState.customer.email || 'Unknown Customer',
+          email: refreshedState.customer.email || '',
+          phone: refreshedState.customer.phoneNumber || '',
+          points: refreshedState.customer.points || 0
+        });
+      } else {
+        setCustomerInfo({ name: '', email: '', phone: '' });
+      }
+      
+      // Clear any search results to show fresh state
+      setSearchQuery('');
+      setSearchResults([]);
+      
+      console.log('✅ Cart refreshed successfully');
+      console.log('📊 Refreshed cart items:', refreshedState.cart.length);
+      console.log('👤 Refreshed customer:', refreshedState.customer ? 'Selected' : 'None');
+      
+      // Show success notification
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2';
+      toast.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span>Cart refreshed! ${refreshedState.cart.length} items loaded</span>
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 3000);
+      
+    } catch (error) {
+      console.error('❌ Error refreshing cart:', error);
+      
+      // Show error notification
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 z-50 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2';
+      toast.innerHTML = `
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+        <span>Failed to refresh cart</span>
+      `;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        if (document.body.contains(toast)) {
+          document.body.removeChild(toast);
+        }
+      }, 3000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const handleClearCart = async () => {
     try {
       // Clear the cart in the database
@@ -1221,6 +1299,21 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <button
+                onClick={handleRefreshCart}
+                disabled={isRefreshing}
+                className={`focus:outline-none px-3 py-1 rounded border transition-colors flex items-center gap-1 ${
+                  isRefreshing 
+                    ? 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed' 
+                    : 'text-blue-600 hover:text-blue-800 border-blue-200 hover:bg-blue-50'
+                }`}
+                title="Refresh Cart Data"
+              >
+                <svg className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
               {adminCart.length > 0 && (
                 <button
                   onClick={handleClearCart}
