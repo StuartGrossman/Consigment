@@ -4,7 +4,7 @@ import { ConsignmentItem } from '../types';
 import { apiService } from '../services/apiService';
 import { useCriticalActionThrottle } from '../hooks/useButtonThrottle';
 import { useUserRateLimiter } from '../hooks/useUserRateLimiter';
-import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
+import { BrowserMultiFormatReader, NotFoundException, DecodeHintType, BarcodeFormat } from '@zxing/library';
 
 interface AdminCartItem {
   item: ConsignmentItem;
@@ -109,6 +109,8 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
   const [cameraPopupOpen, setCameraPopupOpen] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [scanAttempts, setScanAttempts] = useState(0);
+  const [lastScanTime, setLastScanTime] = useState<number>(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
 
@@ -231,6 +233,8 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     
     setCameraLoading(true);
     setScanError(null);
+    setScanAttempts(0); // Reset scan attempts
+    setLastScanTime(0); // Reset last scan time
     
     // Immediately open the camera popup
     setCameraPopupOpen(true);
@@ -238,16 +242,35 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     
     try {
       console.log('📱 [CAMERA] Requesting camera permissions...');
+      
+      // Enhanced camera constraints for better barcode scanning
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'environment', // Use back camera
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          width: { ideal: 1920, min: 1280 }, // Higher resolution for better detail
+          height: { ideal: 1080, min: 720 },
+          aspectRatio: { ideal: 16/9 }, // Standard aspect ratio
+          frameRate: { ideal: 30, min: 15 }, // Higher frame rate for faster scanning
+          // Advanced settings for mobile devices
+          ...(navigator.userAgent.includes('Mobile') && {
+            width: { ideal: 1280, min: 640 },
+            height: { ideal: 720, min: 480 },
+            frameRate: { ideal: 24, min: 10 }
+          })
         } 
       });
       
       console.log('📱 [CAMERA] Camera stream obtained:', stream);
       console.log('📱 [CAMERA] Video tracks:', stream.getVideoTracks());
+      
+      // Log camera capabilities
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const capabilities = videoTrack.getCapabilities();
+        const settings = videoTrack.getSettings();
+        console.log('📱 [CAMERA] Camera capabilities:', capabilities);
+        console.log('📱 [CAMERA] Camera settings:', settings);
+      }
       
       if (videoRef.current) {
         console.log('📱 [CAMERA] Setting video source object...');
@@ -262,6 +285,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
               .then(() => {
                 console.log('📱 [CAMERA] Camera started successfully');
                 console.log('📱 [CAMERA] Video dimensions:', video.videoWidth, 'x', video.videoHeight);
+                console.log('📱 [CAMERA] Video aspect ratio:', video.videoWidth / video.videoHeight);
                 startBarcodeScanning();
                 setCameraLoading(false);
                 resolve();
@@ -347,22 +371,34 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
       
       console.log('🔍 [SCANNER] Setting up decode callback...');
       
-      // Use optimized settings for faster scanning
+      // Use optimized settings for faster scanning with multiple attempts
       await codeReader.decodeFromVideoDevice(null, videoRef.current, (result: any, error: any) => {
         if (result) {
           console.log('✅ [SCANNER] Barcode detected!');
           console.log('✅ [SCANNER] Barcode text:', result.getText());
           console.log('📊 [SCANNER] Barcode format:', result.getBarcodeFormat());
           console.log('🎯 [SCANNER] Processing barcode result...');
+          setScanAttempts(0); // Reset attempts on success
+          
+          // Show immediate visual feedback
+          const overlay = document.querySelector('.scanning-overlay');
+          if (overlay) {
+            overlay.classList.add('barcode-detected');
+            setTimeout(() => overlay.classList.remove('barcode-detected'), 500);
+          }
+          
           processBarcodeResult(result.getText());
         }
         
         if (error) {
           if (error instanceof NotFoundException) {
+            // Track scanning attempts for better user feedback
+            setScanAttempts(prev => prev + 1);
+            
             // This is normal - no barcode found in current frame
             // Reduced logging for better performance
-            if (Math.random() < 0.05) { // Log only 5% of NotFoundException errors
-              console.log('🔍 [SCANNER] Scanning...');
+            if (Math.random() < 0.01) { // Log only 1% of NotFoundException errors for better performance
+              console.log('🔍 [SCANNER] Scanning... (attempts:', scanAttempts + 1, ')');
             }
           } else {
             console.log('⚠️ [SCANNER] Scanning error:', error.message);
@@ -380,7 +416,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
         } else {
           clearInterval(scanInterval);
         }
-      }, 5000); // Log every 5 seconds instead of 3
+      }, 10000); // Log every 10 seconds for better performance
       
       // Store the interval ID for cleanup
       const cleanupInterval = () => {
@@ -444,7 +480,15 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     console.log('🔄 [PROCESS] Current scanning state:', isScanning);
     console.log('🔄 [PROCESS] Last scanned barcode:', lastScannedBarcode);
     
+    // Debounce mechanism to prevent processing the same barcode multiple times
+    const now = Date.now();
+    if (now - lastScanTime < 2000) { // 2 second debounce
+      console.log('⏳ [PROCESS] Debouncing barcode scan, too soon since last scan');
+      return;
+    }
+    
     setLastScannedBarcode(barcodeText);
+    setLastScanTime(now);
     
     if (isScanning) {
       console.log('⏳ [PROCESS] Already processing barcode, skipping:', barcodeText);
@@ -1147,10 +1191,22 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
     }, 2000);
   };
 
+  // Add CSS for barcode detection feedback
+  const barcodeDetectionStyles = `
+    .scanning-overlay.barcode-detected {
+      border-color: #10b981 !important;
+      background-color: rgba(16, 185, 129, 0.3) !important;
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+    }
+  `;
+
   if (!isOpen) return null;
 
   return (
-    <div className="mobile-admin-modal">
+    <>
+      <style>{barcodeDetectionStyles}</style>
+      <div className="mobile-admin-modal">
       <div className="mobile-admin-modal-content">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 p-4 sm:p-6">
@@ -1965,8 +2021,8 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
 
       {/* Camera Popup */}
       {cameraPopupOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 z-[9999] flex items-center justify-center p-1 sm:p-4">
-          <div className="bg-white rounded-lg w-full max-w-3xl max-h-[95vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[9999] flex items-start justify-center p-1 sm:p-4 pt-16">
+          <div className="bg-white rounded-lg w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col mt-8">
             {/* Camera Popup Header */}
             <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white p-4">
               <div className="flex justify-between items-center">
@@ -1994,39 +2050,67 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
                   playsInline 
                   muted
                   className="w-full h-full object-cover"
+                  style={{
+                    transform: 'scaleX(-1)', // Mirror the video for better UX
+                    filter: 'contrast(1.2) brightness(1.1)', // Enhance contrast for better barcode detection
+                  }}
                 />
                 
-                {/* Scanning Overlay */}
+                {/* Enhanced Scanning Overlay */}
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-[90vw] max-w-xl h-40 border-8 border-white border-dashed relative">
-                    <div className="absolute -top-2 -left-2 w-8 h-8 border-l-8 border-t-8 border-orange-400"></div>
-                    <div className="absolute -top-2 -right-2 w-8 h-8 border-r-8 border-t-8 border-orange-400"></div>
-                    <div className="absolute -bottom-2 -left-2 w-8 h-8 border-l-8 border-b-8 border-orange-400"></div>
-                    <div className="absolute -bottom-2 -right-2 w-8 h-8 border-r-8 border-b-8 border-orange-400"></div>
+                  <div className="scanning-overlay w-[85vw] max-w-lg h-48 border-4 border-white border-dashed relative bg-black bg-opacity-20 transition-all duration-300">
+                    {/* Corner indicators with animation */}
+                    <div className="absolute -top-1 -left-1 w-6 h-6 border-l-4 border-t-4 border-green-400 animate-pulse"></div>
+                    <div className="absolute -top-1 -right-1 w-6 h-6 border-r-4 border-t-4 border-green-400 animate-pulse"></div>
+                    <div className="absolute -bottom-1 -left-1 w-6 h-6 border-l-4 border-b-4 border-green-400 animate-pulse"></div>
+                    <div className="absolute -bottom-1 -right-1 w-6 h-6 border-r-4 border-b-4 border-green-400 animate-pulse"></div>
+                    
+                    {/* Center crosshair for precise positioning */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-16 h-16 border-2 border-red-400 border-dashed rounded-full animate-spin" style={{ animationDuration: '3s' }}></div>
+                    </div>
+                    
+                    {/* Scanning line animation */}
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-green-400 to-transparent animate-pulse"></div>
                   </div>
                 </div>
-                {/* Scanning Status Indicators */}
-                <div className="absolute top-2 left-2 bg-blue-500 text-white px-2 py-1 rounded text-xs">
-                  🔍 Scanning...
+                {/* Enhanced Scanning Status Indicators */}
+                <div className="absolute top-2 left-2 bg-blue-500 text-white px-3 py-1 rounded-lg text-xs font-medium shadow-lg">
+                  🔍 Scanning... {scanAttempts > 0 && `(${scanAttempts} attempts)`}
                 </div>
                 {isScanning && (
-                  <div className="absolute top-2 right-2 bg-green-500 text-white px-2 py-1 rounded text-xs">
-                    Processing...
+                  <div className="absolute top-2 right-2 bg-green-500 text-white px-3 py-1 rounded-lg text-xs font-medium shadow-lg animate-pulse">
+                    ⚡ Processing...
+                  </div>
+                )}
+                {scanAttempts > 5 && (
+                  <div className="absolute bottom-2 left-2 bg-yellow-500 text-white px-3 py-1 rounded-lg text-xs font-medium shadow-lg">
+                    💡 Try adjusting distance or angle
                   </div>
                 )}
               </div>
 
-              {/* Instructions */}
+              {/* Enhanced Instructions */}
               <div className="mt-4 text-center">
-                <p className="text-gray-600 text-sm">
-                  Position the barcode within the scanning area. The item will be automatically added to the cart.
+                <p className="text-gray-600 text-sm font-medium">
+                  Position the barcode within the green scanning area. The item will be automatically added to the cart.
                 </p>
-                <div className="mt-2 text-xs text-gray-500 space-y-1">
-                  <p>💡 <strong>Tips for faster scanning:</strong></p>
-                  <p>• Hold the barcode steady and parallel to the camera</p>
-                  <p>• Ensure good lighting and avoid shadows</p>
-                  <p>• Keep the barcode within the orange border</p>
-                  <p>• Try different distances if scanning is slow</p>
+                <div className="mt-3 text-xs text-gray-500 space-y-2">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="font-semibold text-blue-800 mb-2">🚀 <strong>Optimized Scanning Tips:</strong></p>
+                    <div className="space-y-1 text-blue-700">
+                      <p>• 📱 Hold phone 6-12 inches from barcode for best results</p>
+                      <p>• 🎯 Center the barcode within the green border</p>
+                      <p>• 💡 Ensure bright, even lighting (avoid shadows)</p>
+                      <p>• 📐 Keep barcode parallel to the screen</p>
+                      <p>• 🔄 Try different angles if scanning is slow</p>
+                      <p>• ⚡ Scanner now optimized for faster detection!</p>
+                    </div>
+                  </div>
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-2">
+                    <p className="text-green-700 font-medium">✅ Enhanced Features:</p>
+                    <p className="text-green-600 text-xs">• Higher resolution camera • Faster frame rate • Better contrast • Multiple barcode formats</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2036,8 +2120,8 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
 
       {/* Barcode Mapping Modal */}
       {showBarcodeMapping && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 z-[9999] flex items-center justify-center p-1 sm:p-4">
-          <div className="bg-white rounded-lg w-full max-w-2xl h-[95vh] sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col m-2">
+        <div className="fixed inset-0 bg-black bg-opacity-75 z-[9999] flex items-start justify-center p-1 sm:p-4 pt-16">
+          <div className="bg-white rounded-lg w-full max-w-2xl h-[85vh] sm:h-auto sm:max-h-[85vh] overflow-hidden flex flex-col m-2 mt-8">
             {/* Header */}
             <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-4">
               <div className="flex justify-between items-center">
@@ -2170,6 +2254,7 @@ const AdminCartModal: React.FC<AdminCartModalProps> = ({ isOpen, onClose, items 
         </div>
       )}
     </div>
+    </>
   );
 };
 

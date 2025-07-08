@@ -29,16 +29,15 @@ import AdminCartModal from './AdminCartModal';
 import { Banner } from './Banner';
 import { bannerImages } from '../assets/banner-images';
 import {
-  climbingAction,
-  alpineClimbing,
-  mountainTrail,
-  campsiteEvening,
-  skiingPowder,
-  snowboardJump,
-  whitewaterRafting,
-  mountainBiking,
-  outdoorClothing,
-  hikingBoots
+    alpineClimbing,
+    mountainTrail,
+    campsiteEvening,
+    skiingPowder,
+    snowboardJump,
+    whitewaterRafting,
+    mountainBiking,
+    outdoorClothing,
+    hikingBoots
 } from '../assets/category-images';
 import { AnalyticsPage, InventoryPage, ActionsPage, UserHistoryPage } from '../pages';
 import { useItemManagement } from '../hooks/useItemManagement';
@@ -571,7 +570,6 @@ const Home: React.FC = () => {
         
         // Fallback to hardcoded images if no real category data
         const fallbackImages: { [key: string]: string } = {
-            'Climbing': climbingAction,
             'Mountaineering': alpineClimbing,
             'Hiking': mountainTrail,
             'Camping': campsiteEvening,
@@ -595,7 +593,6 @@ const Home: React.FC = () => {
         
         // Fallback to hardcoded icons if no real category data
         const fallbackIcons: { [key: string]: string } = {
-            'Climbing': '🧗',
             'Skiing': '⛷️',
             'Hiking': '🥾',
             'Camping': '⛺',
@@ -1406,7 +1403,6 @@ const Home: React.FC = () => {
                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
                                 {/* Search Input and Filter Button - Side by Side */}
                                 <div className="mb-4">
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
                                     <div className="flex gap-3">
                                         {/* Search Input */}
                                         <div className="flex-1 relative">
@@ -1660,7 +1656,7 @@ const Home: React.FC = () => {
                                         <React.Fragment key={category.name}>
                                             {/* Category Banner - FULL WIDTH, OUTSIDE CONTAINER */}
                                             <div
-                                                className="relative h-48 w-full overflow-hidden shadow-lg cursor-pointer group"
+                                                className="relative h-48 w-full overflow-hidden shadow-lg cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02]"
                                                 style={{
                                                     backgroundImage: `url(${getCategoryImage(category.name)})`,
                                                     backgroundSize: 'cover',
@@ -1669,40 +1665,39 @@ const Home: React.FC = () => {
                                                 onClick={() => handleCategoryFilter(category.name)}
                                             >
                                                 {/* Overlay */}
-                                                <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
+                                                <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/70 group-hover:via-black/40 transition-all duration-300"></div>
+                                                
                                                 {/* Content */}
                                                 <div className="relative h-full flex items-center px-6">
                                                     <div className="flex items-center gap-4">
-                                                        <div className="text-4xl">{getCategoryIcon(category.name)}</div>
+                                                        <div className="text-4xl group-hover:scale-110 transition-transform duration-300">{getCategoryIcon(category.name)}</div>
                                                         <div>
-                                                            <h3 className="text-xl font-bold text-white mb-1">Explore {category.name}</h3>
-                                                            <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
+                                                            <h3 className="text-xl font-bold text-white mb-1 group-hover:text-orange-200 transition-colors duration-300">Explore {category.name}</h3>
+                                                            <p className="text-white/80 text-sm group-hover:text-white/90 transition-colors duration-300">Discover quality gear for your adventures</p>
                                                         </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* View All Button - Appears on Hover */}
+                                                <div className="absolute top-4 right-6 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-4 group-hover:translate-x-0">
+                                                    <div className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-2 text-white font-medium text-sm flex items-center gap-2">
+                                                        <span>View All</span>
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                                
+                                                {/* Item Count Badge - Appears on Hover */}
+                                                <div className="absolute bottom-4 right-6 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+                                                    <div className="bg-orange-500/90 backdrop-blur-sm rounded-full px-3 py-1 text-white font-medium text-sm">
+                                                        {items.length} {items.length === 1 ? 'item' : 'items'}
                                                     </div>
                                                 </div>
                                             </div>
                                             {/* Items Row for this Category */}
                                             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
-                                                {/* Category Header with View All Button */}
-                                                <div className="flex items-center justify-between mb-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <h2 className="text-xl font-bold text-gray-900">{category.name}</h2>
-                                                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                                                            {items.length} {items.length === 1 ? 'item' : 'items'}
-                                                        </span>
-                                                    </div>
-                                                    <button
-                                                        onClick={() => handleCategoryFilter(category.name)}
-                                                        className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
-                                                        title={`View all ${category.name} items`}
-                                                    >
-                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                        </svg>
-                                                        View All
-                                                    </button>
-                                                </div>
+                                                {/* Removed category header - banner shows category info */}
                                                 {/* Items Row (Horizontal Scroll) */}
                                                 <div className="relative overflow-hidden">
                                                     <div 
@@ -1715,7 +1710,7 @@ const Home: React.FC = () => {
                                                         }}
                                                     >
                                                         <div className="flex gap-4 w-max">
-                                                            {items.map((item) => (
+                                                            {items.slice(0, 5).map((item) => (
                                                                 <div key={item.id} className="w-72 flex-shrink-0">
                                                                     <ItemCard 
                                                                         item={item} 

@@ -1229,18 +1229,7 @@ class ApiService {
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             },
-            {
-                id: 'climbing',
-                name: 'Climbing',
-                description: 'Rock climbing and mountaineering equipment',
-                icon: '🧗',
-                bannerImage: '/alpine-climbing.jpg',
-                attributes: [],
-                isActive: true,
-                displayOrder: 0,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            },
+
             {
                 id: 'camping',
                 name: 'Camping',

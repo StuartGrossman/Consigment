@@ -318,31 +318,6 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Simple Header with Back Button */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l14 9-9 7-6-2 1-14z" />
-                </svg>
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Summit Gear Exchange</h1>
-                <p className="text-sm text-gray-500">Mountain Consignment Store</p>
-              </div>
-            </div>
-            <button
-              onClick={() => window.location.href = '/'}
-              className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors font-medium"
-            >
-              Back to Store
-            </button>
-          </div>
-        </div>
-      </div>
-      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="space-y-6">
           {/* Dashboard Header */}
@@ -430,181 +405,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         </div>
       </div>
 
-      {/* Collapsible Search & Filter Section */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Search & Filter Toggle Button */}
-        <button
-          onClick={() => setFiltersOpen(!filtersOpen)}
-          className="w-full mb-4 bg-white rounded-xl shadow-lg border p-4 flex items-center justify-between text-left hover:shadow-xl transition-shadow"
-        >
-          <div className="flex items-center gap-3">
-            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">Search & Filter</h2>
-              <p className="text-sm text-gray-600">Search actions and users</p>
-            </div>
-            {(actionFilter !== 'all' || userTypeFilter !== 'all' || timeFilter !== '24h' || searchQuery) && (
-              <span className="bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded-full font-medium">Active</span>
-            )}
-          </div>
-          <svg className={`w-6 h-6 text-gray-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
 
-        {/* Collapsible Search & Filter Panel */}
-        <div className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all duration-300 ${filtersOpen ? 'max-h-none opacity-100' : 'max-h-0 opacity-0'}`}>
-          <div className="p-6 sm:p-8">
-            {/* Search Input */}
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search users, actions, items, emails..."
-                  className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
-                  >
-                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-              {searchQuery && (
-                <div className="mt-2 text-center">
-                  <p className="text-sm text-gray-600">
-                    Searching through user names, emails, actions, and item details
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Filter Controls */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-
-          {/* Action Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Action Type</label>
-            <select
-              value={actionFilter}
-              onChange={(e) => setActionFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="all">All Actions</option>
-              <option value="item_listed">Item Listed</option>
-              <option value="item_approved">Item Approved</option>
-              <option value="item_purchased">Item Purchased</option>
-              <option value="item_sold">Item Sold</option>
-              <option value="item_archived">Item Archived</option>
-              <option value="item_discounted">Item Discounted</option>
-              <option value="bulk_discount">Bulk Discount</option>
-              <option value="status_changed">Status Changed</option>
-              <option value="barcode_generated">Barcode Generated</option>
-              <option value="shipping_label_generated">Shipping Label Generated</option>
-              <option value="item_shipped">Item Shipped</option>
-              <option value="user_login">User Login</option>
-              <option value="bulk_action">Bulk Actions</option>
-              <option value="item_bookmarked">Item Bookmarked</option>
-              <option value="cart_updated">Cart Updated</option>
-              <option value="admin_action">Admin Actions</option>
-            </select>
-          </div>
-
-          {/* User Type Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">User Type</label>
-            <select
-              value={userTypeFilter}
-              onChange={(e) => setUserTypeFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="all">All Users</option>
-              <option value="admin">Admin Only</option>
-              <option value="user">Users Only</option>
-            </select>
-          </div>
-
-          {/* Time Filter */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
-            <select
-              value={timeFilter}
-              onChange={(e) => setTimeFilter(e.target.value)}
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-            >
-              <option value="1d">Last Day</option>
-              <option value="3d">Last 3 Days</option>
-              <option value="1w">Last Week</option>
-              <option value="1m">Last Month</option>
-              <option value="1h">Last Hour</option>
-              <option value="24h">Last 24 Hours</option>
-            </select>
-          </div>
-
-          {/* Export Button */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Export</label>
-            <button
-              onClick={() => {
-                // TODO: Implement CSV export
-                console.log('Export actions to CSV');
-              }}
-              className="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors text-sm"
-            >
-              Export CSV
-            </button>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-gray-200">
-          <div className="text-sm text-gray-600">
-            {searchQuery && (
-              <span className="mr-4">
-                Searching for "<span className="font-medium text-gray-900">{searchQuery}</span>"
-              </span>
-            )}
-            {(actionFilter !== 'all' || userTypeFilter !== 'all' || timeFilter !== '24h') && (
-              <span className="text-orange-600 font-medium">Filters active</span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setActionFilter('all');
-                setUserTypeFilter('all'); 
-                setTimeFilter('24h');
-                setSearchQuery('');
-              }}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Clear All
-            </button>
-            <button
-              onClick={() => setFiltersOpen(false)}
-              className="px-4 py-2 text-sm text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition-colors"
-            >
-              Apply Filters
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
 
       {/* User Engagement Chart */}
       <div className="bg-white rounded-lg border p-6">
@@ -615,7 +416,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
         
         <div className="space-y-4">
           {/* Legend */}
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-6">
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 bg-red-500 rounded"></div>
               <span className="text-sm text-gray-700">Admin Actions</span>
@@ -627,24 +428,24 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
           </div>
 
           {/* Enhanced User Engagement Chart */}
-          <div className="relative h-80 bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="relative h-60 sm:h-80 bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-xl p-3 sm:p-6 shadow-sm overflow-x-auto">
             {engagementData.length > 0 ? (
-              <div className="h-full flex items-end justify-between gap-2">
+              <div className="h-full flex items-end justify-between gap-1 sm:gap-2 min-w-max">
                 {engagementData.map((dataPoint, index) => {
                   const maxValue = Math.max(...engagementData.map(d => Math.max(d.admin, d.user))) || 1;
                   const adminHeight = Math.max((dataPoint.admin / maxValue) * 100, 2);
                   const userHeight = Math.max((dataPoint.user / maxValue) * 100, 2);
                   
                   return (
-                    <div key={index} className="flex-1 flex flex-col items-center gap-2 group">
+                    <div key={index} className="flex flex-col items-center gap-1 sm:gap-2 group min-w-[40px] sm:min-w-[60px]">
                       {/* Bars Container */}
-                      <div className="relative w-full flex justify-center items-end h-52 gap-1">
+                      <div className="relative w-full flex justify-center items-end h-32 sm:h-52 gap-0.5 sm:gap-1">
                         {/* Admin bar */}
                         <div 
-                          className="bg-gradient-to-t from-red-600 to-red-400 rounded-t-md w-4 transition-all duration-500 hover:from-red-700 hover:to-red-500 transform hover:scale-105 shadow-sm border border-red-200 group-hover:shadow-md"
+                          className="bg-gradient-to-t from-red-600 to-red-400 rounded-t-md w-3 sm:w-4 transition-all duration-500 hover:from-red-700 hover:to-red-500 transform hover:scale-105 shadow-sm border border-red-200 group-hover:shadow-md"
                           style={{ 
                             height: `${adminHeight}%`,
-                            minHeight: dataPoint.admin > 0 ? '8px' : '0px'
+                            minHeight: dataPoint.admin > 0 ? '6px' : '0px'
                           }}
                           title={`Admin: ${dataPoint.admin} actions at ${dataPoint.time}`}
                         >
@@ -658,10 +459,10 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
                         
                         {/* User bar */}
                         <div 
-                          className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md w-4 transition-all duration-500 hover:from-blue-700 hover:to-blue-500 transform hover:scale-105 shadow-sm border border-blue-200 group-hover:shadow-md"
+                          className="bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-md w-3 sm:w-4 transition-all duration-500 hover:from-blue-700 hover:to-blue-500 transform hover:scale-105 shadow-sm border border-blue-200 group-hover:shadow-md"
                           style={{ 
                             height: `${userHeight}%`,
-                            minHeight: dataPoint.user > 0 ? '8px' : '0px'
+                            minHeight: dataPoint.user > 0 ? '6px' : '0px'
                           }}
                           title={`Users: ${dataPoint.user} actions at ${dataPoint.time}`}
                         >
@@ -675,7 +476,7 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
                       </div>
                       
                       {/* Time label with better styling */}
-                      <div className="text-xs text-gray-600 font-medium transform -rotate-45 whitespace-nowrap group-hover:text-gray-800 transition-colors duration-200 bg-white/80 px-1 py-0.5 rounded">
+                      <div className="text-xs text-gray-600 font-medium transform -rotate-45 sm:transform-none whitespace-nowrap group-hover:text-gray-800 transition-colors duration-200 bg-white/80 px-1 py-0.5 rounded text-center">
                         {dataPoint.time}
                       </div>
                     </div>
@@ -728,30 +529,177 @@ const ActionsDashboard: React.FC<ActionsDashboardProps> = ({ user, isAdmin }) =>
           </div>
 
           {/* Summary Stats for Chart */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 pt-4 border-t border-gray-200">
             <div className="text-center">
-              <div className="text-lg font-bold text-red-600">
+              <div className="text-base sm:text-lg font-bold text-red-600">
                 {engagementData.reduce((sum, d) => sum + d.admin, 0)}
               </div>
               <div className="text-xs text-gray-600">Total Admin Actions</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-blue-600">
+              <div className="text-base sm:text-lg font-bold text-blue-600">
                 {engagementData.reduce((sum, d) => sum + d.user, 0)}
               </div>
               <div className="text-xs text-gray-600">Total User Actions</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-green-600">
+              <div className="text-base sm:text-lg font-bold text-green-600">
                 {engagementData.length > 0 ? Math.round(engagementData.reduce((sum, d) => sum + d.admin + d.user, 0) / engagementData.length) : 0}
               </div>
               <div className="text-xs text-gray-600">Avg Actions/Period</div>
             </div>
             <div className="text-center">
-              <div className="text-lg font-bold text-purple-600">
+              <div className="text-base sm:text-lg font-bold text-purple-600">
                 {Math.max(...engagementData.map(d => d.admin + d.user), 0)}
               </div>
               <div className="text-xs text-gray-600">Peak Activity</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & Filter Section */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {/* Search & Filter Panel */}
+        <div className="bg-white rounded-xl shadow-lg border">
+          <div className="p-6 sm:p-8">
+            {/* Search Input */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search users, actions, items, emails..."
+                  className="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute inset-y-0 right-0 pr-4 flex items-center hover:bg-gray-50 rounded-r-lg transition-colors"
+                  >
+                    <svg className="h-5 w-5 text-gray-400 hover:text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {searchQuery && (
+                <div className="mt-2 text-center">
+                  <p className="text-sm text-gray-600">
+                    Searching through user names, emails, actions, and item details
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Filter Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              {/* Action Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Action Type</label>
+                <select
+                  value={actionFilter}
+                  onChange={(e) => setActionFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="all">All Actions</option>
+                  <option value="item_listed">Item Listed</option>
+                  <option value="item_approved">Item Approved</option>
+                  <option value="item_purchased">Item Purchased</option>
+                  <option value="item_sold">Item Sold</option>
+                  <option value="item_archived">Item Archived</option>
+                  <option value="item_discounted">Item Discounted</option>
+                  <option value="bulk_discount">Bulk Discount</option>
+                  <option value="status_changed">Status Changed</option>
+                  <option value="barcode_generated">Barcode Generated</option>
+                  <option value="shipping_label_generated">Shipping Label Generated</option>
+                  <option value="item_shipped">Item Shipped</option>
+                  <option value="user_login">User Login</option>
+                  <option value="bulk_action">Bulk Actions</option>
+                  <option value="item_bookmarked">Item Bookmarked</option>
+                  <option value="cart_updated">Cart Updated</option>
+                  <option value="admin_action">Admin Actions</option>
+                </select>
+              </div>
+
+              {/* User Type Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">User Type</label>
+                <select
+                  value={userTypeFilter}
+                  onChange={(e) => setUserTypeFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="all">All Users</option>
+                  <option value="admin">Admin Only</option>
+                  <option value="user">Users Only</option>
+                </select>
+              </div>
+
+              {/* Time Filter */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Time Range</label>
+                <select
+                  value={timeFilter}
+                  onChange={(e) => setTimeFilter(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="1d">Last Day</option>
+                  <option value="3d">Last 3 Days</option>
+                  <option value="1w">Last Week</option>
+                  <option value="1m">Last Month</option>
+                  <option value="1h">Last Hour</option>
+                  <option value="24h">Last 24 Hours</option>
+                </select>
+              </div>
+
+              {/* Export Button */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Export</label>
+                <button
+                  onClick={() => {
+                    // TODO: Implement CSV export
+                    console.log('Export actions to CSV');
+                  }}
+                  className="w-full bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition-colors text-sm"
+                >
+                  Export CSV
+                </button>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 justify-between items-center pt-4 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                {searchQuery && (
+                  <span className="mr-4">
+                    Searching for "<span className="font-medium text-gray-900">{searchQuery}</span>"
+                  </span>
+                )}
+                {(actionFilter !== 'all' || userTypeFilter !== 'all' || timeFilter !== '24h') && (
+                  <span className="text-orange-600 font-medium">Filters active</span>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setActionFilter('all');
+                    setUserTypeFilter('all'); 
+                    setTimeFilter('24h');
+                    setSearchQuery('');
+                  }}
+                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Clear All
+                </button>
+              </div>
             </div>
           </div>
         </div>

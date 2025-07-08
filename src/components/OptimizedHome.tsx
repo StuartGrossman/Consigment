@@ -234,29 +234,12 @@ const OptimizedHome: React.FC<OptimizedHomeProps> = ({
       <div className="space-y-8">
         {Object.entries(itemsByCategory).map(([category, categoryItems]) => (
           <div key={category} className="category-section">
-            {/* Category Header */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-gray-900">{category}</h2>
-                <span className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium">
-                  {categoryItems.length} {categoryItems.length === 1 ? 'item' : 'items'}
-                </span>
-              </div>
-              
-              {categoryItems.length > 8 && (
-                <button
-                  onClick={() => onItemClick?.(categoryItems[0])} // Trigger category filter
-                  className="text-orange-600 hover:text-orange-700 font-medium text-sm"
-                >
-                  View All →
-                </button>
-              )}
-            </div>
+            {/* Removed category header - banner shows category info */}
 
             {/* Category Items - Horizontal scroll for performance */}
             <div className="overflow-x-auto scrollbar-hide">
               <div className="flex gap-6 pb-4" style={{ width: 'max-content' }}>
-                {categoryItems.slice(0, 12).map((item, index) => (
+                {categoryItems.slice(0, 5).map((item, index) => (
                   <div key={item.id} className="w-80 flex-shrink-0">
                     <OptimizedItemCard
                       item={item}
@@ -268,7 +251,7 @@ const OptimizedHome: React.FC<OptimizedHomeProps> = ({
                 ))}
                 
                 {/* Show more card if there are more items */}
-                {categoryItems.length > 12 && (
+                {categoryItems.length > 5 && (
                   <div className="w-80 flex-shrink-0 flex items-center justify-center">
                     <button
                       onClick={() => onItemClick?.(categoryItems[0])} // Trigger category filter
@@ -280,7 +263,7 @@ const OptimizedHome: React.FC<OptimizedHomeProps> = ({
                       <div className="text-center">
                         <p className="font-medium">View All {category}</p>
                         <p className="text-sm">
-                          {categoryItems.length - 12} more {categoryItems.length - 12 === 1 ? 'item' : 'items'}
+                          {categoryItems.length - 5} more {categoryItems.length - 5 === 1 ? 'item' : 'items'}
                         </p>
                       </div>
                     </button>

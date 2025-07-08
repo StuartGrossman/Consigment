@@ -613,7 +613,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
           <>
             {/* Dashboard Tab */}
             {activeTab === 'dashboard' && dashboardData && (
-              <div className="space-y-8">
+              <div className="space-y-8 pt-8">
                 {/* KPI Cards - Now Clickable */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div 
@@ -828,7 +828,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
 
             {/* Sold Items Tab */}
             {activeTab === 'sold' && (
-              <div className="space-y-8">
+              <div className="space-y-8 pt-8">
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white">
@@ -945,20 +945,20 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
 
             {/* In-Store Pickup Tab */}
             {activeTab === 'instore_pickup' && isAdmin && (
-              <div className="space-y-8">
+              <div className="space-y-8 pt-8">
                 {/* Summary Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div className="bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl p-6 text-white">
+                  <div className="bg-gradient-to-r from-slate-500 to-slate-600 rounded-xl p-6 text-white">
                     <h3 className="text-lg font-semibold mb-2">Pending Pickups</h3>
                     <p className="text-3xl font-bold">{inStorePickupItems.length}</p>
                   </div>
-                  <div className="bg-gradient-to-r from-yellow-500 to-yellow-600 rounded-xl p-6 text-white">
+                  <div className="bg-gradient-to-r from-gray-500 to-gray-600 rounded-xl p-6 text-white">
                     <h3 className="text-lg font-semibold mb-2">Total Value</h3>
                     <p className="text-3xl font-bold">
                       {formatCurrency(inStorePickupItems.reduce((sum, item) => sum + (item.soldPrice || item.price), 0))}
                     </p>
                   </div>
-                  <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white">
+                  <div className="bg-gradient-to-r from-zinc-500 to-zinc-600 rounded-xl p-6 text-white">
                     <h3 className="text-lg font-semibold mb-2">Expiring Soon</h3>
                     <p className="text-3xl font-bold">
                       {inStorePickupItems.filter(item => {
@@ -971,7 +971,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
                       }).length}
                     </p>
                   </div>
-                  <div className="bg-gradient-to-r from-green-500 to-green-600 rounded-xl p-6 text-white">
+                  <div className="bg-gradient-to-r from-stone-500 to-stone-600 rounded-xl p-6 text-white">
                     <h3 className="text-lg font-semibold mb-2">Ready for Payment</h3>
                     <p className="text-3xl font-bold">
                       {inStorePickupItems.filter(item => item.paymentStatus === 'pending').length}
@@ -1163,7 +1163,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
 
             {/* Orders Tab */}
             {activeTab === 'orders' && isAdmin && (
-              <div className="space-y-8">
+              <div className="space-y-8 pt-8">
                 {/* User Search */}
                 <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Search Orders</h3>
@@ -1396,8 +1396,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ user, isAdmin }) => {
 
         {/* Detail Modals for KPI Cards */}
         {activeModal && dashboardData && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-60 p-4">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-start justify-center z-60 p-4 pt-16">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[85vh] overflow-hidden mt-8">
               <div className="p-6 border-b border-gray-200">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-bold text-gray-800">

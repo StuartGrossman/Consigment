@@ -2,7 +2,6 @@ import React from 'react';
 import { ConsignmentItem } from '../types';
 import ItemCard from './ItemCard';
 import {
-  climbingAction,
   alpineClimbing,
   mountainTrail,
   campsiteEvening,
@@ -34,7 +33,6 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
   // Category image mapping
   const getCategoryImage = (category: string) => {
     const categoryImages: { [key: string]: string } = {
-      'Climbing': climbingAction,
       'Mountaineering': alpineClimbing,
       'Hiking': mountainTrail,
       'Camping': campsiteEvening,
@@ -51,7 +49,6 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
   // Category icon mapping
   const getCategoryIcon = (category: string) => {
     const categoryIcons: { [key: string]: string } = {
-      'Climbing': '🧗',
       'Skiing': '⛷️',
       'Hiking': '🥾',
       'Camping': '⛺',
@@ -90,37 +87,16 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
       {/* Category-Based Two-Row Horizontal Scrolling Layout */}
       <div className="space-y-8">
         {Object.entries(categories).map(([category, items]) => {
-          // Only show even number of items for proper 2-row display
-          const itemsToShow = items.slice(0, Math.min(16, items.length)); // Max 16 items (8 pairs)
-          const evenItemsToShow = itemsToShow.length % 2 === 0 ? itemsToShow : itemsToShow.slice(0, -1);
+          // Show only 5 items per category
+          const itemsToShow = items.slice(0, 5);
           
           return (
             <div key={category} className="category-section">
-              {/* Category Header with View All Button */}
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-xl font-bold text-gray-900">{category}</h2>
-                  <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium">
-                    {items.length} {items.length === 1 ? 'item' : 'items'}
-                  </span>
-                </div>
-                
-                <button
-                  onClick={() => onCategoryFilter(category)}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-300"
-                  title={`View all ${category} items`}
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                  View All
-                </button>
-              </div>
+              {/* Removed category header - banner shows category info */}
 
               {/* Category Banner */}
               <div 
-                className="relative h-36 w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] overflow-hidden shadow-lg cursor-pointer group"
+                className="relative h-36 w-screen left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] overflow-hidden shadow-lg cursor-pointer group hover:shadow-2xl transition-all duration-300 transform hover:scale-[1.02]"
                 style={{
                   backgroundImage: `url(${getCategoryImage(category)})`,
                   backgroundSize: 'cover',
@@ -129,16 +105,33 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
                 onClick={() => onCategoryFilter(category)}
               >
                 {/* Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/60 group-hover:via-black/30 transition-all duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent group-hover:from-black/70 group-hover:via-black/40 transition-all duration-300"></div>
                 
                 {/* Content */}
                 <div className="relative h-full flex items-center px-6">
                   <div className="flex items-center gap-4">
-                    <div className="text-4xl">{getCategoryIcon(category)}</div>
+                    <div className="text-4xl group-hover:scale-110 transition-transform duration-300">{getCategoryIcon(category)}</div>
                     <div>
-                      <h3 className="text-xl font-bold text-white mb-1">Explore {category}</h3>
-                      <p className="text-white/80 text-sm">Discover quality gear for your adventures</p>
+                      <h3 className="text-xl font-bold text-white mb-1 group-hover:text-orange-200 transition-colors duration-300">Explore {category}</h3>
+                      <p className="text-white/80 text-sm group-hover:text-white/90 transition-colors duration-300">Discover quality gear for your adventures</p>
                     </div>
+                  </div>
+                </div>
+                
+                {/* View All Button - Appears on Hover */}
+                <div className="absolute top-4 right-6 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-4 group-hover:translate-x-0">
+                  <div className="bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-2 text-white font-medium text-sm flex items-center gap-2">
+                    <span>View All</span>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+                
+                {/* Item Count Badge - Appears on Hover */}
+                <div className="absolute bottom-4 right-6 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+                  <div className="bg-orange-500/90 backdrop-blur-sm rounded-full px-3 py-1 text-white font-medium text-sm">
+                    {items.length} {items.length === 1 ? 'item' : 'items'}
                   </div>
                 </div>
               </div>
@@ -146,9 +139,9 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
               {/* Horizontal Scrolling Container */}
               <div className="category-scroll-container overflow-x-auto scroll-smooth">
                 <div className="flex gap-4 pb-4">
-                  {/* Two-Row Grid */}
-                  <div className="grid grid-rows-2 grid-flow-col gap-4 w-max">
-                    {evenItemsToShow.map((item, index) => (
+                  {/* Single Row of Items */}
+                  <div className="flex gap-4 w-max">
+                    {itemsToShow.map((item) => (
                       <div key={item.id} className="w-72">
                         <ItemCard 
                           item={item} 
@@ -160,7 +153,7 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
                   </div>
 
                   {/* Show More Card - Only if there are more items than displayed */}
-                  {items.length > evenItemsToShow.length && (
+                  {items.length > itemsToShow.length && (
                     <div className="flex items-center justify-center w-72 h-full">
                       <button
                         onClick={() => onCategoryFilter(category)}
@@ -172,7 +165,7 @@ const CategoryDisplay: React.FC<CategoryDisplayProps> = ({
                         <div className="text-center">
                           <p className="font-medium">View All {category}</p>
                           <p className="text-sm">
-                            {items.length - evenItemsToShow.length} more {items.length - evenItemsToShow.length === 1 ? 'item' : 'items'}
+                            {items.length - itemsToShow.length} more {items.length - itemsToShow.length === 1 ? 'item' : 'items'}
                           </p>
                         </div>
                       </button>

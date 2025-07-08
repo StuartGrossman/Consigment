@@ -1090,8 +1090,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
       {/* Mark as Sold Modal */}
       {showSoldModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[90]">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[90] pt-16">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 mt-8">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Mark Item as Sold</h3>
             <p className="text-gray-600 mb-4">Enter the sale price for this item:</p>
             <input
@@ -1132,8 +1132,8 @@ const ItemDetailModal: React.FC<ItemDetailModalProps> = ({ isOpen, onClose, item
 
       {/* Issue Refund Modal */}
       {showRefundModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[90]">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-start justify-center z-[90] pt-16">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4 mt-8">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Issue Refund</h3>
             <div className="mb-4">
               <p className="text-gray-600 mb-2">Item: <strong>{item.title}</strong></p>
