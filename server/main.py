@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Header, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Header, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from firebase_init import db
 from firebase_admin import auth
@@ -15,6 +16,9 @@ from datetime import datetime, timedelta, timezone
 import uuid
 import random
 from firebase_admin import firestore
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # Configure logging for production
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -28,9 +32,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize rate limiter
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="Summit Gear Exchange API", version="1.0.0")
 
-# Configure CORS
+# Add rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# Configure CORS with more restrictive settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -53,8 +64,9 @@ app.add_middleware(
         "https://consignment-store-4a564.firebaseapp.com"
     ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Total-Count", "X-RateLimit-Remaining"],
 )
 
 # Configure Stripe (use environment variable in production)
@@ -70,35 +82,81 @@ logger.info(f"Starting server in {ENVIRONMENT} mode on port {PORT}")
 # Security 
 security = HTTPBearer()
 
+# Request size limit (10MB)
+MAX_REQUEST_SIZE = 10 * 1024 * 1024  # 10MB
+
+def sanitize_input(text: str, max_length: int = 1000) -> str:
+    """Sanitize user input to prevent injection attacks"""
+    if not text:
+        return ""
+    
+    # Limit length
+    if len(text) > max_length:
+        text = text[:max_length]
+    
+    # Remove potentially dangerous characters
+    dangerous_chars = ['<', '>', '"', "'", '&', ';', '(', ')', '{', '}', '[', ']']
+    for char in dangerous_chars:
+        text = text.replace(char, '')
+    
+    # Remove multiple spaces
+    text = ' '.join(text.split())
+    
+    return text.strip()
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    """Add security headers and limit request size"""
+    # Limit request size
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_REQUEST_SIZE:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": "Request too large"}
+        )
+    
+    response = await call_next(request)
+    
+    # Add security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    return response
+
 # Pydantic Models
 class CartItem(BaseModel):
-    item_id: str
-    title: str
-    price: float = Field(..., gt=0)
-    quantity: int = Field(..., gt=0)
-    seller_id: str
-    seller_name: str
+    item_id: str = Field(..., min_length=1, max_length=100)
+    title: str = Field(..., min_length=1, max_length=200)
+    price: float = Field(..., gt=0, le=10000)  # Max $10,000
+    quantity: int = Field(..., gt=0, le=100)   # Max 100 items
+    seller_id: str = Field(..., min_length=1, max_length=100)
+    seller_name: str = Field(..., min_length=1, max_length=100)
 
 class CustomerInfo(BaseModel):
-    name: str = Field(..., min_length=1)
-    email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$')
-    phone: str = Field(..., min_length=10)
-    address: Optional[str] = None
-    city: Optional[str] = None
-    zip_code: Optional[str] = None
+    name: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., pattern=r'^[^@]+@[^@]+\.[^@]+$', max_length=100)
+    phone: str = Field(..., min_length=10, max_length=20)
+    address: Optional[str] = Field(None, max_length=200)
+    city: Optional[str] = Field(None, max_length=100)
+    zip_code: Optional[str] = Field(None, max_length=20)
 
 class PaymentRequest(BaseModel):
-    cart_items: List[CartItem]
+    cart_items: List[CartItem] = Field(..., max_length=50)  # Max 50 items per cart
     customer_info: CustomerInfo
     fulfillment_method: str = Field(..., pattern='^(pickup|shipping)$')
     payment_type: str = Field(..., pattern='^(online|in_store)$')
-    payment_method_id: Optional[str] = None  # Optional for in-store payments
+    payment_method_id: Optional[str] = Field(None, max_length=100)
     
     @field_validator('cart_items')
     @classmethod
     def validate_cart_not_empty(cls, v):
         if not v:
             raise ValueError('Cart cannot be empty')
+        if len(v) > 50:
+            raise ValueError('Cart cannot contain more than 50 items')
         return v
     
     @field_validator('payment_method_id')
@@ -142,19 +200,8 @@ class TestSummary(BaseModel):
     timestamp: str
 
 # Authentication helper - now using Firebase Admin SDK
-async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
+async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=True))):
     """Verify Firebase token from Authorization header"""
-    if not credentials:
-        # For payment processing, we'll use server-side admin credentials
-        # This allows the server to process payments on behalf of users
-        logger.info("No token provided - using server admin context for payment processing")
-        return {
-            'uid': 'server_admin',
-            'email': 'server@consignment-store.com',
-            'name': 'Server Admin',
-            'is_server': True
-        }
-    
     try:
         # Verify the token using Firebase Admin SDK
         decoded_token = auth.verify_id_token(credentials.credentials)
@@ -165,23 +212,44 @@ async def verify_firebase_token(credentials: HTTPAuthorizationCredentials = Depe
             'name': decoded_token.get('name', 'Unknown'),
             'is_server': False
         }
+    except auth.ExpiredIdTokenError:
+        logger.warning("Expired authentication token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token expired"
+        )
+    except auth.RevokedIdTokenError:
+        logger.warning("Revoked authentication token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token revoked"
+        )
+    except auth.InvalidIdTokenError:
+        logger.warning("Invalid authentication token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token"
+        )
     except Exception as e:
         logger.error(f"Token verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token"
+            detail="Authentication failed"
         )
 
 # Admin verification helper - checks if user is admin
 async def verify_admin_access(user_data: dict = Depends(verify_firebase_token)):
     """Verify user has admin privileges"""
-    # Server admin always has access
-    if user_data.get('is_server'):
-        return user_data
-    
     try:
         # Check if user is admin in the database
         user_uid = user_data.get('uid')
+        if not user_uid:
+            logger.warning("No user UID provided for admin verification")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin access required"
+            )
+        
         user_doc = db.collection('users').document(user_uid).get()
         
         if user_doc.exists and user_doc.to_dict().get('isAdmin'):
@@ -236,9 +304,25 @@ async def health_check():
         }
     }
 
+@app.get("/api/test-auth")
+async def test_auth(user_data: dict = Depends(verify_firebase_token)):
+    """Test endpoint to verify authentication is working"""
+    return {
+        "message": "Authentication working",
+        "user": user_data
+    }
+
 @app.post("/api/test-simple")
 async def test_simple_post():
     return {"message": "Simple POST test successful", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+@app.post("/api/test-validation")
+async def test_validation(cart_item: CartItem):
+    """Test endpoint to verify input validation is working"""
+    return {
+        "message": "Validation passed",
+        "item": cart_item.dict()
+    }
 
 @app.post("/api/admin/import-processed-items")
 async def import_processed_items(request: Request, admin_data: dict = Depends(verify_admin_access)):
@@ -1535,7 +1619,8 @@ def map_json_fields_to_standard(item):
     return mapped_item
 
 @app.post("/api/process-payment")
-async def process_payment(payment_request: PaymentRequest, user_data: dict = Depends(verify_firebase_token)):
+@limiter.limit("10/minute")  # Rate limit payment processing
+async def process_payment(payment_request: PaymentRequest, user_data: dict = Depends(verify_firebase_token), request: Request = None):
     """Process payment and update inventory securely on server-side"""
     try:
         # Use authenticated user or server admin for payment processing
@@ -1852,9 +1937,11 @@ async def get_messages():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/submit-item")
+@limiter.limit("20/minute")  # Rate limit item submissions
 async def submit_user_item(
     item_submission: dict,
-    user_data: dict = Depends(verify_firebase_token)
+    user_data: dict = Depends(verify_firebase_token),
+    request: Request = None
 ):
     """Submit a user's draft item for admin review"""
     try:
