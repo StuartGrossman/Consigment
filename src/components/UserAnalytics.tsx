@@ -934,7 +934,17 @@ const UserAnalytics: React.FC<UserAnalyticsProps> = ({ user }) => {
                       className="bg-white border border-gray-200 rounded-lg p-4 hover:bg-gray-50 cursor-pointer transition-colors"
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <h4 className="font-medium text-gray-900 truncate">{item.title}</h4>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-medium text-gray-900 truncate">{item.title}</h4>
+                          {item.adminCreated && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <svg className="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-xs text-purple-600 font-medium">Added by Admin</span>
+                            </div>
+                          )}
+                        </div>
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(item.status)}`}>
                           {getStatusText(item.status)}
                         </span>

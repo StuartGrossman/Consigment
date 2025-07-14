@@ -95,6 +95,12 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
   };
 
   const handleEditItem = (item: ConsignmentItem) => {
+    // Prevent editing admin-created items
+    if (item.adminCreated) {
+      alert('This item was added by an admin on your behalf. You cannot edit admin-created items.');
+      return;
+    }
+    
     if (item.status === 'pending' || item.status === 'rejected') {
       setEditingItem(item);
     }
@@ -137,6 +143,13 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
   };
 
   const handleDeleteItem = async (itemId: string) => {
+    // Find the item to check if it's admin-created
+    const item = myItems.find(i => i.id === itemId);
+    if (item?.adminCreated) {
+      alert('This item was added by an admin on your behalf. You cannot delete admin-created items. Please contact an admin if you need to remove this item.');
+      return;
+    }
+    
     setProcessingAction(`delete-${itemId}`);
     try {
       await apiService.removeUserItem(itemId);
@@ -262,9 +275,19 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                     {/* Item Details */}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-3">
-                        <h3 className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">
-                          {item.title}
-                        </h3>
+                        <div className="flex-1">
+                          <h3 className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">
+                            {item.title}
+                          </h3>
+                          {item.adminCreated && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <svg className="w-3 h-3 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                              <span className="text-xs text-purple-600 font-medium">Added by Admin</span>
+                            </div>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2">
                           <span className="text-xl font-bold text-green-600">
                             ${item.price.toFixed(2)}
@@ -299,9 +322,23 @@ const MyPendingItemsModal: React.FC<MyPendingItemsModalProps> = ({ isOpen, onClo
                       </div>
 
                       {/* Instructions */}
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
-                        <p className="text-sm text-blue-800">
-                          💡 <strong>Click anywhere on this item</strong> to edit details, change photos, or delete it.
+                      <div className={`border rounded-lg p-3 mb-4 ${
+                        item.adminCreated 
+                          ? 'bg-purple-50 border-purple-200' 
+                          : 'bg-blue-50 border-blue-200'
+                      }`}>
+                        <p className={`text-sm ${
+                          item.adminCreated ? 'text-purple-800' : 'text-blue-800'
+                        }`}>
+                          {item.adminCreated ? (
+                            <>
+                              🔒 <strong>Admin-created item</strong> - You can view and edit this item, but cannot delete it. Contact an admin if you need it removed.
+                            </>
+                          ) : (
+                            <>
+                              💡 <strong>Click anywhere on this item</strong> to edit details, change photos, or delete it.
+                            </>
+                          )}
                         </p>
                       </div>
 
@@ -370,6 +407,13 @@ const EditUserItemModal: React.FC<EditUserItemModalProps> = ({ item, user, onSav
   const [newImages, setNewImages] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
+  // User selection for admin
+  const [selectedUserId, setSelectedUserId] = useState(item.sellerId || 'store');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState<any[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [showUserSelection, setShowUserSelection] = useState(false);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const selectedFiles = Array.from(e.target.files);
@@ -391,6 +435,63 @@ const EditUserItemModal: React.FC<EditUserItemModalProps> = ({ item, user, onSav
 
   const removeNewImage = (index: number) => {
     setNewImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // User search functionality for admin
+  const searchUsers = async (query: string) => {
+    if (!query.trim() || query.length < 3) {
+      setUserSearchResults([]);
+      return;
+    }
+
+    setIsSearchingUsers(true);
+    try {
+      const result = await apiService.searchUsers(query);
+      if (result.success && result.customers) {
+        const userOptions = result.customers.map((customer: any) => ({
+          id: customer.uid || customer.id,
+          displayName: customer.displayName || customer.name || customer.email?.split('@')[0] || 'Unknown User',
+          email: customer.email || ''
+        }));
+        setUserSearchResults(userOptions);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+      setUserSearchResults([]);
+    } finally {
+      setIsSearchingUsers(false);
+    }
+  };
+
+  // Debounced user search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (userSearchQuery) {
+        searchUsers(userSearchQuery);
+      } else {
+        setUserSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [userSearchQuery]);
+
+  // Get selected user info
+  const getSelectedUserInfo = () => {
+    if (selectedUserId === 'store') {
+      return {
+        id: 'store',
+        displayName: 'Store',
+        email: 'store@summitgear.com'
+      };
+    }
+    
+    const selectedUser = userSearchResults.find(u => u.id === selectedUserId);
+    return selectedUser || {
+      id: item.sellerId || 'store',
+      displayName: item.sellerName || 'Store',
+      email: item.sellerEmail || 'store@summitgear.com'
+    };
   };
 
   const uploadImages = async (files: File[]): Promise<string[]> => {
@@ -451,6 +552,20 @@ const EditUserItemModal: React.FC<EditUserItemModalProps> = ({ item, user, onSav
         images: allImages
       };
 
+      // If user is admin and user association has changed, update it
+      if ((user as any)?.isAdmin && selectedUserId !== item.sellerId) {
+        try {
+          await apiService.updateItemUser(item.id, selectedUserId);
+          console.log('✅ Item user association updated successfully');
+        } catch (error) {
+          console.error('❌ Failed to update item user association:', error);
+          setValidationMessage('Failed to update item user association. Please try again.');
+          setShowValidationError(true);
+          setUploading(false);
+          return;
+        }
+      }
+
       onSave(updatedItem, allImages);
     } catch (error) {
       console.error('Error saving item:', error);
@@ -471,22 +586,45 @@ const EditUserItemModal: React.FC<EditUserItemModalProps> = ({ item, user, onSav
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[1000] backdrop-blur-sm p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] overflow-hidden">
         <div className="p-6 border-b border-gray-200">
           <h3 className="text-xl font-bold text-gray-800">Edit Item</h3>
           <p className="text-sm text-gray-600 mt-1">Update details, photos, or delete this item</p>
         </div>
         
-        <div className="p-6 space-y-4 max-h-96 overflow-y-auto">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="p-6 space-y-6 max-h-[calc(95vh-200px)] overflow-y-auto">
+          {/* Main Details */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter item title..."
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
+                <input
+                  type="text"
+                  value={price}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+                      setPrice(value);
+                    }
+                  }}
+                  className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
           </div>
           
           <div>
@@ -494,111 +632,261 @@ const EditUserItemModal: React.FC<EditUserItemModalProps> = ({ item, user, onSav
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={3}
+              rows={4}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              placeholder="Describe your item in detail..."
             />
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">$</span>
-              <input
-                type="text"
-                value={price}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  if (value === '' || /^\d*\.?\d*$/.test(value)) {
-                    setPrice(value);
-                  }
-                }}
-                className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+
+          {/* User Association (Admin Only) */}
+          {(user as any)?.isAdmin && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Item Owner
+              </label>
+              
+              {/* Current Selection Display */}
+              <div className="mb-3">
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <div className="font-medium text-gray-900">
+                        {getSelectedUserInfo().displayName}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {getSelectedUserInfo().email}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowUserSelection(!showUserSelection)}
+                    className="px-3 py-1 text-sm bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
+                  >
+                    Change
+                  </button>
+                </div>
+              </div>
+
+              {/* User Selection Dropdown */}
+              {showUserSelection && (
+                <div className="space-y-3">
+                  {/* Store Option */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedUserId('store');
+                      setShowUserSelection(false);
+                    }}
+                    className={`w-full p-3 text-left rounded-lg border transition-colors ${
+                      selectedUserId === 'store'
+                        ? 'bg-blue-50 border-blue-300 text-blue-900'
+                        : 'bg-white border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center">
+                        <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="font-medium">Store</div>
+                        <div className="text-sm text-gray-600">store@summitgear.com</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {/* User Search */}
+                  <div>
+                    <input
+                      type="text"
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      placeholder="Search for a user..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Search Results */}
+                  {isSearchingUsers && (
+                    <div className="text-center py-2">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto"></div>
+                    </div>
+                  )}
+
+                  {userSearchResults.length > 0 && (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {userSearchResults.map((userOption) => (
+                        <button
+                          key={userOption.id}
+                          type="button"
+                          onClick={() => {
+                            setSelectedUserId(userOption.id);
+                            setShowUserSelection(false);
+                            setUserSearchQuery('');
+                            setUserSearchResults([]);
+                          }}
+                          className={`w-full p-3 text-left rounded-lg border transition-colors ${
+                            selectedUserId === userOption.id
+                              ? 'bg-blue-50 border-blue-300 text-blue-900'
+                              : 'bg-white border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                              </svg>
+                            </div>
+                            <div>
+                              <div className="font-medium">{userOption.displayName}</div>
+                              <div className="text-sm text-gray-600">{userOption.email}</div>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {userSearchQuery && userSearchResults.length === 0 && !isSearchingUsers && (
+                    <div className="text-center py-2 text-gray-500">
+                      No users found
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Photos Section */}
+          <div className="border-t border-gray-200 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <label className="text-lg font-medium text-gray-900">
+                📸 Photos ({currentImages.length + newImages.length}/5)
+              </label>
+              {(currentImages.length + newImages.length) < 5 && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                    id="image-upload"
+                  />
+                  <label htmlFor="image-upload" className="cursor-pointer flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Add Photos
+                  </label>
+                </div>
+              )}
+            </div>
+            
+            {/* Photo Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              {/* Current Images */}
+              {currentImages.map((imageUrl, index) => (
+                <div key={`current-${index}`} className="relative group">
+                  <div className="aspect-square rounded-lg overflow-hidden border-2 border-gray-200 hover:border-blue-300 transition-colors">
+                    <img
+                      src={imageUrl}
+                      alt={`Photo ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeCurrentImage(index)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Remove photo"
+                  >
+                    ×
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-50 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Current Photo {index + 1}
+                  </div>
+                </div>
+              ))}
+
+              {/* New Images */}
+              {newImages.map((image, index) => (
+                <div key={`new-${index}`} className="relative group">
+                  <div className="aspect-square rounded-lg overflow-hidden border-2 border-green-300 hover:border-green-400 transition-colors">
+                    <img
+                      src={URL.createObjectURL(image)}
+                      alt={`New Photo ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeNewImage(index)}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm hover:bg-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Remove photo"
+                  >
+                    ×
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-green-600 bg-opacity-90 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    New Photo {index + 1}
+                  </div>
+                </div>
+              ))}
+
+              {/* Add Photo Placeholder */}
+              {(currentImages.length + newImages.length) < 5 && (
+                <div className="relative">
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                    id="image-upload-placeholder"
+                  />
+                  <label htmlFor="image-upload-placeholder" className="cursor-pointer block">
+                    <div className="aspect-square rounded-lg border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all duration-200 flex flex-col items-center justify-center">
+                      <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span className="text-sm text-gray-600 text-center">Add Photo</span>
+                    </div>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Photo Instructions */}
+            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-start gap-2">
+                <svg className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div className="text-sm text-blue-800">
+                  <p className="font-medium mb-1">Photo Tips:</p>
+                  <ul className="space-y-1 text-xs">
+                    <li>• Upload clear, well-lit photos of your item</li>
+                    <li>• Show any damage or wear clearly</li>
+                    <li>• Include photos from multiple angles</li>
+                    <li>• Maximum 5 photos allowed</li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Photos Section */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Photos (Max 5)
-            </label>
-            
-            {/* Current Images */}
-            {currentImages.length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-600 mb-2">Current Photos</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  {currentImages.map((imageUrl, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={imageUrl}
-                        alt={`Current ${index + 1}`}
-                        className="w-full h-20 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeCurrentImage(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* New Images */}
-            {newImages.length > 0 && (
-              <div className="mb-4">
-                <h4 className="text-sm font-medium text-gray-600 mb-2">New Photos</h4>
-                <div className="grid grid-cols-3 gap-2">
-                  {newImages.map((image, index) => (
-                    <div key={index} className="relative">
-                      <img
-                        src={URL.createObjectURL(image)}
-                        alt={`New ${index + 1}`}
-                        className="w-full h-20 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeNewImage(index)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Add Photos */}
-            {(currentImages.length + newImages.length) < 5 && (
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition-colors">
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageChange}
-                  className="hidden"
-                  id="image-upload"
-                />
-                <label htmlFor="image-upload" className="cursor-pointer flex flex-col items-center">
-                  <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <span className="text-sm text-gray-600">Add photos</span>
-                </label>
-              </div>
-            )}
-          </div>
-
           {/* Additional Details */}
-          <div className="border-t border-gray-200 pt-4">
-            <h4 className="text-sm font-medium text-gray-900 mb-3">Additional Details</h4>
+          <div className="border-t border-gray-200 pt-6">
+            <h4 className="text-lg font-medium text-gray-900 mb-4">Additional Details</h4>
             
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                 <select
@@ -710,10 +998,15 @@ const EditUserItemModal: React.FC<EditUserItemModalProps> = ({ item, user, onSav
           </button>
           <button
             onClick={handleDelete}
-            disabled={isProcessing || uploading}
-            className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+            disabled={isProcessing || uploading || item.adminCreated}
+            className={`px-4 py-2 text-white rounded-lg transition-colors ${
+              item.adminCreated 
+                ? 'bg-gray-400 cursor-not-allowed' 
+                : 'bg-red-600 hover:bg-red-700'
+            } disabled:opacity-50`}
+            title={item.adminCreated ? 'Admin-created items cannot be deleted by users' : 'Delete this item'}
           >
-            Delete Item
+            {item.adminCreated ? 'Cannot Delete' : 'Delete Item'}
           </button>
           <button
             onClick={handleSave}

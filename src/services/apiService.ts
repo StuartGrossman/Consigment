@@ -650,6 +650,42 @@ class ApiService {
         }
     }
 
+    async updateItemUser(itemId: string, userId: string): Promise<{
+        success: boolean;
+        message: string;
+        itemId: string;
+        oldUserId: string;
+        newUserId: string;
+    }> {
+        try {
+            const response = await this.makeRequest('/api/admin/update-item-user', {
+                method: 'POST',
+                body: JSON.stringify({
+                    itemId,
+                    userId
+                }),
+            });
+            
+            const result = await response.json();
+            
+            // Log the user update action
+            const user = auth.currentUser;
+            if (user) {
+                await logUserAction(
+                    user, 
+                    'item_user_updated', 
+                    `Changed item ownership to ${userId === 'store' ? 'Store' : userId}`,
+                    itemId
+                );
+            }
+            
+            return result;
+        } catch (error) {
+            console.error('❌ Failed to update item user:', error);
+            throw error;
+        }
+    }
+
     async issueRefund(itemId: string, refundReason: string, refundPassword?: string): Promise<{
         success: boolean;
         message: string;

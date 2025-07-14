@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../config/firebase';
 import { AuthUser } from '../types';
@@ -12,6 +12,12 @@ interface AddItemModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: AuthUser | null;
+}
+
+interface UserOption {
+  id: string;
+  displayName: string;
+  email: string;
 }
 
 const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) => {
@@ -30,6 +36,13 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
     type: 'info' as 'success' | 'error' | 'info' | 'warning'
   });
 
+  // User selection state for admins
+  const [selectedUserId, setSelectedUserId] = useState<'store' | 'search' | string>('store'); // Default to store
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState<UserOption[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+
   // Helper function to show notifications
   const showNotificationModal = (title: string, message: string, type: 'success' | 'error' | 'info' | 'warning') => {
     setNotificationData({ title, message, type });
@@ -47,6 +60,63 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
   const [condition, setCondition] = useState('');
   const [material, setMaterial] = useState('');
   const [color, setColor] = useState('');
+
+  // User search functionality
+  const searchUsers = async (query: string) => {
+    if (!query.trim() || query.length < 3) {
+      setUserSearchResults([]);
+      return;
+    }
+
+    setIsSearchingUsers(true);
+    try {
+      const result = await apiService.searchUsers(query);
+      if (result.success && result.customers) {
+        const userOptions: UserOption[] = result.customers.map((customer: any) => ({
+          id: customer.uid || customer.id,
+          displayName: customer.displayName || customer.name || customer.email?.split('@')[0] || 'Unknown User',
+          email: customer.email || ''
+        }));
+        setUserSearchResults(userOptions);
+      }
+    } catch (error) {
+      console.error('Error searching users:', error);
+      setUserSearchResults([]);
+    } finally {
+      setIsSearchingUsers(false);
+    }
+  };
+
+  // Debounced user search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (userSearchQuery) {
+        searchUsers(userSearchQuery);
+      } else {
+        setUserSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [userSearchQuery]);
+
+  // Get selected user info
+  const getSelectedUserInfo = () => {
+    if (selectedUserId === 'store') {
+      return {
+        id: 'store',
+        displayName: 'Store',
+        email: 'store@summitgear.com'
+      };
+    }
+    
+    const selectedUser = userSearchResults.find(u => u.id === selectedUserId);
+    return selectedUser || {
+      id: user?.uid || '',
+      displayName: user?.displayName || 'Anonymous',
+      email: user?.email || ''
+    };
+  };
 
   if (!isOpen) return null;
 
@@ -105,16 +175,26 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
         // Upload images to Firebase Storage
         const imageUrls = await uploadImages(images);
 
+        // Get selected user info
+        const selectedUserInfo = getSelectedUserInfo();
+
         // Prepare item data, only including fields that have values
         const itemData: any = {
           title: title.trim(),
           description: description.trim(),
           price: parseFloat(price),
           images: imageUrls,
-          sellerId: user.uid,
-          sellerName: user.displayName || 'Anonymous',
-          sellerEmail: user.email || ('phoneNumber' in user ? user.phoneNumber : ''),
+          sellerId: selectedUserInfo.id,
+          sellerName: selectedUserInfo.displayName,
+          sellerEmail: selectedUserInfo.email,
         };
+
+        // Add admin-created flag if admin is creating for a user
+        if (isAdmin && selectedUserId !== 'store') {
+          itemData.adminCreated = true;
+          itemData.adminCreatedBy = user?.uid;
+          itemData.adminCreatedAt = new Date().toISOString();
+        }
 
         // Only add optional fields if they have values
         if (category && category.trim()) {
@@ -183,6 +263,11 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
     setCondition('');
     setMaterial('');
     setColor('');
+    // Reset user selection
+    setSelectedUserId('store');
+    setUserSearchQuery('');
+    setUserSearchResults([]);
+    setShowUserDropdown(false);
   };
 
   const handleClose = () => {
@@ -301,7 +386,7 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
                     ${parseFloat(price).toFixed(2)}
                   </div>
                   <div className="text-sm text-gray-500">
-                    by {user?.displayName}
+                    by {isAdmin ? getSelectedUserInfo().displayName : user?.displayName}
                   </div>
                 </div>
 
@@ -448,6 +533,109 @@ const AddItemModal: React.FC<AddItemModalProps> = ({ isOpen, onClose, user }) =>
               />
             </div>
           </div>
+
+          {/* User Selection (Admin Only) */}
+          {isAdmin && (
+            <div>
+              <label htmlFor="user-selection" className="block text-sm font-medium text-gray-700 mb-2">
+                Item Owner *
+              </label>
+              <div className="relative">
+                {(selectedUserId === 'store' || selectedUserId === 'search') ? (
+                  <select
+                    id="user-selection"
+                    value={selectedUserId}
+                    onChange={(e) => setSelectedUserId(e.target.value)}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="store">🏪 Store (Default)</option>
+                    <option value="search">🔍 Search for User...</option>
+                  </select>
+                ) : (
+                  <div className="w-full px-4 py-3 border border-green-300 bg-green-50 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-green-700 font-medium">
+                          👤 {getSelectedUserInfo().displayName}
+                        </span>
+                        <span className="text-green-600 text-sm">
+                          ({getSelectedUserInfo().email})
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserId('store')}
+                        className="text-xs text-green-600 hover:text-green-800 underline"
+                      >
+                        Change
+                      </button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* User Search Input */}
+                {selectedUserId === 'search' && (
+                  <div className="mt-3 space-y-2">
+                    <input
+                      type="text"
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                      placeholder="Search by name or email (min 3 characters)..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    
+                    {/* Search Results */}
+                    {userSearchQuery.length >= 3 && (
+                      <div className="relative">
+                        <div className="absolute z-10 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                          {isSearchingUsers ? (
+                            <div className="p-4 text-center text-gray-500">
+                              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                              Searching users...
+                            </div>
+                          ) : userSearchResults.length > 0 ? (
+                            <div className="py-2">
+                              {userSearchResults.map((userOption) => (
+                                <button
+                                  key={userOption.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedUserId(userOption.id);
+                                    setUserSearchQuery('');
+                                    setUserSearchResults([]);
+                                  }}
+                                  className="w-full px-4 py-3 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="font-medium text-gray-900">{userOption.displayName}</div>
+                                  <div className="text-sm text-gray-500">{userOption.email}</div>
+                                </button>
+                              ))}
+                            </div>
+                          ) : userSearchQuery.length >= 3 ? (
+                            <div className="p-4 text-center text-gray-500">
+                              No users found matching "{userSearchQuery}"
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Info about admin-created items */}
+                    {selectedUserId !== 'store' && selectedUserId !== 'search' && (
+                      <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="text-xs text-blue-700">
+                          This user will see this item in their listings but cannot edit it
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Select who owns this item. Choose "Store" for store inventory or search for a specific user.
+              </p>
+            </div>
+          )}
 
           {/* Additional Item Details */}
           <div className="border-t border-gray-200 pt-6">

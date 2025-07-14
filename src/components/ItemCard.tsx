@@ -307,6 +307,19 @@ const ItemCard: React.FC<ItemCardProps> = ({ item, isAdmin = false, onClick }) =
             <p className="text-sm text-blue-700 font-medium">Your Listing</p>
           </div>
         )}
+
+        {/* Message for admin-created items */}
+        {!isAdmin && item.status === 'live' && user?.uid === item.sellerId && item.adminCreated && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-center">
+            <div className="flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-sm text-purple-700 font-medium">Added by Admin</p>
+            </div>
+            <p className="text-xs text-purple-600 mt-1">You can view but not edit this item</p>
+          </div>
+        )}
       </div>
     </div>
   );

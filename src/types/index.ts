@@ -80,6 +80,10 @@ export interface ConsignmentItem {
   timeRemainingFormatted?: string;
   pickedUpAt?: Date;
   pickedUpBy?: string;
+  // Admin-created item tracking
+  adminCreated?: boolean; // Flag indicating item was created by admin on behalf of user
+  adminCreatedBy?: string; // UID of admin who created the item
+  adminCreatedAt?: string; // ISO string when admin created the item
 }
 
 export interface User {

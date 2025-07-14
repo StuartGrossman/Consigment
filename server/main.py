@@ -2456,6 +2456,101 @@ async def edit_item(request: Request):
             raise e
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+@app.post("/api/admin/update-item-user")
+async def update_item_user(request: Request):
+    """Admin endpoint to update the user association for an item"""
+    try:
+        auth_header = request.headers.get("authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        
+        token = auth_header.split("Bearer ")[1]
+        decoded_token = auth.verify_id_token(token)
+        user_id = decoded_token['uid']
+        
+        user_doc = db.collection('users').document(user_id).get()
+        if not user_doc.exists or not user_doc.to_dict().get('isAdmin', False):
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        item_id = data.get('itemId', '')
+        new_user_id = data.get('userId', '')
+        
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Missing itemId")
+        
+        # Get the item to verify it exists
+        item_ref = db.collection('items').document(item_id)
+        item_doc = item_ref.get()
+        if not item_doc.exists:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        item_data = item_doc.to_dict()
+        old_user_id = item_data.get('sellerId', '')
+        
+        # Prepare update data
+        update_data = {
+            'lastUpdated': datetime.now(timezone.utc),
+            'editedBy': user_id
+        }
+        
+        if new_user_id == 'store':
+            # Change to store ownership
+            update_data.update({
+                'sellerId': 'store',
+                'sellerName': 'Store',
+                'sellerEmail': 'store@summitgear.com',
+                'adminCreated': True,
+                'adminCreatedBy': user_id,
+                'adminCreatedAt': datetime.now(timezone.utc).isoformat()
+            })
+        elif new_user_id:
+            # Change to specific user ownership
+            # Get user details
+            user_doc = db.collection('users').document(new_user_id).get()
+            if not user_doc.exists:
+                raise HTTPException(status_code=404, detail="User not found")
+            
+            user_data = user_doc.to_dict()
+            update_data.update({
+                'sellerId': new_user_id,
+                'sellerName': user_data.get('displayName', user_data.get('email', 'Unknown User')),
+                'sellerEmail': user_data.get('email', ''),
+                'adminCreated': True,
+                'adminCreatedBy': user_id,
+                'adminCreatedAt': datetime.now(timezone.utc).isoformat()
+            })
+        else:
+            raise HTTPException(status_code=400, detail="Invalid userId")
+        
+        # Update the item
+        item_ref.update(update_data)
+        
+        # Log admin action
+        db.collection('adminActions').add({
+            'adminId': user_id,
+            'action': 'item_user_updated',
+            'itemId': item_id,
+            'details': f'Changed item ownership from {old_user_id} to {new_user_id}',
+            'timestamp': datetime.now(timezone.utc),
+            'oldUserId': old_user_id,
+            'newUserId': new_user_id
+        })
+        
+        return {
+            "success": True, 
+            "message": f"Item ownership updated successfully",
+            "itemId": item_id,
+            "oldUserId": old_user_id,
+            "newUserId": new_user_id
+        }
+        
+    except Exception as e:
+        logger.error(f"Error updating item user: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 @app.post("/api/admin/make-item-live")
 async def make_item_live(request: Request):
     """Admin endpoint to make an item live"""
@@ -3347,6 +3442,10 @@ async def remove_user_item(item_id: str, request: Request):
         # Only allow removing pending items
         if item_data.get('status') != 'pending':
             raise HTTPException(status_code=400, detail="Only pending items can be removed")
+        
+        # Prevent deletion of admin-created items
+        if item_data.get('adminCreated'):
+            raise HTTPException(status_code=403, detail="Admin-created items cannot be deleted by users. Please contact an admin if you need to remove this item.")
         
         # Delete the item
         db.collection('items').document(item_id).delete()
